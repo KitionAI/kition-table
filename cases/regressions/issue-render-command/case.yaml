@@ -9,11 +9,11 @@ intent: >-
   Before, table.preview.render answered {change, result: {png}}, took focus, and was not declared,
   so the kits server previewed with the screenshot (no scale, no target), and the executable drew
   no text unless its host set KITION_FONTS_DIR, which the kits server does not.
-layer: golden
+layer: gate
 source:
   kind: probe
   from: agent-readiness review of the table kit's preview
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table, test: render }

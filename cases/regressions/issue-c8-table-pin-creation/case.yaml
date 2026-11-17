@@ -2,9 +2,9 @@ format: 1
 id: regressions/issue-c8-table-pin-creation
 feature: table.agent.environment
 intent: A raw create through table_batch is given what a create gives (a record's createdAt and createdBy; a table's empty description, a field's empty formula and aiPrompt), so every stored type's creation receipt replays and the replayed object equals the created one, under the receipt's id.
-layer: golden
-direction: ai
-source: {kind: synthetic, from: creation receipts on the public kition-sdk pin, licence: Apache-2.0}
+layer: gate
+dimension: ai
+source: {kind: synthetic, from: creation receipts on the public kition-sdk pin, license: Apache-2.0}
 input: []
 steps:
   - cargo-test: {package: kition-table, test: environment, filter: waiting_for_sdk_creation_replay_and_required_defaults}

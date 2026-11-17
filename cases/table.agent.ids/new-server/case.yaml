@@ -3,11 +3,11 @@ id: table.agent.ids/new-server
 feature: table.agent.ids
 intent: >-
   Table, field, view and record ids from an earlier table_inspect name the same objects after renames, a save and a new server, and the commands take them.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: apps/kition-table/tests/premise.rs
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test:

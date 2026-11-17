@@ -2,12 +2,12 @@ format: 1
 id: regressions/issue-c8-land-13-params
 feature: table.agent.ids
 intent: Every public parameter naming a model object is marked with the type its command resolves, including nested members; counts and newly assigned names are not references.
-layer: golden
-direction: ai
+layer: gate
+dimension: ai
 source:
   kind: synthetic
   from: outside-writer tests of the agent tools
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test: {package: kition-table-kit, test: object_params}

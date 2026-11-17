@@ -2,9 +2,9 @@ format: 1
 id: regressions/issue-c8-table-3-receipts
 feature: table.agent.receipts
 intent: A receipt reports no guard-only derived fact, and every edit it reports satisfies the pinned SDK's published output schema.
-layer: golden
-direction: data-safety
-source: {kind: synthetic, from: MCP conformance check of the receipts, licence: Apache-2.0}
+layer: gate
+dimension: data-safety
+source: {kind: synthetic, from: MCP conformance check of the receipts, license: Apache-2.0}
 input: []
 steps:
   - cargo-test: {package: kition-table, test: outside, filter: derived_receipt_edits_match_the_published_schema}

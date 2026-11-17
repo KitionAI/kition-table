@@ -7,11 +7,11 @@ intent: >-
   and the agent's `table_export` (`exports`, `agent.export`); the headless kit answers every
   declared format to the agent and writes no file itself. `table.csv.export` and
   `table.markdown.export` still answer the same text.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition desktop app, the table editor's CSV download saved no file
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, filter: "file_export" }

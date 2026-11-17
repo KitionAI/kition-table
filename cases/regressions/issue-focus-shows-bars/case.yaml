@@ -8,11 +8,11 @@ intent: >-
   editor's footer, which shows the document's state (unsaved, edited by the agent) instead.
   Escape that closes a menu (a column's, a record's, a toolbar popover, the attachment preview)
   is the menu's alone: in Focus it no longer leaves Focus as well.
-layer: golden
+layer: gate
 source:
   kind: probe
   from: review of the kits' display modes
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - flow: { spec: web/tests/flow.mjs, scenario: "Focus shows the records alone", browsers: [chromium, webkit] }

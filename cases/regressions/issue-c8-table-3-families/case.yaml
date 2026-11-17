@@ -2,9 +2,9 @@ format: 1
 id: regressions/issue-c8-table-3-families
 feature: table.agent.premises
 intent: Creation holds the namespace facts that determine generated names and view schema references without refusing unrelated writes. Waiting tests expose parameterless creation and deleted-table receipt gaps in the pinned SDK.
-layer: golden
-direction: collab
-source: {kind: synthetic, from: outside-writer review of creation, licence: Apache-2.0}
+layer: gate
+dimension: collab
+source: {kind: synthetic, from: outside-writer review of creation, license: Apache-2.0}
 input: []
 steps:
   - cargo-test: {package: kition-table, test: outside, filter: card3_families}

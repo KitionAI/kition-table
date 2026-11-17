@@ -2,9 +2,9 @@ format: 1
 id: regressions/issue-c8-table-review-receipts
 feature: table.agent.receipts
 intent: Characterize text receipt truncation waiting for the SDK; numeric footprints cover every UUID.
-layer: golden
-direction: collab
-source: {kind: synthetic, from: outside-writer review of the write guards, licence: Apache-2.0}
+layer: gate
+dimension: collab
+source: {kind: synthetic, from: outside-writer review of the write guards, license: Apache-2.0}
 input: []
 steps:
   - cargo-test: {package: kition-table, test: outside, filter: review_receipts}

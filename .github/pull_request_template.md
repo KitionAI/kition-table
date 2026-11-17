@@ -16,7 +16,7 @@ Describe the change and why it is useful.
 - [ ] A new feature has an entry in `features.yaml`
 - [ ] No expected result changed (`cases/**/expected/`, the `protected` paths in `features.yaml`,
       an existing case's `expected`, `tolerance`, `reference`, `input` or `steps`), or each change
-      is named for the owner's review as `docs/quality.md` requires
+      is named for the maintainers' review as `docs/quality.md` requires
 - [ ] No test was weakened: no deleted assertions, `#[ignore]`, `.skip`, `.only`, `.todo`, or raised
       tolerances
 - [ ] `CHANGELOG.md` has an entry under **Unreleased** for a change users or hosts notice

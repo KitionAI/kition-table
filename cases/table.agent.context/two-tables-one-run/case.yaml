@@ -6,11 +6,11 @@ intent: >-
   records packed and sets one Notes record's status, naming each record by the id table_inspect
   lists (`on`) and each step's table (the run's target, a step's at.part, and tableId); each edit
   lands on its own record and nothing else changes.
-layer: ai
+layer: eval
 source:
   kind: synthetic
   from: 'a two-table file the table engine wrote'
-  licence: owned
+  license: owned
 input: [input/trip.ktable]
 steps:
   - task:

@@ -8,7 +8,7 @@ layer: unit
 source:
   kind: synthetic
   from: bindings/wasm/src/tests.rs (a new Tasks.ktable with one record)
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, filter: "tests::saved_bytes_reopen_with_the_edits_and_the_same_replica" }

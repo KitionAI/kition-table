@@ -52,10 +52,10 @@ matter:
 
 - **Tests are the spec.** The feature catalogue (`features.yaml`) and each case's `intent` say how
   this repository must behave. A new feature adds an entry to `features.yaml` and at least one
-  golden case; a bug fix starts with a failing case under `cases/regressions/issue-<n>/`.
+  gate case; a bug fix starts with a failing case under `cases/regressions/issue-<n>/`.
 - **Expected results are protected.** Never change files under `cases/**/expected/`, or the
   `expected`, `tolerance`, `reference`, `input` or `steps` of an existing case, to make a test
-  pass, and never weaken a test. Only the owner approves an expected-result change.
+  pass, and never weaken a test. Only a maintainer approves an expected-result change.
 - **No compatibility layers**: no aliases, old names, old file suffixes, migrations, or readers
   for old formats.
 - **English** for code, comments, docs, and commit messages.

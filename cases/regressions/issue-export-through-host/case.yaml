@@ -7,11 +7,11 @@ intent: >-
   (`table.file.export`), the editor says it exported only when the host answers and names the file
   the host wrote, and shows the host's error when it refuses. Before, the CSV download asked for a
   save dialog the kit's host does not offer, and no file was written in the desktop app.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition desktop app, the table editor's CSV download saved no file
-  licence: owned
+  license: owned
 input: []
 steps:
   - exec:

@@ -2,9 +2,9 @@ format: 1
 id: regressions/issue-c8-table-pin-lists
 feature: table.agent.premises
 intent: Another agent on the same server adding a record or a field to another table leaves a write to table 1 by local integers and an import reading table 1's schema independent; inserting a record above the addressed one refuses relocated, and moving table 1's fields refuses the import.
-layer: golden
-direction: collab
-source: {kind: synthetic, from: list facts on the public kition-sdk pin, licence: Apache-2.0}
+layer: gate
+dimension: collab
+source: {kind: synthetic, from: list facts on the public kition-sdk pin, license: Apache-2.0}
 input: []
 steps:
   - cargo-test: {package: kition-table, test: outside, filter: list_preimages_on_same_server_local_addresses}

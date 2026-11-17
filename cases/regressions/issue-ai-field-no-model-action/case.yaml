@@ -7,11 +7,11 @@ intent: >-
   `action:settings.open`, a "Set up AI" button that asks the host to open where the person sets up
   AI (`settings.open`, `section: ai`). Before, the run only failed with the host's message and no
   next step.
-layer: golden
+layer: gate
 source:
   kind: probe
   from: error-state review of the kits
-  licence: owned
+  license: owned
 input: []
 steps:
   - exec:

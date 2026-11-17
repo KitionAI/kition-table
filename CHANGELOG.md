@@ -27,6 +27,9 @@ First public release of the source, under the Apache License 2.0. It contains:
   item is removed, as the guard reads it: to move the first of two items to the end, write
   `"from":0,"to":2`.
 - Quality: a missing private tool (kition-server) is a skip, not a failure.
+- Quality vocabulary: cases run in the layers `unit`, `gate`, `corpus` and `eval` (eval cases are
+  run by kition-sdk's `tools/eval-cases.mjs`); cases and features name their `dimension`, a case's
+  `source` names its `license`, and only a maintainer approves expected-result changes.
 - Toolchain: Node 22.23.4, pnpm 10.34.9.
 
 Known gaps are listed in [docs/gaps.md](docs/gaps.md).

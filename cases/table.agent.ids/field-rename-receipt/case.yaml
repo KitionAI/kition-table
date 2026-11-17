@@ -3,11 +3,11 @@ id: table.agent.ids/field-rename-receipt
 feature: table.agent.ids
 intent: >-
   A field rename's receipt names one Field with its title before and after.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: apps/kition-table/tests/premise.rs
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test:

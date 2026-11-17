@@ -6,11 +6,11 @@ intent: >-
   snapshot (`openWithReplica` with empty bytes) as the same KDM document and exchanges changes
   with it; file bytes open with the replica the `.ktable` holds; `undo` and `redo` answer
   `{done, damage}` for the person's steps.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: engine contract 2
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, filter: "tests::a_snapshot_opens_as_the_same_document_without_a_file" }

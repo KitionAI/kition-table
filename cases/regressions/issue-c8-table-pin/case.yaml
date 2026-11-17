@@ -2,9 +2,9 @@ format: 1
 id: regressions/issue-c8-table-pin
 feature: table.agent.premises
 intent: On the public kition-sdk pin, raw batches run under declared premise contracts (a raw cell write refuses a deleted column and ignores the record's place; batch indexes refuse an outside prefix change), receipts state identical assignments once and report no guard-only derived fact, a deleted table is named by its id, parameterless table creation holds its generated name, an outside reread keeps the session's undo history, every raw contract holds what its reading says, and offline creation tasks replay for every stored type.
-layer: golden
-direction: collab
-source: {kind: synthetic, from: the public kition-sdk pin, licence: Apache-2.0}
+layer: gate
+dimension: collab
+source: {kind: synthetic, from: the public kition-sdk pin, license: Apache-2.0}
 input: []
 steps:
   - cargo-test: {package: kition-table, test: outside, filter: raw_cell_address_matrix}

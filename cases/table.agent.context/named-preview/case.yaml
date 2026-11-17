@@ -3,11 +3,11 @@ id: table.agent.context/named-preview
 feature: table.agent.context
 intent: >-
   table_inspect with preview draws the view its target names through table.file.render, and without a target the first table's first view.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: apps/kition-table/tests/premise.rs
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test:

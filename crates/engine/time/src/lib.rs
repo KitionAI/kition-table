@@ -13,7 +13,7 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, Utc};
 pub type Millis = i64;
 
 /// `SOURCE_DATE_EPOCH` (seconds), when the process has it: a reproducible build (a showcase
-/// sample, a golden case) then stores this time instead of the clock's, and its ids come from a
+/// sample, a gate case) then stores this time instead of the clock's, and its ids come from a
 /// counter (`kition-table-file`'s ids), so the same commands save the same bytes. Read once.
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub fn source_date_epoch() -> Option<i64> {

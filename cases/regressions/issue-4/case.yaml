@@ -10,11 +10,11 @@ intent: >-
   table's first view, as the editor opens, until preview.show picks a table, view or dashboard.
   Before, render drew coloured bars without text, of the first table only, at most 8 columns by 20
   rows, so every thumbnail looked alike.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition Table regression suite
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, test: picture }

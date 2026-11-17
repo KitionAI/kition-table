@@ -5,11 +5,11 @@ intent: >-
   Over two messages the agent builds a view and then refines it: a grid view named Open work, then
   a filter on Status that leaves out done tasks and a sort by title. Filters and sorts name fields
   by id, not name. The table kit declares no drafts, so this is the multi-turn case.
-layer: ai
+layer: eval
 source:
   kind: synthetic
   from: repo:conformance/basic.ktable
-  licence: Apache-2.0
+  license: Apache-2.0
   note: A copy of the conformance fixture the table engine writes.
 input: [input/tasks.ktable]
 steps:

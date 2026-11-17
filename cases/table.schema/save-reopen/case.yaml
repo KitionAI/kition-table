@@ -3,11 +3,11 @@ id: table.schema/save-reopen
 feature: table.schema
 intent: >-
   Tables and fields created, renamed, duplicated and deleted with the table and field commands, and a record with CJK and emoji text, survive a .ktable save and reopen, and a second save, as the API reads the whole document.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: bindings/wasm/src/round_trip_tests.rs (tables_and_fields_survive_save_and_reopen)
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, filter: "round_trip_tests::tables_and_fields_survive_save_and_reopen" }

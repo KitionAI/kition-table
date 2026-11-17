@@ -1,12 +1,12 @@
 format: 1
 kit: table
 updated: "2026-11-16"
-golden_budget_s: 600
+gate_budget_s: 600
 protected: []
 features:
   - id: table.agent.observe
     title: An agent reads the records and answers in the file
-    direction: [ai]
+    dimension: [ai]
     priority: P0
     status: has
     requirements: [AX13]
@@ -16,7 +16,7 @@ features:
     since: "2026-11-16"
   - id: table.agent.act
     title: An agent adds records by field name
-    direction: [ai]
+    dimension: [ai]
     priority: P0
     status: has
     requirements: [AX13]
@@ -24,7 +24,7 @@ features:
     since: "2026-11-16"
   - id: table.agent.recover
     title: An agent fixes what the check reports
-    direction: [ai]
+    dimension: [ai]
     priority: P0
     status: has
     requirements: [AX13]
@@ -33,7 +33,7 @@ features:
     since: "2026-11-16"
   - id: table.agent.context
     title: No agent call depends on or leaves behind what the picture shows; previews draw a named table or view
-    direction: [ai]
+    dimension: [ai]
     priority: P0
     status: has
     commands: [table.file.render, table.preview.show]
@@ -43,7 +43,7 @@ features:
     since: "2026-11-16"
   - id: table.agent.ids
     title: One id space for tables, fields, views and records that survives reopening; receipts name them
-    direction: [ai, conversion]
+    dimension: [ai, conversion]
     priority: P0
     status: partial
     paths: [model/schema.json, crates/engine/file/src/kdm/project.rs, bindings/wasm/src/params.rs, bindings/wasm/tests/object_params.rs, apps/kition-table/tests/premise.rs]
@@ -53,7 +53,7 @@ features:
     since: "2026-11-16"
   - id: table.agent.premises
     title: Writes hold their addressed cells, properties, settings and insertion gaps
-    direction: [ai, collab, data-safety]
+    dimension: [ai, collab, data-safety]
     priority: P0
     status: partial
     paths: [bindings/wasm/src/place.rs, bindings/wasm/tests/places.rs, apps/kition-table/tests/outside.rs]
@@ -62,7 +62,7 @@ features:
     since: "2026-11-16"
   - id: table.agent.receipts
     title: Receipts state identical shifts and assignments once and count what they leave out
-    direction: [ai, data-safety]
+    dimension: [ai, data-safety]
     priority: P0
     status: has
     paths: [apps/kition-table/tests/outside/review_receipts.rs, model/schema.json]
@@ -70,7 +70,7 @@ features:
     since: "2026-11-16"
   - id: table.agent.conversation
     title: An agent builds and refines a view over a conversation
-    direction: [ai]
+    dimension: [ai]
     priority: P1
     status: has
     requirements: [AX13]
@@ -78,7 +78,7 @@ features:
     since: "2026-11-16"
   - id: table.agent.environment
     title: Offline editing tasks use the table model's words and value domains
-    direction: [ai]
+    dimension: [ai]
     priority: P1
     status: partial
     paths: [model/schema.json, crates/engine/file/src/kdm/kit-table.schema.json, bindings/wasm/tests/schema_words.rs, apps/kition-table/tests/environment.rs]
@@ -87,7 +87,7 @@ features:
     since: "2026-11-16"
   - id: table.collab.replica
     title: A shared table opens from its replica (engine contract 2)
-    direction: [collab, function]
+    dimension: [collab, function]
     priority: P1
     status: has
     requirements: [E2]
@@ -96,7 +96,7 @@ features:
     since: "2026-11-16"
   - id: table.collab.live
     title: Two or more people edit one table at the same time, live
-    direction: [collab, function]
+    dimension: [collab, function]
     priority: P1
     status: has
     requirements: [E2]
@@ -105,7 +105,7 @@ features:
     since: "2026-11-16"
   - id: table.editor.toolbar
     title: The grid toolbar (add record, fields, filter, sort, group, row height, freeze, search)
-    direction: [function]
+    dimension: [function]
     priority: P1
     status: has
     paths: [web/src/editor/table/components/TableEditorToolbarPropertyBar.tsx, web/src/editor/table/components/TableEditorOverlays.tsx, web/src/styles/editor.css]
@@ -113,7 +113,7 @@ features:
     since: "2026-11-16"
   - id: table.records
     title: "Records: list, create, update, delete, copy in bulk, and their history"
-    direction: [function, data-safety]
+    dimension: [function, data-safety]
     priority: P0
     status: has
     commands: [table.records.list, table.records.create, table.records.update, table.records.delete, table.records.history, table.records.bulkDelete, table.records.bulkCopy]
@@ -122,7 +122,7 @@ features:
     since: "2026-11-16"
   - id: table.schema
     title: "Tables and fields: create, update, delete, duplicate, link candidates"
-    direction: [function]
+    dimension: [function]
     priority: P0
     status: has
     commands: [table.documents.get, table.tables.list, table.tables.create, table.tables.update, table.tables.delete, table.fields.list, table.fields.create, table.fields.update, table.fields.delete, table.fields.duplicate, table.fields.linkCandidates]
@@ -132,7 +132,7 @@ features:
     since: "2026-11-16"
   - id: table.views
     title: "Views: filters, sorts, groups, field visibility and widths"
-    direction: [function]
+    dimension: [function]
     priority: P0
     status: has
     commands: [table.views.list, table.views.create, table.views.update, table.views.delete, table.views.getFilterTree, table.views.putFilterTree, table.views.getSorts, table.views.putSorts, table.views.getGroups, table.views.putGroups, table.views.patchConfig, table.views.listFields, table.views.patchField]
@@ -141,7 +141,7 @@ features:
     since: "2026-11-16"
   - id: table.links
     title: "Links between records"
-    direction: [function]
+    dimension: [function]
     priority: P0
     status: has
     commands: [table.links.list, table.links.replace, table.links.delete]
@@ -150,7 +150,7 @@ features:
     since: "2026-11-16"
   - id: table.import-export
     title: "Import CSV and spreadsheets; export CSV and Markdown"
-    direction: [conversion, function]
+    dimension: [conversion, function]
     priority: P1
     status: has
     commands: [table.csv.import, table.csv.export, table.markdown.export, table.file.export, table.import.preview, table.import.run]
@@ -160,7 +160,7 @@ features:
     since: "2026-11-16"
   - id: table.dashboards
     title: "Dashboards and record previews"
-    direction: [function]
+    dimension: [function]
     priority: P1
     status: has
     commands: [table.dashboards.list, table.dashboards.upsert, table.dashboards.delete]
@@ -169,7 +169,7 @@ features:
     since: "2026-11-16"
   - id: table.picture
     title: "The document's picture: what the editor shows (tables, views, typed cells, dashboards), for renders, thumbnails and previews"
-    direction: [fidelity, ai]
+    dimension: [fidelity, ai]
     priority: P1
     status: has
     commands: [table.file.render, table.preview.show]
@@ -178,7 +178,7 @@ features:
     since: "2026-11-16"
   - id: table.attachments
     title: "Attachments stored in the file"
-    direction: [function, data-safety]
+    dimension: [function, data-safety]
     priority: P1
     status: has
     commands: [table.attachments.put, table.attachments.read]
@@ -186,7 +186,7 @@ features:
     since: "2026-11-16"
   - id: table.ai-fields
     title: "AI fields: prepare a request and apply its answer to cells"
-    direction: [ai, function]
+    dimension: [ai, function]
     priority: P1
     status: partial
     commands: [table.ai.prepare, table.ai.apply]
@@ -195,7 +195,7 @@ features:
     since: "2026-11-16"
   - id: table.history
     title: "Undo, redo, transactions and the change feed"
-    direction: [function, collab]
+    dimension: [function, collab]
     priority: P1
     status: partial
     commands: [edit.undo, edit.redo, table.transact, table.undo, table.redo, table.historyState, table.changes.since]
@@ -204,7 +204,7 @@ features:
     since: "2026-11-16"
   - id: table.editor.display-modes
     title: The editor in Focus (an editor without frame tabs offers only Focus); Focus shows the records alone
-    direction: [function]
+    dimension: [function]
     priority: P1
     status: has
     paths: [web/src/App.tsx, web/src/editor/table/components/TableEditor.tsx, web/src/editor/table/components/TableEditorFooter.tsx, web/src/editor/dashboard/components/DashboardEditor.tsx, web/src/editor/table/components/TableColumnHeaderMenu.tsx, web/src/editor/table/components/TableEditorOverlays.tsx, web/src/editor/table/components/AttachmentPreviewModal.tsx, web/tests/modes.mjs, web/tests/flow.mjs]

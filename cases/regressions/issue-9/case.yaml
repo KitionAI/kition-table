@@ -2,11 +2,11 @@ format: 1
 id: regressions/issue-9
 feature: table.schema
 intent: An explicit table or field name is kept as given, or refused. table.tables.create (name, fields[i].name) and table.fields.create (name) answer invalid_params with one data.errors entry per name the engine would have rewritten, at /name or /fields/<i>/name, and the call writes nothing. Such a name is one not in internal-name form (^[a-z](?:[a-z0-9_]*[a-z0-9])?$) or one already taken, also by an earlier field of the same call. Names derived from titles stay as before, and the params schemas and agent/guide.md state the rule. Before, kition-table 0.2.18 silently rewrote "电话x" to x and a second "name" to name_2, so a host wrote into a different field than it meant.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition Table regression suite
-  licence: owned
+  license: owned
 input: []
 steps:
   - exec:

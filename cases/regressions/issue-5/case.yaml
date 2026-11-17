@@ -9,11 +9,11 @@ intent: >-
   unlinks the other. records.create and records.update answer changed (false when nothing
   changed), as writing-format.md says. Before, transact dropped link values silently, the reverse
   field stayed empty, and records.update answered the record without changed.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition Table regression suite
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, test: record_links }

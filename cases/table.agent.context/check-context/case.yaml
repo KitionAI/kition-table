@@ -3,11 +3,11 @@ id: table.agent.context/check-context
 feature: table.agent.context
 intent: >-
   The editor-state hooks pass kition-sdk's check_context with a context that really moves the editor (another table's view): no revision, dirty state, undo step or content changes, and the state is put back.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: apps/kition-table/tests/context.rs
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test:

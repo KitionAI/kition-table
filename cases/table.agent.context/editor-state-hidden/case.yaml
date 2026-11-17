@@ -3,11 +3,11 @@ id: table.agent.context/editor-state-hidden
 feature: table.agent.context
 intent: >-
   What an agent reads of a table file is the same whatever the person's picture shows (table.preview.show): the editor state (what the picture shows) is not in inspect, and EDITOR_STATE says so.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: apps/kition-table/tests/context.rs
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test:

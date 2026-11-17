@@ -8,11 +8,11 @@ intent: >-
   `change` (what the call changed, or null). Before, 18 commands answered an untyped "route's
   answer" and the typed ones left out most keys (ids, order, timestamps), and descriptions named
   things the commands do not do (record counts, form views, a view's filters in records.list).
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition Table regression suite
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table, test: command_catalogue }

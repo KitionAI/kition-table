@@ -3,11 +3,11 @@ id: table.agent.context/on-and-part
 feature: table.agent.context
 intent: >-
   Through the agent's tools, a step with on and at.part updates exactly the record on names in the part's table; the request's change and the receipt name that record alone, with its cells before and after.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: apps/kition-table/tests/premise.rs
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test:

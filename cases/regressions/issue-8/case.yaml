@@ -9,11 +9,11 @@ intent: >-
   another case or with spaces for underscores) is told the field's name. The engine refuses it,
   so the in-page editor gets the same refusal. Before, a host that keyed values by title got a
   record without them and a success answer, and the data was lost.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition Table regression suite
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table, test: unknown_values }

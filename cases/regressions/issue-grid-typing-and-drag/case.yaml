@@ -9,11 +9,11 @@ intent: >-
   grid when the hovered cell changes, not on every pointer move, and moving inside a text cell
   no longer redraws the grid at all; a dragged column or row and the freeze handle still follow
   the pointer.
-layer: golden
+layer: gate
 source:
   kind: probe
   from: editor review, the Sheet kit's typing and drag fixes applied to the table grid
-  licence: owned
+  license: owned
 input: []
 steps:
   - exec:

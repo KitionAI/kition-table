@@ -5,11 +5,11 @@ intent: >-
   The agent adds a record with every value landing in its field. Values are keyed by the field's
   name (status, notes), not its title (Status, Notes); a title key is silently ignored, so this is
   the pitfall the guide warns about.
-layer: ai
+layer: eval
 source:
   kind: synthetic
   from: repo:conformance/basic.ktable
-  licence: Apache-2.0
+  license: Apache-2.0
   note: A copy of the conformance fixture the table engine writes.
 input: [input/tasks.ktable]
 steps:

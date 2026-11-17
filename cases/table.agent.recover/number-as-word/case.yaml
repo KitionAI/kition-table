@@ -4,11 +4,11 @@ feature: table.agent.recover
 intent: >-
   The agent uses the kit's check to find a number field holding a word and repairs it with the
   number it means, not by clearing it (the check's own fix), keeping the record's other values.
-layer: ai
+layer: eval
 source:
   kind: synthetic
   from: repo:conformance/check-field-type-mismatch.ktable
-  licence: Apache-2.0
+  license: Apache-2.0
   note: A copy of the conformance fixture for table.field-type-mismatch (Effort holds "three").
 input: [input/effort.ktable]
 steps:

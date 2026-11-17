@@ -4,11 +4,11 @@ feature: table.agent.observe
 intent: >-
   The agent reads the records through the kit to find which task is done, and answers in the file:
   the other task's notes name it. Nothing else changes.
-layer: ai
+layer: eval
 source:
   kind: synthetic
   from: repo:conformance/basic.ktable
-  licence: Apache-2.0
+  license: Apache-2.0
   note: A copy of the conformance fixture the table engine writes.
 input: [input/tasks.ktable]
 steps:

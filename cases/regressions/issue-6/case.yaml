@@ -8,11 +8,11 @@ intent: >-
   checkbox cells as booleans, multi_select cells as the list, empty cells as no value; a cell that
   does not read as its type stays text and is reported. Before, every imported number was a
   string, so every row reported table.field-type-mismatch.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition Table regression suite
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, test: check_false_positives }

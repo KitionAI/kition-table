@@ -3,11 +3,11 @@ id: table.links/save-reopen
 feature: table.links
 intent: >-
   A link-to-record field linking a task to two people keeps both links, with the people's names, through a .ktable save and reopen, and a second save.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: bindings/wasm/src/round_trip_tests.rs (record_links_survive_save_and_reopen)
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, filter: "round_trip_tests::record_links_survive_save_and_reopen" }

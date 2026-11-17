@@ -13,11 +13,11 @@ intent: >-
   table.tables.delete as a system write the person's Undo does not bring back. Before, `type` was
   a bare string, an unknown type failed with "Failed to create field", and nothing said the new
   document held a table.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition Table regression suite
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, test: field_types }

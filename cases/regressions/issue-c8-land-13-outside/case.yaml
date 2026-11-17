@@ -2,13 +2,13 @@ format: 1
 id: regressions/issue-c8-land-13-outside
 feature: table.agent.premises
 intent: An independent writer rewrites the file between observation and write; relevant changes refuse, unrelated changes apply, and fixed rules classify a fixed-seed mixed table of writes.
-layer: golden
-direction: collab
+layer: gate
+dimension: collab
 timeout_s: 60
 source:
   kind: synthetic
   from: outside-writer tests of the agent tools
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test: {package: kition-table, test: outside}

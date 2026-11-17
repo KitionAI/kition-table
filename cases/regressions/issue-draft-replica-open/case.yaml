@@ -9,11 +9,11 @@ intent: >-
   headless draft is such a replica (KHP A12); the kit's ReplicaPort lacked model_open_replica and
   the blob methods, so kition-kits-mcp silently fell back to file-mode drafts (copies of the file,
   without the object difference a person reviews).
-layer: golden
+layer: gate
 source:
   kind: probe
   from: agent-readiness review of the table kit's drafts
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table, test: replica }

@@ -8,11 +8,11 @@ intent: >-
   a snapshot the file already holds leaves the document saved, and a damaged one is left out.
   Before, file bytes opened as the file alone and the stored snapshot was ignored, so the
   editor showed the last saved file until the relay caught up.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: "co-editing cases: table keeps no replica the room can use"
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, filter: "tests::a_room_snapshot_of_the_same_document_merges_into_the_file" }

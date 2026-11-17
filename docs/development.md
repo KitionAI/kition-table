@@ -94,12 +94,12 @@ files (`bindings/wasm/tests/`, `apps/kition-table/tests/`); `--test <name>` runs
 `KITION_TABLE_WRITE_COMMANDS=1 cargo test -p kition-table-kit shipped_commands_file` rewrites
 `agent/commands.json` after a command changes.
 
-The cases under `cases/` are run by kition-sdk's case runner; `layer: ai` cases (`cases/table.agent.*`)
-have a real model edit a table through the kits' MCP server and are started only by the owner
+The cases under `cases/` are run by kition-sdk's case runner; eval cases (`cases/table.agent.*`)
+have a real model edit a table through the kits' MCP server and are started only by a maintainer
 (docs/quality.md). Check them without a model from a kition-sdk checkout beside this repository:
 
 ```sh
-node ../kition-sdk/tools/ai-cases.mjs --repo . --dry-run   # each case fails before and passes after its solution
+node ../kition-sdk/tools/eval-cases.mjs --repo . --dry-run   # each case fails before and passes after its solution
 ```
 
 `kit.json` is checked with kition-sdk's `tools/check-manifest.mjs`.

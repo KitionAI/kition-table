@@ -8,11 +8,11 @@ intent: >-
   edit converges when it reconnects; a first open from the room and one from the file are one
   document. In the editor, the replica is declared, a viewer's session refuses every write the
   table makes, and a co-editor's records reach the table through the data source.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: "co-editing cases (MC-02, MC-05, MC-16/17, MC-17/18)"
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, test: convergence }

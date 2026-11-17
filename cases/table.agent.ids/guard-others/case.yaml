@@ -3,11 +3,11 @@ id: table.agent.ids/guard-others
 feature: table.agent.ids
 intent: >-
   With basis, another agent's edit of another record does not refuse my write: it applies, and others names that record and the other agent.
-layer: golden
+layer: gate
 source:
   kind: synthetic
   from: apps/kition-table/tests/premise.rs
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test:

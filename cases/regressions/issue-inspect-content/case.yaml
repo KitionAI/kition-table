@@ -10,11 +10,11 @@ intent: >-
   or of a view (A24a, A25). An edit (a field renamed, a record changed) changes the answer and
   survives a save and a reopen. Before, the headless kit answered {"tables": [{"id": 1}]}, so the
   agent-ready self-test found an edit invisible and an agent had to guess.
-layer: golden
+layer: gate
 source:
   kind: probe
   from: agent-readiness review of the table kit, the SDK self-test's act phase
-  licence: owned
+  license: owned
 input: []
 steps:
   - cargo-test: { package: kition-table, test: inspect }

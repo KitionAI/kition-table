@@ -8,11 +8,11 @@ intent: >-
   Before, every one of the 54 schema'd commands ran with an unknown key or refused it without
   naming it, table.undo and table.redo read a `scope` their schema left out, and the editor sent
   keys the engine ignored (ai.prepare's scope and force, dashboards.upsert's id).
-layer: golden
+layer: gate
 source:
   kind: probe
   from: "unknown-parameter sweep of the kits"
-  licence: Apache-2.0
+  license: Apache-2.0
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, test: unknown_params }

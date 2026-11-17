@@ -6,11 +6,11 @@ intent: >-
   "Search records" in view: its menu buttons show as icons, named by title and aria-label, since
   their menus open inline and a scrolling bar would clip them. Undo and Redo are the editor
   frame's alone; the toolbar no longer adds a second pair beside them.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: UI design review of the kits
-  licence: owned
+  license: owned
 input: []
 steps:
   - flow: { spec: web/tests/flow.mjs, scenario: "keeps search in view at 768 and shows one Undo and Redo", browsers: [chromium, webkit] }

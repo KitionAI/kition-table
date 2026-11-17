@@ -84,5 +84,5 @@ these third-party libraries. Versions are the ones `Cargo.lock` and `web/pnpm-lo
 | `web/public/templates/**/manifest.json` | Kition authors | written for the templates | Apache-2.0 | Template definitions |
 | `conformance/*.ktable`, `conformance/edit.json` | Kition Table contributors | written for the conformance suite | Apache-2.0 | Fixtures, one per diagnostic code |
 | `conformance/golden/*.png`, `conformance/golden/tolerance.json` | Kition Table contributors | rendered by this repository's engine | Apache-2.0 | Reference renders |
-| `cases/**/input/*.ktable` | Kition Table contributors | written for the cases | Apache-2.0 | Golden case inputs |
+| `cases/**/input/*.ktable` | Kition Table contributors | written for the cases | Apache-2.0 | Case inputs |
 | `model/schema.json` | Kition Table contributors | written for the KDM model | Apache-2.0 | The document's KDM schema |

@@ -6,11 +6,11 @@ intent: >-
   (`edit.undo` / `edit.redo` with `scope: agent`) take it back and put it back. The engine exports
   `executeAs`, which the editor's worker uses for agent steps; without it Kition's agent matrix
   (e2e/interaction/agent-adaptation.spec.ts, table) saw `changed: false` on undo.
-layer: golden
+layer: gate
 source:
   kind: issue
   from: Kition's agent interaction tests
-  licence: owned
+  license: owned
 input: []
 steps:
   - exec:
