@@ -15,9 +15,6 @@ crate-type = ["cdylib", "rlib"]
 workspace = true
 
 [dependencies]
-# The pinned KDM uses loro 1.16.2; its ^1.16.2 internal dependency admits
-# incompatible 1.17 releases in a consuming workspace without our Cargo.lock.
-loro-internal = "=1.16.2"
 # 34dff06's unconditional BatchSettler alias requires its session-gated kdm module.
 kition-kit = { workspace = true, features = ["session"] }
 kition-table-file = { workspace = true }
