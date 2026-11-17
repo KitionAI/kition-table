@@ -168,7 +168,7 @@ is run. Building the executable with text in its previews needs the fonts listed
 
 ## Maturity
 
-Version 0.1.0 (`kit.json`, changes in [CHANGELOG.md](CHANGELOG.md)); KHP 1.0, conformance level `basic`.
+Version 0.4.0 (`kit.json`, changes in [CHANGELOG.md](CHANGELOG.md)); KHP 1.0, conformance level `basic`.
 
 The feature catalogue (`features.yaml`) lists every feature with its status and the cases that
 prove it; known gaps are in [docs/gaps.md](docs/gaps.md).

@@ -3,6 +3,18 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
+## 0.4.0
+
+The first version with prebuilt headless executables: the Kition SDK release that carries this
+version builds `kition-table` for macOS (arm64, x64), Linux (arm64, x64) and Windows (x64) from the
+`package-v0.4.0` tag. Its number is above every version this repository has published before:
+the 0.3.1 package of 17 November 2026 was withdrawn when the history was rewritten, and
+0.1.0 stays published as it is. From this version on a published tag and its assets are never
+deleted, moved or reused.
+
+- `scripts/fetch-fonts.sh <folder>`: downloads the fonts the build needs from their upstream
+  sources and checks each file's SHA-256, so a source build needs no private repository.
+
 ## 0.1.0
 
 First public release of the source, under the Apache License 2.0. It contains:

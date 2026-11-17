@@ -34,7 +34,7 @@ Fonts
 
 The web package ships and embeds no font. The headless
 kition-table executable (built with the `embed` feature of crates/view/fonts) builds in three
-faces from kition-fonts (https://github.com/KitionAI/kition-fonts): Inter (SIL Open Font License
+faces from their upstream sources (scripts/fetch-fonts.sh): Inter (SIL Open Font License
 1.1, Copyright 2020 The Inter Project Authors), Noto Color Emoji (SIL Open Font License 1.1,
 Copyright 2022 Google Inc.) and Droid Sans Fallback (Apache-2.0, Copyright (c) 2005-2008 The
 Android Open Source Project). The SIL Open Font License text is at the end of this file.

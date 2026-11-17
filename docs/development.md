@@ -23,7 +23,8 @@ Table in your own app, start with the [README](../README.md).
 Requirements and fonts are below. On a clean clone:
 
 ```sh
-export KITION_FONTS_DIR=<folder holding fonts/>   # see "Fonts"
+scripts/fetch-fonts.sh ~/kition-table-fonts        # see "Fonts"
+export KITION_FONTS_DIR=~/kition-table-fonts
 
 # The headless kit, and the table tools for any MCP client
 cargo build --release -p kition-table              # target/release/kition-table
@@ -55,9 +56,10 @@ git dependencies pinned by commit in `Cargo.toml`; Cargo fetches them.
 ## Fonts
 
 The picture (thumbnails, the agent's preview, `table.file.render`) draws text with the faces
-below. Download each file, with its license, into a folder of your choice laid out as shown, and
-set `KITION_FONTS_DIR` to that folder (the default is a `kition-fonts` folder beside this
-repository). The headless executable embeds them at build time (`kition-table-fonts`, feature
+below. `scripts/fetch-fonts.sh <folder>` downloads each file, with its license, from its upstream
+source into `<folder>`, laid out as shown, and checks its SHA-256; then set `KITION_FONTS_DIR` to
+that folder (the default is a `kition-fonts` folder beside this repository, the maintainers'
+private font checkout, which has the same layout and the same files). The headless executable embeds them at build time (`kition-table-fonts`, feature
 `embed`); without them it builds with a warning and its previews have no text
 (`KITION_FONTS_REQUIRED=1` makes that an error). The picture and preview tests read them and fail
 without them.
