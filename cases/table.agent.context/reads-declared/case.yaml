@@ -1,0 +1,20 @@
+format: 1
+id: table.agent.context/reads-declared
+feature: table.agent.context
+intent: >-
+  What each command reads and the parameter on fills are derived from the code (the dispatch's reads of the picture's state, kition-table-api's reads of each request's ids), and five commands' published required parameters pass kition-sdk's check_required.
+layer: golden
+source:
+  kind: synthetic
+  from: bindings/wasm/tests/acts.rs
+  licence: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table-kit
+      test: acts
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+since: "2026-11-16"

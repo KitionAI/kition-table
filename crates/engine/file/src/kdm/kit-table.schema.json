@@ -1,0 +1,108 @@
+{
+  "kdm": 1,
+  "kit": "kit.table",
+  "schemaVersion": 1,
+  "root": "Base",
+  "types": {
+    "Base": {
+      "batchOps": { "*": { "direct": true } },
+      "label": "title",
+      "derived": {
+        "linkCells": { "description": "Link membership by source record and field", "premiseOnly": true },
+        "mirrors": { "description": "Effective symmetric partner of each link field", "premiseOnly": true },
+        "rowIds": { "description": "Live record identities by table, independent of order", "premiseOnly": true }
+      },
+      "fields": {
+        "title": { "kind": "string" },
+        "description": { "kind": "string" },
+        "icon": { "kind": "string" },
+        "color": { "kind": "string" },
+        "meta": { "kind": "json", "optional": true },
+        "tables": { "kind": "list", "of": "Table" },
+        "dashboards": { "kind": "list", "of": "Dashboard" }
+      }
+    },
+    "Table": {
+      "batchOps": { "*": { "direct": true } },
+      "label": "title",
+      "derived": { "fieldOrder": { "description": "Hash of the table's ordered field identities, for calls that read its schema", "premiseOnly": true } },
+      "fields": {
+        "name": { "kind": "string", "sample": false },
+        "title": { "kind": "string" },
+        "description": { "kind": "string", "optional": true },
+        "meta": { "kind": "json", "optional": true },
+        "primaryField": { "kind": "ref", "of": "Field", "optional": true },
+        "fields": { "kind": "list", "of": "Field" },
+        "views": { "kind": "list", "of": "View" },
+        "records": { "kind": "list", "of": "Record" }
+      }
+    },
+    "Field": {
+      "batchOps": { "*": { "direct": true } },
+      "label": "title",
+      "derived": { "owner": { "description": "Owning table UUID", "premiseOnly": true } },
+      "fields": {
+        "name": { "kind": "string", "sample": false },
+        "title": { "kind": "string" },
+        "type": { "kind": "enum", "values": ["text", "long_text", "number", "date", "datetime", "single_select", "multi_select", "checkbox", "url", "attachment", "document_link", "formula", "ai", "rating", "user", "link_to_record", "lookup", "rollup", "button", "created_time", "last_modified_time", "created_by", "last_modified_by", "auto_number"] },
+        "required": { "kind": "boolean", "label": "required" },
+        "readonly": { "kind": "boolean", "label": "read only" },
+        "options": { "kind": "json", "optional": true },
+        "formula": { "kind": "string", "optional": true },
+        "aiPrompt": { "kind": "string", "optional": true },
+        "meta": { "kind": "json", "optional": true }
+      }
+    },
+    "View": {
+      "batchOps": { "*": { "direct": true } },
+      "label": "title",
+      "derived": {
+        "owner": { "description": "Owning table UUID", "premiseOnly": true },
+        "rowHeight": { "description": "effective row_height setting, null when absent" },
+        "frozenColumnCount": { "description": "effective frozen_column_count setting, null when absent" },
+        "searchQuery": { "description": "effective search_query setting, null when absent" },
+        "filterTree": { "description": "effective filter_tree setting, null when absent" },
+        "sorts": { "description": "effective sorts setting, null when absent" },
+        "groups": { "description": "effective groups setting, null when absent" }
+      },
+      "fields": {
+        "type": { "kind": "enum", "values": ["grid", "kanban", "calendar", "gallery"] },
+        "title": { "kind": "string" },
+        "locked": { "kind": "boolean", "label": "locked" },
+        "config": { "kind": "json", "optional": true, "members": { "frozen_column_count": { "minimum": 0, "maximum": 9223372036854775807, "multipleOf": 1 } } },
+        "widths": { "kind": "map" },
+        "hidden": { "kind": "map" }
+      }
+    },
+    "Record": {
+      "batchOps": {
+        "*": { "direct": true },
+        "map.set.cells": { "command": "model.cell", "params": { "target": "target", "key": "key" } },
+        "map.remove.cells": { "command": "model.cell", "params": { "target": "target", "key": "key" } }
+      },
+      "derived": { "owner": { "description": "Owning table UUID", "premiseOnly": true } },
+      "fields": {
+        "cells": { "kind": "map" },
+        "createdAt": { "kind": "integer", "readOnly": true, "optional": true, "display": { "kind": "time", "perSecond": 1000 } },
+        "createdBy": { "kind": "string", "readOnly": true, "optional": true }
+      }
+    },
+    "Link": {
+      "batchOps": { "*": { "direct": true } },
+      "fields": {
+        "from": { "kind": "ref", "of": "Record" },
+        "field": { "kind": "ref", "of": "Field" },
+        "to": { "kind": "ref", "of": "Record" }
+      }
+    },
+    "Dashboard": {
+      "batchOps": { "*": { "direct": true } },
+      "label": "name",
+      "fields": {
+        "name": { "kind": "string" },
+        "config": { "kind": "json", "optional": true },
+        "widgets": { "kind": "map" }
+      }
+    }
+  }
+}

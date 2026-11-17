@@ -1,0 +1,17 @@
+format: 1
+id: table.dashboards/save-reopen
+feature: table.dashboards
+intent: >-
+  A dashboard upserted with a widget, next to one deleted, survives a .ktable save and reopen, and a second save.
+layer: golden
+source:
+  kind: synthetic
+  from: bindings/wasm/src/round_trip_tests.rs (dashboards_survive_save_and_reopen)
+  licence: Apache-2.0
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "round_trip_tests::dashboards_survive_save_and_reopen" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

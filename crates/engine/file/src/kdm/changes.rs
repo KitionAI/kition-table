@@ -1,0 +1,266 @@
+//! Which records changed since a version of the replica, and who changed them.
+//!
+//! Every stored write notes the version it reached and its origin in the origin log
+//! ([`store::record_origin`]), which survives compaction. [`TableFile::record_changes_since`]
+//! walks the log from a version: for each write after it, the replica as it was before the write
+//! (a fork at the previous version) takes the write's changes (exported from a fork at the
+//! version the write reached), and the records the import changed are compared before and after.
+//! A record no table listed before and one lists after was created; one listed before and no
+//! longer listed was deleted; one listed on both sides whose cells (or links) differ was updated,
+//! in those fields.
+//!
+//! Changes the log cannot attribute (writes older than the log keeps, or writes made before the
+//! log existed) are reported with the origin [`UNKNOWN_ORIGIN`].
+
+use std::collections::{BTreeSet, HashMap};
+
+use kition_kdm::{ObjectId, Origin, OriginKind, Replica, Version};
+use rusqlite::OptionalExtension;
+use serde::Serialize;
+use serde_json::Value;
+
+use super::model::{LINK, RECORD};
+use super::read::ModelView;
+use super::store;
+use crate::{Result, TableFile, TableFileError};
+
+/// The origin of changes the origin log cannot attribute.
+pub const UNKNOWN_ORIGIN: &str = "system:unknown";
+
+/// What happened to a record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RecordChangeKind {
+    Created,
+    Updated,
+    Deleted,
+}
+
+/// One record a write created, updated, or deleted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordChange {
+    pub table_id: i64,
+    pub record_id: i64,
+    /// The fields whose values changed (updates only), sorted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_ids: Option<Vec<i64>>,
+    /// The write's origin: `person:<principal>`, `agent:<principal>`, `extension:<principal>`,
+    /// `import:<principal>`, or `system:<label>`.
+    pub origin: String,
+}
+
+/// The records created, updated, and deleted since a version, in the order the writes made them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RecordChanges {
+    pub created: Vec<RecordChange>,
+    pub updated: Vec<RecordChange>,
+    pub deleted: Vec<RecordChange>,
+}
+
+/// An encoded origin (`Origin::encode`, the origin log's form) as `kind:principal`, or
+/// `system:<label>` for a system write.
+pub fn render_origin(origin: &Origin) -> String {
+    match origin.kind {
+        OriginKind::System => format!("system:{}", origin.label.clone().unwrap_or_else(|| origin.principal.clone())),
+        kind => format!("{}:{}", kind.as_str(), origin.principal),
+    }
+}
+
+fn render_encoded(encoded: &str) -> String {
+    Origin::decode(encoded).map_or_else(|| UNKNOWN_ORIGIN.to_owned(), |origin| render_origin(&origin))
+}
+
+impl TableFile {
+    /// The records created, updated, and deleted since `since` (a version of this file's replica;
+    /// [`Version::empty`] for every change), each with the origin of the write that made it.
+    /// [`TableFileError::Invalid`] when `since` names changes the replica does not have.
+    pub fn record_changes_since(&self, since: &Version) -> Result<RecordChanges> {
+        let current = self.replica.version();
+        if !current.includes(since) {
+            return Err(TableFileError::invalid("the version names changes this document does not have"));
+        }
+        let mut walk = Walk { file: self, prev: fork(&self.replica, since)?, out: Collected::default() };
+        if since.includes(&current) {
+            return Ok(walk.out.finish());
+        }
+        // The log's floor: where the rows it dropped had brought the replica.
+        if let Some(floor) = store::origin_log_floor(&self.conn)?
+            && current.includes(&floor)
+            && !walk.prev.version().includes(&floor)
+        {
+            walk.step(Some(&floor), UNKNOWN_ORIGIN)?;
+        }
+        for (version, encoded) in store::origin_log(&self.conn)? {
+            // A row the replica never reached (the file was replaced by another copy) is skipped;
+            // whatever it holds is reported at the end.
+            if walk.prev.version().includes(&version) || !current.includes(&version) {
+                continue;
+            }
+            let target = if version == current { None } else { Some(&version) };
+            walk.step(target, &render_encoded(&encoded))?;
+        }
+        if !walk.prev.version().includes(&current) {
+            walk.step(None, UNKNOWN_ORIGIN)?;
+        }
+        Ok(walk.out.finish())
+    }
+}
+
+fn fork(replica: &Replica, at: &Version) -> Result<Replica> {
+    Ok(replica.fork_at(at, crate::ids::actor())?)
+}
+
+struct Walk<'a> {
+    file: &'a TableFile,
+    /// The replica as it was after the last step.
+    prev: Replica,
+    out: Collected,
+}
+
+impl Walk<'_> {
+    /// Moves `prev` to `to` (`None`: the current version), attributing what changed to `origin`.
+    fn step(&mut self, to: Option<&Version>, origin: &str) -> Result<()> {
+        let changes = match to {
+            Some(version) => fork(&self.file.replica, version)?.export_changes(&self.prev.version())?,
+            None => self.file.replica.export_changes(&self.prev.version())?,
+        };
+        let mut next = self.prev.fork(crate::ids::actor())?;
+        let changed = next.import_changes(&changes)?;
+        diff(self.file, &self.prev, &next, &changed, origin, &mut self.out)?;
+        self.prev = next;
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct Collected {
+    changes: Vec<(RecordChangeKind, RecordChange)>,
+    /// Where each `(kind, record, origin)` already is in `changes`, to merge repeats.
+    index: HashMap<(RecordChangeKind, i64, String), usize>,
+}
+
+impl Collected {
+    fn push(&mut self, kind: RecordChangeKind, change: RecordChange) {
+        let key = (kind, change.record_id, change.origin.clone());
+        if let Some(at) = self.index.get(&key) {
+            if let (Some((_, existing)), Some(fields)) = (self.changes.get_mut(*at), change.field_ids) {
+                let merged = existing.field_ids.get_or_insert_with(Vec::new);
+                merged.extend(fields);
+                merged.sort_unstable();
+                merged.dedup();
+            }
+            return;
+        }
+        self.index.insert(key, self.changes.len());
+        self.changes.push((kind, change));
+    }
+
+    fn finish(self) -> RecordChanges {
+        let mut out = RecordChanges::default();
+        for (kind, change) in self.changes {
+            match kind {
+                RecordChangeKind::Created => out.created.push(change),
+                RecordChangeKind::Updated => out.updated.push(change),
+                RecordChangeKind::Deleted => out.deleted.push(change),
+            }
+        }
+        out
+    }
+}
+
+fn is_type(replica: &Replica, id: &ObjectId, ty: &str) -> bool {
+    replica.object_type(id).is_ok_and(|found| found == ty)
+}
+
+fn cells(replica: &Replica, id: &ObjectId) -> Result<HashMap<String, Value>> {
+    if !replica.exists(id) {
+        return Ok(HashMap::new());
+    }
+    Ok(replica.map_entries(id, "cells")?.into_iter().collect())
+}
+
+/// The record's row (`(id, table id)`), live or deleted, in the file's projection.
+fn record_row(file: &TableFile, row_key: &str) -> Result<Option<(i64, i64)>> {
+    Ok(file
+        .conn
+        .prepare_cached("SELECT id, table_id FROM kition_records WHERE row_key = ?1 ORDER BY deleted_at IS NOT NULL, id DESC LIMIT 1")?
+        .query_row([row_key], |row| Ok((row.get(0)?, row.get(1)?)))
+        .optional()?)
+}
+
+/// The field row's id for a field object, live or deleted.
+fn field_id(file: &TableFile, cache: &mut HashMap<String, Option<i64>>, object: &str) -> Result<Option<i64>> {
+    if let Some(found) = cache.get(object) {
+        return Ok(*found);
+    }
+    let found = file
+        .conn
+        .prepare_cached("SELECT id FROM kition_fields WHERE kdm_id = ?1 ORDER BY deleted_at IS NOT NULL, id DESC LIMIT 1")?
+        .query_row([object], |row| row.get(0))
+        .optional()?;
+    cache.insert(object.to_owned(), found);
+    Ok(found)
+}
+
+/// Collects what one step changed in records: `changed` are the objects the step's import
+/// changed, `prev` and `next` the replica before and after it.
+fn diff(file: &TableFile, prev: &Replica, next: &Replica, changed: &BTreeSet<ObjectId>, origin: &str, out: &mut Collected) -> Result<()> {
+    let before = ModelView::new(prev);
+    let after = ModelView::new(next);
+    let mut fields = HashMap::new();
+    // Updated records and their fields, in object order; links add their record's link field.
+    let mut updated: Vec<(ObjectId, BTreeSet<i64>)> = Vec::new();
+    let mut updated_at: HashMap<ObjectId, usize> = HashMap::new();
+    let mut note = |record: ObjectId, field: Option<i64>, updated: &mut Vec<(ObjectId, BTreeSet<i64>)>| {
+        let at = *updated_at.entry(record.clone()).or_insert_with(|| {
+            updated.push((record, BTreeSet::new()));
+            updated.len() - 1
+        });
+        if let (Some(field), Some((_, set))) = (field, updated.get_mut(at)) {
+            set.insert(field);
+        }
+    };
+    for id in changed {
+        if is_type(prev, id, RECORD) || is_type(next, id, RECORD) {
+            let was = before.table_of_record(id)?.is_some();
+            let is = after.table_of_record(id)?.is_some();
+            let kind = match (was, is) {
+                (false, true) => RecordChangeKind::Created,
+                (true, false) => RecordChangeKind::Deleted,
+                (true, true) => {
+                    let (old, new) = (cells(prev, id)?, cells(next, id)?);
+                    let keys: BTreeSet<&String> = old.keys().chain(new.keys()).collect();
+                    for key in keys {
+                        if old.get(key) != new.get(key) {
+                            let field = field_id(file, &mut fields, key)?;
+                            note(id.clone(), field, &mut updated);
+                        }
+                    }
+                    continue;
+                }
+                (false, false) => continue,
+            };
+            if let Some((record_id, table_id)) = record_row(file, id.as_str())? {
+                out.push(kind, RecordChange { table_id, record_id, field_ids: None, origin: origin.to_owned() });
+            }
+        } else if is_type(prev, id, LINK) || is_type(next, id, LINK) {
+            let source = if next.exists(id) { next } else { prev };
+            let end = |name: &str| -> Result<String> { Ok(source.get(id, name)?.as_str().unwrap_or_default().to_owned()) };
+            let (from, field) = (ObjectId::from_string(end("from")?), end("field")?);
+            // A link of a record created or deleted in this step is part of that change.
+            if before.table_of_record(&from)?.is_some() && after.table_of_record(&from)?.is_some() {
+                let field = field_id(file, &mut fields, &field)?;
+                note(from, field, &mut updated);
+            }
+        }
+    }
+    for (record, field_ids) in updated {
+        if let Some((record_id, table_id)) = record_row(file, record.as_str())? {
+            out.push(
+                RecordChangeKind::Updated,
+                RecordChange { table_id, record_id, field_ids: Some(field_ids.into_iter().collect()), origin: origin.to_owned() },
+            );
+        }
+    }
+    Ok(())
+}

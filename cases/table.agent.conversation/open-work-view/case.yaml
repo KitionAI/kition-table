@@ -1,0 +1,55 @@
+format: 1
+id: table.agent.conversation/open-work-view
+feature: table.agent.conversation
+intent: >-
+  Over two messages the agent builds a view and then refines it: a grid view named Open work, then
+  a filter on Status that leaves out done tasks and a sort by title. Filters and sorts name fields
+  by id, not name. The table kit declares no drafts, so this is the multi-turn case.
+layer: ai
+source:
+  kind: synthetic
+  from: repo:conformance/basic.ktable
+  licence: Apache-2.0
+  note: A copy of the conformance fixture the table engine writes.
+input: [input/tasks.ktable]
+steps:
+  - task:
+      turns:
+        - In tasks.ktable, add a grid view named "Open work" to the table.
+        - In that view, hide the tasks that are done and sort the rest by title, A to Z.
+      max_turns: 20
+  - query: { path: tasks.ktable, args: { follow: tables.0.views }, as: views }
+  - query: { path: tasks.ktable, args: { follow: tables.0.records }, as: records }
+expected:
+  - actual: out:views
+    compare: values
+    value:
+      total: 2
+      objects.1.fields.title: Open work
+      objects.1.fields.config.filter_tree.children:
+        any: { field_name: status }
+      objects.1.fields.config.sorts.0.field_name: title
+      objects.1.fields.config.sorts.0.direction: asc
+  - actual: out:views
+    compare: values
+    collateral: true
+    value:
+      objects.0.fields.title: All
+  - actual: out:records
+    compare: values
+    collateral: true
+    value:
+      total: 2
+      objects.1.fields.cells.01a169aa-ff23-7691-b372-5f1f53a79ace: Done
+solution:
+  - tool: table_run
+    args: { path: tasks.ktable, steps: [{ command: table.views.create, params: { tableId: 1, title: Open work, type: grid } }] }
+  - tool: table_run
+    args:
+      path: tasks.ktable
+      steps:
+        - command: table.views.putFilterTree
+          params: { tableId: 1, viewId: 2, tree: { conjunction: and, children: [{ condition: { field_id: 2, operator: neq, value: Done } }] } }
+        - { command: table.views.putSorts, params: { tableId: 1, viewId: 2, items: [{ field_id: 1, direction: asc }] } }
+since: "2026-11-16"
+timeout_s: 600

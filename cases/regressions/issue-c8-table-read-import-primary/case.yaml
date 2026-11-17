@@ -1,0 +1,13 @@
+format: 1
+id: regressions/issue-c8-table-read-import-primary
+feature: table.agent.premises
+intent: An import that replaces a table's schema deletes the fields past the source's columns except the primary field, so it rests on which field is primary; a colleague's primary switch refuses it as changed, a table title change does not.
+layer: golden
+direction: collab
+source: {kind: synthetic, from: review of the write handlers' expectations, licence: Apache-2.0}
+input: []
+steps:
+  - cargo-test: {package: kition-table, test: outside, filter: a_schema_replacing_import_rests_on_the_primary_field}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

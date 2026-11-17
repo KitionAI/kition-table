@@ -1,0 +1,21 @@
+[package]
+name = "kition-table-picture"
+description = "The Table kit's picture: what the editor shows (tables and views, typed cells, dashboards) laid out and drawn on the CPU, for thumbnails and the agent's previews."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kition-table-file = { workspace = true }
+kition-table-fonts = { workspace = true }
+kition-tessera-icons = { workspace = true }
+chrono = { workspace = true }
+kurbo = { workspace = true }
+serde_json = { workspace = true }
+vello_cpu = { workspace = true }
+
+[lints]
+workspace = true

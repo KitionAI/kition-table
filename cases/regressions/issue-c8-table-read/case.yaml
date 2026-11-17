@@ -1,0 +1,14 @@
+format: 1
+id: regressions/issue-c8-table-read
+feature: table.agent.premises
+intent: Every write command's declarations hold what the reading of its handler says it rests on; a delete does not rest on where its object is, a sort on its field's other settings, a cell write on validation flags, or a type change on the column's cells; a view setting lands only on a view of the table it names.
+layer: golden
+direction: collab
+source: {kind: synthetic, from: reading of the write handlers, licence: Apache-2.0}
+input: []
+steps:
+  - cargo-test: {package: kition-table-kit, test: declarations_independent}
+  - cargo-test: {package: kition-table, test: outside, filter: read_narrowed}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

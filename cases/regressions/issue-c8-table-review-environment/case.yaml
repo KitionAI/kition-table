@@ -1,0 +1,13 @@
+format: 1
+id: regressions/issue-c8-table-review-environment
+feature: table.agent.environment
+intent: Generate offline tasks at a fixed seed and classify creation failures on the pinned SDK.
+layer: golden
+direction: ai
+source: {kind: synthetic, from: offline task generation review, licence: Apache-2.0}
+input: []
+steps:
+  - cargo-test: {package: kition-table, test: environment, filter: waiting_for_sdk}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

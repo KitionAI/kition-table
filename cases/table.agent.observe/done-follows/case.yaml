@@ -1,0 +1,43 @@
+format: 1
+id: table.agent.observe/done-follows
+feature: table.agent.observe
+intent: >-
+  The agent reads the records through the kit to find which task is done, and answers in the file:
+  the other task's notes name it. Nothing else changes.
+layer: ai
+source:
+  kind: synthetic
+  from: repo:conformance/basic.ktable
+  licence: Apache-2.0
+  note: A copy of the conformance fixture the table engine writes.
+input: [input/tasks.ktable]
+steps:
+  - task:
+      prompt: >-
+        In tasks.ktable, one task is already done. Set the Notes of the task that is still to do
+        to exactly "Follows " followed by the done task's title.
+      max_turns: 20
+  - query: { path: tasks.ktable, args: { follow: tables.0.records }, as: after }
+expected:
+  - actual: out:after
+    compare: values
+    value:
+      objects.0.fields.cells.01a169aa-ff23-7691-b372-5f20579c9f54: Follows Review the plan
+  - actual: out:after
+    compare: values
+    collateral: true
+    value:
+      total: 2
+      objects.0.fields.cells.01a169aa-ff23-7691-b372-5f1eec0dcd5e: Write the plan
+      objects.0.fields.cells.01a169aa-ff23-7691-b372-5f1f53a79ace: To do
+      objects.1.fields.cells.01a169aa-ff23-7691-b372-5f1eec0dcd5e: Review the plan
+      objects.1.fields.cells.01a169aa-ff23-7691-b372-5f1f53a79ace: Done
+      objects.1.fields.cells.01a169aa-ff23-7691-b372-5f20579c9f54: Looks good
+solution:
+  - tool: table_run
+    args:
+      path: tasks.ktable
+      steps:
+        - { command: table.records.update, params: { tableId: 1, recordId: 1, values: { notes: Follows Review the plan } } }
+since: "2026-11-16"
+timeout_s: 600

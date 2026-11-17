@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-6
+feature: table.import-export
+intent: >-
+  Tables that work are not reported. A count rollup without target_field_id counts the linked
+  records (as the field's options describe) and is not table.broken-lookup; a sum without it still
+  is. csv.import stores each cell as its field's type: number and rating cells as numbers,
+  checkbox cells as booleans, multi_select cells as the list, empty cells as no value; a cell that
+  does not read as its type stays text and is reported. Before, every imported number was a
+  string, so every row reported table.field-type-mismatch.
+layer: golden
+source:
+  kind: issue
+  from: Kition Table regression suite
+  licence: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: check_false_positives }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

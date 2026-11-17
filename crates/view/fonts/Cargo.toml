@@ -1,0 +1,22 @@
+[package]
+name = "kition-table-fonts"
+description = "The Table kit's fonts: faces registered at run time, per-character fallback, shaping, glyph outlines and color emoji (ported from kition-note-fonts)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+skrifa = { workspace = true }
+harfrust = { workspace = true }
+kurbo = { workspace = true }
+
+[features]
+# The faces embedded into the build (`register_embedded`), for the headless executable; the web
+# build gets its faces from the editor.
+embed = []
+
+[lints]
+workspace = true

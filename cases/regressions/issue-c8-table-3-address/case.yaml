@@ -1,0 +1,13 @@
+format: 1
+id: regressions/issue-c8-table-3-address
+feature: table.agent.premises
+intent: Exhaustive supported address forms hold their identity, cell, name membership and local index window after independent file rewrites, and accept unrelated changes.
+layer: golden
+direction: collab
+source: {kind: synthetic, from: outside-writer review of the write addresses, licence: Apache-2.0}
+input: []
+steps:
+  - cargo-test: {package: kition-table, test: outside, filter: card3_address}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

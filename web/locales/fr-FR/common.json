@@ -1,0 +1,13 @@
+{
+  "actions": {
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "save": "Enregistrer",
+    "hidePassword": "Masquer le mot de passe",
+    "showPassword": "Afficher le mot de passe"
+  },
+  "dialogs": {
+    "rightSheet": "Volet droit"
+  }
+}

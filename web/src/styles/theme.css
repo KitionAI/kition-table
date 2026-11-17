@@ -1,0 +1,241 @@
+/* The table editor's theme (copied from Kition's `src/app/styles.css` at commit 7ee7b538): the
+   color, surface, and shadow tokens as CSS variables (light, and `.dark`, which App.tsx sets from
+   the host's color scheme), and the element defaults. Tailwind's theme (tailwind.config.ts) reads
+   these variables. */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 172.941 83.217% 28.039%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 12% 96%;
+    --secondary-foreground: 40 7% 23%;
+    --muted: 30 12% 96%;
+    --muted-foreground: 42 3% 46%;
+    --accent: 173 30% 95%;
+    --accent-foreground: 0 0% 10%;
+    --destructive: 2 72% 47%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 34 11% 89%;
+    --hairline-strong: 34 11% 78%;
+    --hairline-soft: 34 11% 93%;
+    --input: 34 11% 86%;
+    --ring: 172.941 83.217% 28.039%;
+    --brand: 172.941 83.217% 28.039%;
+    --brand-foreground: 0 0% 100%;
+    --brand-active: 172.941 83.217% 22%;
+    --subtle-foreground: 42 3% 46%;
+    --radius: 0.5rem;
+    /* Top-edge highlight available to light surfaces; the dark theme composes it into every shadow. */
+    --shadow-inset-highlight: inset 0 1px 0 hsl(0 0% 100% / 0.6);
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 42 3% 46%;
+    --sidebar-accent: 30 12% 96%;
+    --sidebar-active: 172.941 83.217% 28.039%;
+    --surface-soft: 30 14% 97%;
+    --surface-strong: 0 0% 100%;
+    --shadow-color: 220 40% 8%;
+    --shadow-soft: 0 1px 2px hsl(var(--shadow-color) / 0.05), 0 10px 30px hsl(var(--shadow-color) / 0.04);
+    --shadow-elevated: 0 18px 46px hsl(var(--shadow-color) / 0.12);
+    --shadow-floating: 0 10px 30px hsl(var(--shadow-color) / 0.12), 0 2px 8px hsl(var(--shadow-color) / 0.06);
+    --shadow-toolbar: 0 12px 36px hsl(var(--shadow-color) / 0.18), 0 2px 10px hsl(var(--shadow-color) / 0.08);
+    --success: 145 63% 36%;
+    --success-border: 145 42% 82%;
+    --success-background: 145 56% 94%;
+    --success-foreground: 145 63% 28%;
+    --warning: 28 100% 43%;
+    --warning-border: 28 68% 82%;
+    --warning-background: 28 100% 95%;
+    --warning-foreground: 28 100% 28%;
+    --info: 207 71% 44%;
+    --destructive-border: 2 42% 82%;
+    --destructive-background: 2 72% 96%;
+    --tint-peach: 26 100% 92%;
+    --tint-rose: 335 78% 93%;
+    --tint-mint: 138 52% 90%;
+    --tint-lavender: 257 51% 92%;
+    --tint-sky: 207 71% 92%;
+    --tint-yellow: 49 95% 92%;
+    --tint-yellow-bold: 48 83% 81%;
+    --tint-cream: 49 53% 94%;
+    --tint-gray: 30 8% 93%;
+    --code-bg: 30 12% 96%;
+    --code-border: 34 11% 89%;
+    --code-text: 0 0% 10%;
+    --code-keyword: 333 68% 45%;
+    --code-string: 145 63% 28%;
+    --code-comment: 42 3% 46%;
+    --code-number: 28 100% 43%;
+    --code-function: 35 92% 42%;
+    --code-attr: 190 78% 36%;
+  }
+
+  .dark {
+    --background: 220 13% 12%;
+    --foreground: 210 14% 94%;
+    --card: 220 12% 15%;
+    --card-foreground: 210 14% 94%;
+    --popover: 220 12% 16%;
+    --popover-foreground: 210 14% 94%;
+    /* The kit brand (kit.json ui.brand): #0c8375 with white content in light, #3fd1bf with black
+       content in dark. */
+    --primary: 172.603 61.345% 53.333%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 220 11% 18%;
+    --secondary-foreground: 210 18% 90%;
+    --muted: 220 11% 18%;
+    --muted-foreground: 215 10% 70%;
+    --accent: 173 34% 22%;
+    --accent-foreground: 173 60% 80%;
+    --destructive: 0 70% 68%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-border: 0 34% 30%;
+    --destructive-background: 0 40% 14%;
+    --border: 220 10% 23%;
+    --hairline-strong: 220 10% 33%;
+    --hairline-soft: 220 10% 26%;
+    --input: 220 10% 25%;
+    --ring: 172.603 61.345% 53.333%;
+    --brand: 172.603 61.345% 53.333%;
+    --brand-foreground: 0 0% 0%;
+    --brand-active: 172.603 61.345% 45%;
+    --subtle-foreground: 215 8% 56%;
+    --sidebar-background: 220 13% 10%;
+    --sidebar-foreground: 215 10% 72%;
+    --sidebar-accent: 220 12% 16%;
+    --sidebar-active: 172.603 61.345% 53.333%;
+    --surface-soft: 220 13% 11%;
+    --surface-strong: 220 12% 17%;
+    --shadow-color: 222 60% 1%;
+    --shadow-inset-highlight: inset 0 1px 0 hsl(0 0% 100% / 0.05);
+    --shadow-soft: var(--shadow-inset-highlight), 0 1px 2px hsl(var(--shadow-color) / 0.4), 0 18px 48px hsl(var(--shadow-color) / 0.32);
+    --shadow-elevated: var(--shadow-inset-highlight), 0 26px 72px hsl(var(--shadow-color) / 0.48);
+    --shadow-floating: var(--shadow-inset-highlight), 0 18px 50px hsl(var(--shadow-color) / 0.5), 0 2px 10px hsl(var(--shadow-color) / 0.32);
+    --shadow-toolbar: var(--shadow-inset-highlight), 0 20px 58px hsl(var(--shadow-color) / 0.52), 0 2px 10px hsl(var(--shadow-color) / 0.36);
+    --success: 145 55% 62%;
+    --success-border: 145 28% 28%;
+    --success-background: 145 30% 14%;
+    --success-foreground: 145 70% 82%;
+    --warning: 28 80% 64%;
+    --warning-border: 28 34% 30%;
+    --warning-background: 28 40% 14%;
+    --warning-foreground: 28 80% 82%;
+    --info: 207 71% 66%;
+    --tint-peach: 26 32% 18%;
+    --tint-rose: 333 24% 20%;
+    --tint-mint: 134 22% 17%;
+    --tint-lavender: 258 22% 22%;
+    --tint-sky: 210 30% 20%;
+    --tint-yellow: 48 26% 18%;
+    --tint-yellow-bold: 47 36% 26%;
+    --tint-cream: 45 12% 16%;
+    --tint-gray: 30 4% 16%;
+    --code-bg: 220 12% 16%;
+    --code-border: 220 11% 22%;
+    --code-text: 210 14% 90%;
+    --code-keyword: 286 70% 78%;
+    --code-string: 95 50% 72%;
+    --code-comment: 215 10% 48%;
+    --code-number: 25 80% 70%;
+    --code-function: 41 90% 70%;
+    --code-attr: 187 65% 65%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    margin: 0;
+    font-family:
+      Inter,
+      system-ui,
+      -apple-system,
+      'SF Pro Text',
+      'Segoe UI',
+      Roboto,
+      'PingFang SC',
+      'Hiragino Sans GB',
+      'Noto Sans SC',
+      sans-serif;
+    background-color: hsl(var(--background));
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  /* Native sliders, checkboxes, and radios follow the kit brand, not the browser blue. */
+  input[type='range'],
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: hsl(var(--primary));
+  }
+
+  html.theme-transitioning,
+  html.theme-transitioning * {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(215 14% 68% / 0.58) transparent;
+  }
+
+  .dark * {
+    scrollbar-color: hsl(215 14% 32% / 0.55) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border: 4px solid transparent;
+    border-radius: 999px;
+    background: hsl(215 14% 68% / 0.62);
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(215 14% 54% / 0.78);
+    background-clip: content-box;
+  }
+
+  .dark *::-webkit-scrollbar-thumb {
+    background: hsl(215 14% 32% / 0.55);
+    background-clip: content-box;
+  }
+
+  .dark *::-webkit-scrollbar-thumb:hover {
+    background: hsl(215 14% 46% / 0.7);
+    background-clip: content-box;
+  }
+}
+

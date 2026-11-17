@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-c8-table-pin
+feature: table.agent.premises
+intent: On the public kition-sdk pin, raw batches run under declared premise contracts (a raw cell write refuses a deleted column and ignores the record's place; batch indexes refuse an outside prefix change), receipts state identical assignments once and report no guard-only derived fact, a deleted table is named by its id, parameterless table creation holds its generated name, an outside reread keeps the session's undo history, every raw contract holds what its reading says, and offline creation tasks replay for every stored type.
+layer: golden
+direction: collab
+source: {kind: synthetic, from: the public kition-sdk pin, licence: Apache-2.0}
+input: []
+steps:
+  - cargo-test: {package: kition-table, test: outside, filter: raw_cell_address_matrix}
+  - cargo-test: {package: kition-table, test: outside, filter: batch_index_guards_refuse_an_outside_prefix_change}
+  - cargo-test: {package: kition-table, test: outside, filter: text_assignment_footprints_state_identical_assignments_once}
+  - cargo-test: {package: kition-table, test: outside, filter: derived_receipt_edits_match_the_published_schema}
+  - cargo-test: {package: kition-table, test: outside, filter: deleted_table_premise_in_upload}
+  - cargo-test: {package: kition-table, test: outside, filter: last_table_deletion_keeps_tool_ids}
+  - cargo-test: {package: kition-table, test: outside, filter: default_creation_without_a_place_parameter}
+  - cargo-test: {package: kition-table, test: outside, filter: outside_rereads_do_not_undo_or_redo_the_colleague}
+  - cargo-test: {package: kition-table-kit, test: declarations_independent}
+  - cargo-test: {package: kition-table, test: environment, filter: seed_seven}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

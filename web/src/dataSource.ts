@@ -1,0 +1,233 @@
+import {
+  normalizeAIConfig,
+  type AnyAIConfig,
+  type DataAttachment,
+  type DataDocument,
+  type DataField,
+  type DataTable,
+  type TableDataSource,
+} from './editor'
+
+/** What a data-document request answers from the engine: the route's answer, and what it changed. */
+type Answer<T> = { result: T; change: unknown }
+
+/** The session calls the data source makes (`useKitSession`'s `run`, and the open engine). */
+export type TableEngineAccess = {
+  /** Runs an engine command; `refresh: 'none'` for reads, which change nothing the shell shows. */
+  run(command: string, params: Record<string, unknown>, refresh: 'all' | 'none'): Promise<string | null>
+  /** Calls one of the engine's extras (`KitEngine.invoke`). */
+  invoke<T>(name: string, ...args: unknown[]): Promise<T>
+  /** The engine's revision now. */
+  revision(): number
+}
+
+/** The methods that only read (the engine's `READ_METHODS`): they run without refreshing the shell. */
+export const READS: ReadonlySet<string> = new Set([
+  'documents.get',
+  'fields.linkCandidates',
+  'views.listFields',
+  'records.list',
+  'records.history',
+  'csv.export',
+  'historyState',
+  'dashboards.list',
+  'attachments.read',
+  'import.preview',
+  'ai.prepare',
+  'changes.since',
+])
+
+export function toBase64(bytes: Uint8Array) {
+  let binary = ''
+  for (let start = 0; start < bytes.length; start += 0x8000) binary += String.fromCharCode(...bytes.subarray(start, start + 0x8000))
+  return btoa(binary)
+}
+
+export function fromBase64(text: string) {
+  const binary = atob(text)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return bytes
+}
+
+/** What `attachments.read` answers: a blob held in the file, its bytes in base64. */
+type StoredBlob = { hash: string; name: string; mimeType: string; sizeBytes: number; data: string }
+
+/**
+ * A field as the editor reads it: an AI field's configuration from its legacy place in `options`
+ * moved to `ai_config` and normalized, as Kition's HTTP client does with every field it reads.
+ */
+function normalizeField(field: DataField): DataField {
+  if (!field) return field
+  const options = (field.options ?? {}) as Record<string, unknown>
+  const legacy = 'ai_config' in options
+  const config = normalizeAIConfig((legacy ? options.ai_config : field.ai_config) as AnyAIConfig | null | undefined)
+  if (!legacy && config === field.ai_config) return field
+  const rest = { ...options }
+  delete rest.ai_config
+  return { ...field, options: legacy ? rest : field.options, ai_config: config ?? null }
+}
+
+function normalizeTable<T extends Pick<DataTable, 'fields'>>(table: T): T {
+  return table && Array.isArray(table.fields) ? { ...table, fields: table.fields.map(normalizeField) } : table
+}
+
+/**
+ * The editor's data source, plus the engine commands the host glue runs itself (`table.<method>`:
+ * file import, AI field runs) and the revision feed of the shell.
+ */
+export type EngineTableDataSource = TableDataSource & {
+  /** Runs `table.<method>` and answers its result; the methods in `READS` refresh nothing. */
+  command<T>(method: string, params?: Record<string, unknown>): Promise<T>
+  observe(revision: number): void
+  /** The shell opened the document again from its file (it changed on disk): everything is read again. */
+  reopened(revision: number): void
+}
+
+type ChangeListener = Parameters<TableDataSource['onChange']>[1]
+type ChangeEvent = Parameters<ChangeListener>[0]
+
+/**
+ * Separates the message of the engine's refusal of a call's parameters (kition-sdk's
+ * `schema::refusal`, such as a record `values` key that names no field) from its errors as JSON.
+ */
+const REFUSAL_SEPARATOR = '\u001e'
+
+/** An engine error as the editor shows it: a refusal's message without its errors' JSON. */
+export function refusalMessage(error: unknown): unknown {
+  if (error instanceof Error && error.message.includes(REFUSAL_SEPARATOR)) {
+    error.message = error.message.slice(0, error.message.indexOf(REFUSAL_SEPARATOR))
+  }
+  return error
+}
+
+/** `params` without `documentId`: the engine holds one document. */
+function own<T extends { documentId?: number }>({ documentId: _documentId, ...params }: T) {
+  return params as Record<string, unknown>
+}
+
+/**
+ * The table editor's data over the kit's engine (`TableDataSource`): each member is the engine
+ * command `table.<method>`, which runs the same `kition-table-api` request Kition's runtime
+ * routes run, so the editor gets the answers it gets in Kition. The engine holds one document,
+ * `path`, which `documents.*` answer. Attachments are blobs held in the file
+ * (`attachments.put`, `attachments.read`, bytes in base64): the editor shows them from object
+ * URLs and uploads into the file, with nothing outside the document.
+ *
+ * `onChange` reports what the editor did not do through this source: changes imported from
+ * co-editors (the engine queues their `TableChange`s), or, when the document moved otherwise (an
+ * Undo from the shell, an agent's command), a `resync`. `observe(revision)` is told every engine
+ * revision the shell sees.
+ */
+export function createWorkerTableDataSource(engine: TableEngineAccess, path: string) {
+  const listeners = new Set<ChangeListener>()
+  /** The last revision this source saw or made. */
+  let seen: number | null = null
+
+  async function call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    const read = READS.has(method)
+    const answer = await engine.run(`table.${method}`, params, read ? 'none' : 'all').catch((error: unknown) => {
+      throw refusalMessage(error)
+    })
+    if (answer == null) throw new Error('The table is not open.')
+    if (!read) seen = engine.revision()
+    return (JSON.parse(answer) as Answer<T>).result
+  }
+
+  async function document() {
+    const opened = await call<DataDocument>('documents.get')
+    return { ...opened, path, tables: opened.tables?.map(normalizeTable) }
+  }
+
+  function emit(event: ChangeEvent) {
+    for (const listener of listeners) listener(event)
+  }
+
+  async function foreign() {
+    const imported = JSON.parse(await engine.invoke<string>('takeImported')) as Array<Extract<ChangeEvent, { type: 'changed' }>['change']>
+    if (!imported.length) {
+      emit({ type: 'resync' })
+      return
+    }
+    for (const change of imported) emit({ type: 'changed', change: { ...change, documentPath: path } })
+  }
+
+  const source: EngineTableDataSource = {
+    documents: {
+      get: () => document(),
+      open: () => document(),
+      list: async () => {
+        const opened = await document()
+        return { items: [opened], total: 1, offset: 0 }
+      },
+    },
+    tables: {
+      create: async (params) => normalizeTable(await call<DataTable>('tables.create', own(params))),
+      update: async (params) => normalizeTable(await call<DataTable>('tables.update', own(params))),
+      delete: (params) => call('tables.delete', own(params)),
+    },
+    fields: {
+      create: async (params) => normalizeField(await call<DataField>('fields.create', own(params))),
+      update: async (params) => normalizeField(await call<DataField>('fields.update', own(params))),
+      delete: (params) => call('fields.delete', own(params)),
+      duplicate: async (params) => normalizeField(await call<DataField>('fields.duplicate', own(params))),
+      linkCandidates: (params) => call('fields.linkCandidates', own(params)),
+    },
+    views: {
+      create: (params) => call('views.create', own(params)),
+      update: (params) => call('views.update', own(params)),
+      delete: (params) => call('views.delete', own(params)),
+      listFields: (params) => call('views.listFields', own(params)),
+      patchField: (params) => call('views.patchField', own(params)),
+    },
+    records: {
+      list: (params) => call('records.list', own(params)),
+      create: (params) => call('records.create', own(params)),
+      update: (params) => call('records.update', own(params)),
+      delete: (params) => call('records.delete', own(params)),
+      history: (params) => call('records.history', own(params)),
+      bulkDelete: (params) => call('records.bulkDelete', own(params)),
+      bulkCopy: (params) => call('records.bulkCopy', own(params)),
+    },
+    links: {
+      replace: (params) => call('links.replace', own(params)),
+    },
+    transact: (params) => call('transact', own(params)),
+    undo: () => call('undo'),
+    redo: () => call('redo'),
+    historyState: () => call('historyState'),
+    dashboards: {
+      list: () => call('dashboards.list'),
+      upsert: ({ documentId: _documentId, dashboardId, id: _id, ...dashboard }) => call('dashboards.upsert', { ...dashboard, dashboardId }),
+    },
+    attachments: {
+      read: async ({ hash }) => {
+        const blob = await call<StoredBlob>('attachments.read', { hash })
+        return { data: fromBase64(blob.data), mimeType: blob.mimeType, name: blob.name }
+      },
+      put: async ({ tableId, file }) => {
+        const data = toBase64(new Uint8Array(await file.arrayBuffer()))
+        return call<DataAttachment>('attachments.put', { tableId, name: file.name, mimeType: file.type, data })
+      },
+    },
+    onChange(_documentId, listener) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    command: <T>(method: string, params?: Record<string, unknown>) => call<T>(method, params),
+    observe(revision) {
+      if (seen === revision) return
+      const first = seen == null
+      seen = revision
+      if (!first) void foreign().catch(() => emit({ type: 'resync' }))
+    },
+    reopened(revision) {
+      // A new engine's revisions start again, so `observe` alone may see nothing new.
+      seen = revision
+      emit({ type: 'resync' })
+    },
+  }
+  return source
+}

@@ -1,0 +1,21 @@
+format: 1
+id: table.agent.context/render-explicit-view
+feature: table.agent.context
+intent: >-
+  table.file.render is a function of the file and the call: what the picture shows changes neither a named view nor the default (the first table's first view), rendering changes nothing, and the same call answers the same bytes, also after a save and a reopen.
+layer: golden
+source:
+  kind: synthetic
+  from: bindings/wasm/tests/render_view.rs
+  licence: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table-kit
+      test: render_view
+      filter: it_never_reads_or_moves_what_the_picture_shows_and_answers_the_same_bytes
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+since: "2026-11-16"

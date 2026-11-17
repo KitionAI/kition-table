@@ -1,0 +1,24 @@
+format: 1
+id: regressions/issue-grid-typing-and-drag
+feature: table.records
+intent: >-
+  Typing in a cell and selecting by drag feel like a text field and stay smooth. The pointer is
+  the text cursor over the cell being typed, a long text's box included. In a row taller than two
+  lines the text being typed and its caret stay centred, as the grid draws the cell, and keep the
+  cell's alignment; a short row opens a box from the top. A drag that selects cells redraws the
+  grid when the hovered cell changes, not on every pointer move, and moving inside a text cell
+  no longer redraws the grid at all; a dragged column or row and the freeze handle still follow
+  the pointer.
+layer: golden
+source:
+  kind: probe
+  from: editor review, the Sheet kit's typing and drag fixes applied to the table grid
+  licence: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/grid/RenderLayer.spec.tsx, src/editor/table/grid/components/editor/TextEditor.spec.tsx, src/editor/table/grid/renderers/cell-renderer/textCellRenderer.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

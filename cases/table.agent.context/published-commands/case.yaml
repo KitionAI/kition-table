@@ -1,0 +1,21 @@
+format: 1
+id: table.agent.context/published-commands
+feature: table.agent.context
+intent: >-
+  No command publishes editor state it reads (x-khp-reads), the record or field parameter on fills is marked (x-khp-role: targets), and the render command publishes the view members it draws (table, view, path, sheet, rows).
+layer: golden
+source:
+  kind: synthetic
+  from: apps/kition-table/tests/context.rs
+  licence: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table
+      test: context
+      filter: the_agents_commands_say_what_on_fills_and_read_no_editor_state
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+since: "2026-11-16"

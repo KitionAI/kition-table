@@ -1,0 +1,13 @@
+format: 1
+id: regressions/issue-c8-table-3-seeds
+feature: table.agent.premises
+intent: Inline table field seeds accept stable target references and hold the external schema and local address windows they depend on, while unrelated cells and UUID table reordering remain independent.
+layer: golden
+direction: collab
+source: {kind: synthetic, from: outside-writer review of creation, licence: Apache-2.0}
+input: []
+steps:
+  - cargo-test: {package: kition-table, test: outside, filter: card3_seeds}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

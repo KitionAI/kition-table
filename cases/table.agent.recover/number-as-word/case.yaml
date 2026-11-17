@@ -1,0 +1,43 @@
+format: 1
+id: table.agent.recover/number-as-word
+feature: table.agent.recover
+intent: >-
+  The agent uses the kit's check to find a number field holding a word and repairs it with the
+  number it means, not by clearing it (the check's own fix), keeping the record's other values.
+layer: ai
+source:
+  kind: synthetic
+  from: repo:conformance/check-field-type-mismatch.ktable
+  licence: Apache-2.0
+  note: A copy of the conformance fixture for table.field-type-mismatch (Effort holds "three").
+input: [input/effort.ktable]
+steps:
+  - task:
+      prompt: >-
+        Run the kit's check on effort.ktable and fix what it reports. Where a number was typed as
+        a word, store that number rather than clearing the value.
+      max_turns: 20
+  - query: { path: effort.ktable, args: { follow: tables.0.records }, as: after }
+  - check: { path: effort.ktable, as: diagnostics }
+expected:
+  - actual: out:diagnostics
+    compare: diagnostics
+    value: { absent: [table.field-type-mismatch], max_errors: 0 }
+  - actual: out:after
+    compare: values
+    value:
+      objects.0.fields.cells.01a169aa-ff42-7189-b76e-6dac6ca3cda0: 3
+  - actual: out:after
+    compare: values
+    collateral: true
+    value:
+      total: 1
+      objects.0.fields.cells.01a169aa-ff41-7257-9248-148cc2984ea0: Write the plan
+solution:
+  - tool: table_run
+    args:
+      path: effort.ktable
+      steps:
+        - { command: table.records.update, params: { tableId: 1, recordId: 1, values: { effort: 3 } } }
+since: "2026-11-16"
+timeout_s: 600

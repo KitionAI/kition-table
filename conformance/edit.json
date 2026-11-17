@@ -1,0 +1,14 @@
+{
+  "steps": [
+    {
+      "command": "table.records.create",
+      "params": {
+        "tableId": 1,
+        "values": {
+          "title": "Ship the plan",
+          "status": "In progress"
+        }
+      }
+    }
+  ]
+}

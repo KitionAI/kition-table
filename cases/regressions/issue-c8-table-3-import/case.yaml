@@ -1,0 +1,13 @@
+format: 1
+id: regressions/issue-c8-table-3-import
+feature: table.agent.premises
+intent: Importing into a new table holds name collisions that decide its generated name while allowing unrelated title edits.
+layer: golden
+direction: collab
+source: {kind: synthetic, from: outside-writer review of the import handlers, licence: Apache-2.0}
+input: []
+steps:
+  - cargo-test: {package: kition-table, test: outside, filter: new_table_import_holds_generated_name_dependencies}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

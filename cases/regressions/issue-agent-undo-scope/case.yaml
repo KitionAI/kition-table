@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-agent-undo-scope
+feature: table.agent.act
+intent: >-
+  An agent's step in the editor is recorded as the agent's, so the agent's own undo and redo
+  (`edit.undo` / `edit.redo` with `scope: agent`) take it back and put it back. The engine exports
+  `executeAs`, which the editor's worker uses for agent steps; without it Kition's agent matrix
+  (e2e/interaction/agent-adaptation.spec.ts, table) saw `changed: false` on undo.
+layer: golden
+source:
+  kind: issue
+  from: Kition's agent interaction tests
+  licence: owned
+input: []
+steps:
+  - exec:
+      cmd: [node, --test, --test-name-pattern, "a step run as the agent", web/tests/engine.test.mjs]
+expected:
+  - actual: out:exec
+    compare: exit
+    value: 0
+since: "2026-11-16"

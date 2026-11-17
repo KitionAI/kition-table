@@ -1,0 +1,22 @@
+format: 1
+id: table.agent.context/failed-run
+feature: table.agent.context
+intent: >-
+  A failing later step rolls the whole run back: the file is byte for byte as before.
+layer: golden
+source:
+  kind: synthetic
+  from: apps/kition-table/tests/premise.rs
+  licence: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table
+      test: premise
+      filter: a_failing_later_step_changes_nothing
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+tags: [headless]
+since: "2026-11-16"

@@ -1,0 +1,16 @@
+format: 1
+id: regressions/issue-c8-land-13-saved
+feature: table.agent.premises
+intent: Public writes and model receipts agree with reopened files, including fractional widths and column layout.
+layer: golden
+direction: conversion
+source:
+  kind: synthetic
+  from: outside-writer tests of the agent tools
+  licence: Apache-2.0
+input: []
+steps:
+  - cargo-test: {package: kition-table-kit, test: saved, features: [headless]}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

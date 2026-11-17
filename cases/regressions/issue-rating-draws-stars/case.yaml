@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-rating-draws-stars
+feature: table.records
+intent: >-
+  A rating cell with a value draws its steps in the grid: one icon per step, filled up to the
+  value. The grid's sprite manager has the star, heart and thumbs icons a rating field can name,
+  and a field without an icon draws stars. Before, the sprite manager had none of them, so the
+  rating renderer found no sprite and every rating column was blank although its values were
+  stored.
+layer: golden
+source:
+  kind: probe
+  from: README screenshot review
+  licence: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/grid/renderers/cell-renderer/ratingCellRenderer.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

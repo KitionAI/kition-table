@@ -1,0 +1,7 @@
+/* The editor's stylesheet: its theme, Tailwind, and its component classes. */
+@import './theme.css';
+@import './editor.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

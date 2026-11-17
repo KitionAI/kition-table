@@ -1,0 +1,23 @@
+format: 1
+id: regressions/issue-8
+feature: table.records
+intent: >-
+  A record `values` key that names no field of the table is refused, not dropped:
+  table.records.create, table.records.update and table.transact (cells.set and records.create
+  ops) answer invalid_params with one data.errors entry per unknown key at its JSON Pointer
+  (/values/<key>), and the call changes nothing. A key that is a field's title (or its name in
+  another case or with spaces for underscores) is told the field's name. The engine refuses it,
+  so the in-page editor gets the same refusal. Before, a host that keyed values by title got a
+  record without them and a success answer, and the data was lost.
+layer: golden
+source:
+  kind: issue
+  from: Kition Table regression suite
+  licence: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table, test: unknown_values }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

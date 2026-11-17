@@ -1,0 +1,22 @@
+format: 1
+id: table.agent.context/tool-refusals
+feature: table.agent.context
+intent: >-
+  A table or view the file lacks, a time, on for a command without targets, and on beside the targets parameter are refused before anything changes.
+layer: golden
+source:
+  kind: synthetic
+  from: apps/kition-table/tests/premise.rs
+  licence: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table
+      test: premise
+      filter: a_part_the_file_lacks_a_time_or_a_stray_on_is_refused
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+tags: [headless]
+since: "2026-11-16"

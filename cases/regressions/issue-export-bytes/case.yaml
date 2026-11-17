@@ -1,0 +1,25 @@
+format: 1
+id: regressions/issue-export-bytes
+feature: table.import-export
+intent: >-
+  `table.file.export` answers one table as CSV or Markdown, base64 at the top level (`data`),
+  without writing a file or changing the document, and kit.json declares those exports for the host
+  and the agent's `table_export` (`exports`, `agent.export`); the headless kit answers every
+  declared format to the agent and writes no file itself. `table.csv.export` and
+  `table.markdown.export` still answer the same text.
+layer: golden
+source:
+  kind: issue
+  from: Kition desktop app, the table editor's CSV download saved no file
+  licence: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "file_export" }
+  - cargo-test: { package: kition-table, filter: "the_agent_exports_every_declared_format" }
+  - exec:
+      cmd: [node, --test, --test-name-pattern, "table.file.export answers", web/tests/engine.test.mjs]
+expected:
+  - actual: out:exit
+    compare: exit
+timeout_s: 60
+since: "2026-11-16"
