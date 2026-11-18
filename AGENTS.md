@@ -51,7 +51,8 @@ executable, and never depends on a crate here.
   write a local path or user name into a tracked file.
 - Checks: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo test --workspace`, the manifest check, the conformance suite (13/13), and
-  `web/tests/flow.mjs` in Chromium and WebKit. No CI workflows in this repository.
+  `web/tests/flow.mjs` in Chromium and WebKit. No CI workflows in this repository besides the Package
+  workflow (`.github/workflows/package.yml`), which publishes the kit's package.
 - Code moved or ported from Kition or another kit names its source in the commit message that
   brings it in; there is no change ledger.
 - The whole repository is Apache-2.0 ([LICENSE](LICENSE)).

@@ -223,3 +223,14 @@ let bytes = document.save(None)?;
   serves it to agents.
 - **Offline.** The engine never reaches the network: AI fields build their prompts and apply
   results in the engine, and the model call is the host's.
+
+## Publish
+
+Kition ships the kit's package, `kition-table-<version>.tgz` (the `table-ui/` folder), a release
+asset of this repository tagged `package-v<version>`. It is built on GitHub, never on a developer
+machine: the Package workflow (`.github/workflows/package.yml`, which calls Kition's reusable
+`kit-package.yml`) builds the commit it is started on, with `gh workflow run package.yml -R
+KitionAI/kition-table`, and publishes the Release with the package's lock entry,
+`kition-table-<version>.json`. Kition pins it with `node scripts/pin-kits.mjs table` (see
+`docs/kits.md` there). A version is published once: bump `version` in `kit.json` to publish a
+change.
