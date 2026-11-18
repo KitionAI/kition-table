@@ -96,6 +96,13 @@
       "returns": "string",
       "description": "Lays out an axis from gridOpen or gridSync for the grid ({tableId, viewId?, theme?, brand?}): row heights as runs, columns, header and row head sizes, band sizes, skeleton colors, the overlay's colors, sizes and row head control icons, and the group headers' ids, as JSON."
     },
+    "gridRecords": {
+      "params": [
+        "paramsJson"
+      ],
+      "returns": "string",
+      "description": "The records of some ids for the grid to edit ({tableId, ids, fields?}): [{id, row_key, values}] in the order asked, values only of the fields named when some are, ids that name no record left out."
+    },
     "gridRows": {
       "params": [],
       "returns": "Uint8Array",

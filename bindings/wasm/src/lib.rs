@@ -55,6 +55,7 @@ mod dependencies;
 pub mod export;
 mod files;
 mod grid;
+mod grid_edit;
 pub mod inspect;
 #[cfg(feature = "headless")]
 mod model;

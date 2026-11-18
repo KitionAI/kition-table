@@ -1,0 +1,21 @@
+format: 1
+id: table.editor.grid/editing-engine
+feature: table.editor.grid
+intent: >-
+  The engine gives the grid the records an edit touches without the page holding the table:
+  gridRecords answers the records of some ids in the order asked, with their row keys (what
+  writes name), only the fields asked for when some are named (none for the row keys alone), and
+  leaves out ids that name no record of the table; an ask without a table or ids is refused.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, section 3.8 (card tg4b)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: grid_records, features: [headless] }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

@@ -1,0 +1,56 @@
+//! What the grid reads to edit (case table.editor.grid/editing-engine): `gridRecords` answers the
+//! records of some ids in the order asked, with their row keys (what writes name), only the fields
+//! asked for when it is given some, and leaves out ids that name no record of the table.
+
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
+
+use kition_kit::KitDocument;
+use kition_table_kit::TableDocument;
+use serde_json::{Value, json};
+
+fn call(doc: &mut TableDocument, method: &str, params: Value) -> Value {
+    doc.call(method, &params).unwrap_or_else(|error| panic!("{method}: {error}"))["result"].clone()
+}
+
+#[test]
+fn grid_records_answers_the_records_asked_for_in_order_with_their_row_keys() {
+    let mut doc = TableDocument::create("Records.ktable", 0, 0).unwrap();
+    let table = call(&mut doc, "documents.get", json!({}))["tables"][0].clone();
+    let table_id = table["id"].as_i64().unwrap();
+    let title = table["fields"].as_array().unwrap().iter().find(|field| field["is_primary"] == true).unwrap()["name"].as_str().unwrap().to_owned();
+    let made = call(&mut doc, "fields.create", json!({ "tableId": table_id, "title": "Amount", "type": "number" }));
+    let amount = if made["field"].is_object() { made["field"]["name"].clone() } else { made["name"].clone() };
+    let amount = amount.as_str().unwrap().to_owned();
+    let records: Vec<Value> = (1..=3).map(|i| json!({ title.clone(): format!("Record {i}"), amount.clone(): i * 10 })).collect();
+    call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }));
+    let listed = call(&mut doc, "records.list", json!({ "tableId": table_id }));
+    let items = listed["items"].as_array().unwrap();
+    let ids: Vec<i64> = items.iter().map(|item| item["id"].as_i64().unwrap()).collect();
+
+    // In the order asked, an unknown id left out.
+    let answer = doc.grid_records(&json!({ "tableId": table_id, "ids": [ids[2], 999_999, ids[0]] })).unwrap();
+    let answer = answer.as_array().unwrap();
+    assert_eq!(answer.len(), 2);
+    assert_eq!(answer[0]["id"], json!(ids[2]));
+    assert_eq!(answer[1]["id"], json!(ids[0]));
+    assert_eq!(answer[0]["row_key"], items[2]["row_key"]);
+    assert!(answer[0]["row_key"].as_str().is_some_and(|key| !key.is_empty()));
+    assert_eq!(answer[0]["values"][&title], json!("Record 3"));
+    assert_eq!(answer[0]["values"][&amount], json!(30));
+
+    // Only the fields asked for; none at all for the row keys alone.
+    let only = doc.grid_records(&json!({ "tableId": table_id, "ids": [ids[1]], "fields": [amount] })).unwrap();
+    assert_eq!(only[0]["values"], json!({ amount.clone(): 20 }));
+    let keys = doc.grid_records(&json!({ "tableId": table_id, "ids": [ids[1]], "fields": [] })).unwrap();
+    assert_eq!(keys[0]["values"], json!({}));
+    assert_eq!(keys[0]["row_key"], items[1]["row_key"]);
+
+    // Records of another table are not this table's.
+    let other = call(&mut doc, "tables.create", json!({ "title": "Other" }));
+    let other_id = other["id"].as_i64().or_else(|| other["table"]["id"].as_i64()).unwrap();
+    assert_eq!(doc.grid_records(&json!({ "tableId": other_id, "ids": [ids[0]] })).unwrap(), json!([]));
+
+    // Malformed asks are refused.
+    assert!(doc.grid_records(&json!({ "ids": [1] })).unwrap_err().contains("tableId"));
+    assert!(doc.grid_records(&json!({ "tableId": table_id })).unwrap_err().contains("ids"));
+}
