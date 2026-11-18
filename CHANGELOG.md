@@ -3,6 +3,19 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
+## Unreleased
+
+- The editor's grid is rewritten: the engine arranges the view, lays it out and draws it in bands
+  (the same display list the headless picture rasterizes), and the page plays the bands on a
+  canvas with the package's fonts; selection, the cell editors, the clipboard and the drags are the
+  page's. The editor no longer reads the whole table to show a grid view (the kanban, calendar and
+  gallery still read every record), and the footer's sums come from the engine. The old canvas
+  grid, derived from Teable's `packages/sdk` grid, is deleted, and with it the Teable notice in
+  NOTICE and its unused dependencies (react-hammerjs, react-hotkeys-hook, lodash-es, lru-cache,
+  scroller, ts-key-enum, ts-keycode-enum).
+- Engine extras: `gridAxes` takes the view's config as the editor holds it (`config`), and
+  `gridSummary` sums number fields over the editor's arrangement.
+
 ## 0.4.0
 
 The first version with prebuilt headless executables: the Kition SDK release that carries this

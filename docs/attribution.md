@@ -2,50 +2,11 @@
 
 Third-party code and non-code assets in this repository and the kit package, with their source and
 licence. Kition Table's own code is under the Apache License 2.0 ([LICENSE](../LICENSE));
-[NOTICE](../NOTICE) says where the code came from. The only third-party source code in the
-repository is the editor's canvas grid, derived from Teable (below).
-
-## Code derived from other projects
-
-| Path | Upstream | License | Notes |
-|---|---|---|---|
-| `web/src/editor/table/grid/` | [Teable](https://github.com/teableio/teable) `packages/sdk/src/components/grid/`, Copyright (c) 2023-2025 Teable, Inc. | MIT (text in [NOTICE](../NOTICE)) | The canvas grid. |
-| `web/src/editor/table/grid/_shim/grid-core.ts` | Teable `packages/core/src/models/field/colors.ts`, same copyright | MIT | Stands in for `@teable/core`: the select colour list, with the grid's own helpers |
-
-Only Teable's MIT-licensed `packages/` are used; nothing comes from its AGPL-3.0 applications
-(`apps/`, `plugins/`). Checked 2026-11-17 by comparing every file under `web/src/` and `web/locales/`
-with Teable's repository at commits `1e353a0e` and
-`b8425f5a`. Paths below are relative to `web/src/editor/table/grid/`.
-
-- Copied unchanged from Teable's `grid/` (36): `CellScroller.tsx`, `index.ts`, `configs/grid.ts`,
-  `configs/index.ts`, `components/editor/index.ts`, `hooks/index.ts`, `hooks/useDrag.ts`,
-  `hooks/useResizeObserver.ts`, `hooks/useScrollFrameRate.ts`, `hooks/useVisibleRegion.ts`,
-  `managers/index.ts`, `managers/coordinate-manager/` (`CoordinateManager.ts`, `index.ts`,
-  `interface.ts`), `managers/image-manager/index.ts`,
-  `managers/performance-tracker/` (`PerformanceTracker.ts`, `index.ts`),
-  `managers/selection-manager/index.ts`, `managers/sprite-manager/index.ts`, `renderers/index.ts`,
-  `renderers/base-renderer/` (`index.ts`, `interface.ts`), `renderers/cell-renderer/`
-  (`booleanCellRenderer.ts`, `chartCellRenderer.ts`, `index.ts`, `loadingCellRenderer.ts`,
-  `utils.ts`), `renderers/layout-renderer/` (`index.ts`, `interface.ts`), `utils/` (`element.ts`,
-  `group.ts`, `hotkey.ts`, `index.ts`, `measure.ts`, `range.ts`, `utils.ts`).
-- Copied from Teable's `grid/` and modified by the Kition authors (38): `Grid.tsx`,
-  `InfiniteScroller.tsx`, `InteractionLayer.tsx`, `RenderLayer.tsx`, `TouchLayer.tsx`,
-  `interface.ts`, `components/` (`ErrorIndicator.tsx`, `LoadingIndicator.tsx`, `index.ts`),
-  `components/editor/` (`BooleanEditor.tsx`, `EditorContainer.tsx`, `RatingEditor.tsx`,
-  `SelectEditor.tsx`, `TextEditor.tsx`), `configs/gridTheme.ts`, `hooks/` (`useAutoScroll.ts`,
-  `useColumnFreeze.ts`, `useColumnResize.ts`, `useEventListener.ts`, `useKeyboardSelection.ts`,
-  `useSelection.ts`), `managers/image-manager/ImageManager.ts`,
-  `managers/selection-manager/CombinedSelection.ts`, `managers/sprite-manager/` (`SpriteManager.ts`,
-  `sprites.tsx`), `renderers/base-renderer/baseRenderer.ts`, `renderers/cell-renderer/`
-  (`buttonCellRenderer.ts`, `imageCellRenderer.ts`, `interface.ts`, `linkCellRenderer.ts`,
-  `numberCellRenderer.ts`, `ratingCellRenderer.ts`, `selectCellRenderer.ts`,
-  `textCellRenderer.ts`, `userCellRenderer.ts`), `renderers/layout-renderer/layoutRenderer.ts`,
-  `utils/` (`region.ts`, `rowControl.ts`).
-- The Kition authors' own (23): `useGridAdapter.ts`, `hooks/useReactRuntime.ts`,
-  `components/AIOverlayIndicator.tsx`, `components/editor/TableDateCellEditor.tsx`,
-  `renderers/aiActionLayer.ts`, `renderers/cell-renderer/alignment.ts`,
-  `utils/selectChoiceColors.ts`, `_shim/grid-types.ts`, `_shim/use-is-touch-device.ts`, and every
-  `*.spec.ts` and `*.spec.tsx` in the folder.
+[NOTICE](../NOTICE) says where the code came from. The repository holds no third-party source
+code. The editor's grid derived from Teable until 2026-11-18, when it was replaced by the grid the
+engine lays out (`crates/view/grid`, `web/src/editor/table/canvas/`), written by the Kition
+authors; every remaining file under `web/src/` was compared with Teable's `packages/sdk` grid and
+`packages/core` colours (commits `1e353a0e` and `bd8cfc05`), and none derives from them.
 
 ## Code bundled in the kit package
 
@@ -63,14 +24,8 @@ these third-party libraries. Versions are the ones `Cargo.lock` and `web/pnpm-lo
 | [CodeMirror](https://codemirror.net) (`@codemirror/autocomplete`, `commands`, `language`, `search`, `state`, `view`) | 6.x | MIT | Editor: formula and text editing |
 | [React](https://react.dev), React DOM | 19.3.1 | MIT | Editor |
 | [react-grid-layout](https://github.com/STRML/react-grid-layout), [react-resizable](https://github.com/react-grid-layout/react-resizable) | 2.3.0, 3.2.0 | MIT | Editor: dashboards |
-| [react-hammerjs](https://github.com/JedWatson/react-hammerjs) (with hammerjs) | 1.0.1 | MIT | Editor: touch gestures |
-| [react-hotkeys-hook](https://github.com/JohannesKlauss/react-keymap-hook) | 5.3.3 | MIT | Editor: shortcuts |
 | [i18next](https://www.i18next.com), [react-i18next](https://react.i18next.com) | 26.5.2, 17.1.0 | MIT | Editor: translations |
-| [lodash-es](https://lodash.com) | 4.18.1 | MIT | Editor |
-| [lru-cache](https://github.com/isaacs/node-lru-cache) | 10.2.0 | ISC | Editor |
-| [scroller](https://github.com/popham/scroller) | 0.0.3 | MIT | Editor: grid scrolling |
 | [clsx](https://github.com/lukeed/clsx), [tailwind-merge](https://github.com/dcastil/tailwind-merge) | 2.1.1, 3.7.0 | MIT | Editor: class names |
-| [ts-key-enum](https://gitlab.com/nfriend/ts-key-enum), [ts-keycode-enum](https://github.com/nfriend/ts-keycode-enum) | 2.0.12, 1.0.6 | MIT | Editor: key names |
 | [zod](https://zod.dev) | 4.1.13 | MIT | Editor: data validation |
 | `@kition/kit-editor`, `@kition/kit-host`, `@kition/kit-ui-protocol` ([kition-sdk](https://github.com/KitionAI/kition-sdk)), `@kition/tessera-icons` ([kition-tessera](https://github.com/KitionAI/kition-tessera)) | 0.1.0, from npm | Apache-2.0; tessera-icons' Lucide icons ISC (Feather-derived ones MIT), texts in [NOTICE](../NOTICE) | Editor |
 
