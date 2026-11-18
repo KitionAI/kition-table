@@ -1,11 +1,16 @@
 //! The editor's grid in bands (grid plan sections 3.4, 3.7, 3.8): the extras `gridAxes`,
-//! `gridBands`, `gridRaster` and `gridMeasure`, and the bands' timings in `gridStats`.
+//! `gridRows`, `gridBands`, `gridRaster` and `gridMeasure`, and the bands' timings in `gridStats`.
 //!
 //! The page arranges a view with `gridOpen` (`grid.rs`, `kition-table-arrange`) and hands the axis
 //! it got to `gridAxes`, which lays out the arrangement's linear rows (group headers, records, add
 //! rows) and the view's columns with the grid's geometry (`kition-table-grid`) and answers what the
 //! page scrolls and hit-tests with: the rows' heights as runs, the columns, the header and row
-//! head, and how the grid is cut into bands. `gridBands` then answers display lists
+//! head, how the grid is cut into bands, and the overlay's colors and sizes (the selection, the
+//! hovered row, the row head's controls; `kition_table_grid::overlay`) and the group headers' ids
+//! (in the arrangement's order, as `gridRows` indexes them). `gridRows` answers what
+//! each linear row is (a record and its id, a group header, an add row), for the page to hit-test
+//! and select with. The row head bands carry a hit record per row head control (drag handle,
+//! checkbox, expand), the corner one for the header's checkbox. `gridBands` then answers display lists
 //! (`kition-table-display`, format v1) for the bands the page asks for, in one batch with the
 //! icons and emoji tiles they use that the page does not hold yet:
 //!
@@ -30,6 +35,7 @@ use std::collections::{HashMap, HashSet};
 use kition_table_arrange::{Arrangement, Axis as Arranged, GroupHeader, Stopwatch};
 use kition_table_display::{Align, Axis, DisplayList, Header, HitKind, Key, Layer, Line, Op, Resources};
 use kition_table_file::{Field, Record, TableFile};
+use kition_table_grid::overlay::{self, Overlay};
 use kition_table_grid::text::{Kind, Shaper};
 use kition_table_grid::theme::{BODY, Mode, REGULAR, Rgba, TINY, Theme};
 use kition_table_grid::{
@@ -45,6 +51,8 @@ const BAND_HEIGHT: f32 = 1280.0;
 const RECORD_CACHE: usize = 8192;
 /// The batch format's version.
 const BATCH_VERSION: u16 = 1;
+/// `gridRows`' format version.
+const ROWS_VERSION: u16 = 1;
 
 /// A row of the grid in display order.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -349,6 +357,10 @@ impl Bands {
             .map(|(index, (column, left))| json!({ "x": left, "width": column.width, "frozen": index < frozen, "fieldId": column.field.id }))
             .collect();
         answer_columns.push(json!({ "x": columns_right, "width": APPEND_COLUMN, "frozen": false, "fieldId": null }));
+        let overlay = self.overlay_style(&theme);
+        // The group headers' ids (the editor keeps collapsed groups by them), in the arrangement's order.
+        let groups: Vec<Value> =
+            axis.groups.iter().map(|group| json!({ "id": group.id, "depth": group.depth, "collapsed": group.collapsed })).collect();
         let answer = json!({
             "epoch": axis.epoch,
             "rowRuns": runs,
@@ -358,6 +370,8 @@ impl Bands {
             "bandRows": band_rows,
             "bandWidth": BAND_WIDTH,
             "skeleton": { "background": hex(theme.paper), "line": hex(theme.line) },
+            "overlay": overlay,
+            "groups": groups,
         });
         self.layout = Some(Layout {
             epoch: axis.epoch,
@@ -463,6 +477,7 @@ fn header(out: &mut Out<'_>, layout: &Layout, layer: Layer, area: Area) {
     if layer == Layer::HeaderFrozen {
         let center = if layout.row_head > 2.0 * ROW_CONTROL { layout.row_head / 2.0 } else { ROW_CONTROL / 2.0 };
         out.border(Area { x: center - 8.0, y: middle - 8.0, w: 16.0, h: 16.0 }, 4.0, 1.0, theme.muted);
+        out.hit(HitKind::Checkbox, 0, u16::MAX, u32::MAX, Area { x: center - ROW_CONTROL / 2.0, y: 0.0, w: ROW_CONTROL, h: HEADER });
     }
     for index in columns {
         let column = &layout.columns[index];
@@ -568,6 +583,7 @@ fn rows(out: &mut Out<'_>, layout: &Layout, records: &HashMap<i64, Record>, key:
             Row::Record { id: record_id, number } => {
                 if key.layer == Layer::RowHead {
                     out.text(&number.to_string(), layout.row_head / 2.0, middle, Align::Center, TINY, REGULAR, theme.muted, layout.row_head);
+                    row_head_controls(out, layout, id, y, height);
                     continue;
                 }
                 let Some(record) = records.get(&record_id) else { continue };
@@ -584,6 +600,21 @@ fn rows(out: &mut Out<'_>, layout: &Layout, records: &HashMap<i64, Record>, key:
                 }
             }
         }
+    }
+}
+
+/// Where a record's row head controls are, for the overlay to draw them when the row is hovered,
+/// active or checked and to hit-test them: one slot of `ROW_CONTROL` each, as tall as the row,
+/// from the left: the drag handle (only when rows can be dragged), the checkbox, the expand
+/// control. The header's checkbox sits over the record checkboxes.
+fn row_head_controls(out: &mut Out<'_>, layout: &Layout, row: u32, y: f32, height: f32) {
+    let kinds: &[HitKind] = if layout.row_head > 2.0 * ROW_CONTROL {
+        &[HitKind::DragHandle, HitKind::Checkbox, HitKind::Expand]
+    } else {
+        &[HitKind::Checkbox, HitKind::Expand]
+    };
+    for (slot, kind) in kinds.iter().enumerate() {
+        out.hit(*kind, 0, u16::MAX, row, Area { x: slot as f32 * ROW_CONTROL, y, w: ROW_CONTROL, h: height });
     }
 }
 
@@ -742,6 +773,71 @@ impl Bands {
         Ok(Value::Array(answer))
     }
 
+    /// The overlay's colors and sizes (`gridAxes`' `overlay`), and the row head controls' icons,
+    /// which the next `gridBands` batch brings with the icons the page does not hold yet.
+    fn overlay_style(&mut self, theme: &Theme) -> Value {
+        let style = Overlay::of(theme);
+        let mut icon = |name: &str| self.resources.icon(name).map_or(Value::Null, |id| json!(id));
+        let icons = json!({ "drag": icon(overlay::DRAG_ICON), "expand": icon(overlay::EXPAND_ICON), "check": icon(overlay::CHECK_ICON) });
+        json!({
+            "selection": hex(style.selection),
+            "border": hex(style.border),
+            "hover": hex(style.hover),
+            "rowHead": hex(style.row_head),
+            "control": hex(style.control),
+            "check": hex(style.check),
+            "checkMark": hex(style.check_mark),
+            "icons": icons,
+            "controlSize": overlay::CONTROL,
+            "checkboxRadius": overlay::CHECKBOX_RADIUS,
+            "checkboxBorder": overlay::CHECKBOX_BORDER,
+            "checkMarkSize": overlay::CHECK_MARK,
+            "iconStroke": overlay::ICON_STROKE,
+            "activeWidth": overlay::ACTIVE_WIDTH,
+            "rangeWidth": overlay::RANGE_WIDTH,
+        })
+    }
+
+    /// `gridRows`: what each linear row of the laid-out arrangement is (the page reads it in
+    /// `web/src/editor/table/canvas/rows.ts`):
+    ///
+    /// ```text
+    /// header  16 B   magic "KTRW" | version u16 = 1 | 0 u16 | epoch u32 | count u32
+    /// kinds   u8 x count (0 record, 1 group header, 2 add row), zero-padded to a multiple of 8
+    /// values  f64 x count: a record's id; a group header's index in the arrangement's groups;
+    ///                      for an add row, the id of the nearest record above it, or -1
+    /// ```
+    pub(crate) fn rows_bytes(&self) -> Result<Vec<u8>, String> {
+        let layout = self.layout.as_ref().ok_or("no grid is laid out: call gridAxes first")?;
+        let count = layout.rows.len();
+        let kinds_end = 16 + count.next_multiple_of(8);
+        let mut bytes = Vec::with_capacity(kinds_end + 8 * count);
+        bytes.extend_from_slice(b"KTRW");
+        bytes.extend_from_slice(&ROWS_VERSION.to_le_bytes());
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes.extend_from_slice(&layout.epoch.to_le_bytes());
+        bytes.extend_from_slice(&u32::try_from(count).map_err(|_| "too many rows")?.to_le_bytes());
+        let mut values = Vec::with_capacity(count);
+        let mut above = -1.0f64;
+        for row in &layout.rows {
+            let (kind, value) = match row {
+                Row::Record { id, .. } => {
+                    above = *id as f64;
+                    (0u8, above)
+                }
+                Row::Group(index) => (1, *index as f64),
+                Row::Append => (2, above),
+            };
+            bytes.push(kind);
+            values.push(value);
+        }
+        bytes.resize(kinds_end, 0);
+        for value in values {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        Ok(bytes)
+    }
+
     /// The bands' part of `gridStats`: how many were made, the milliseconds of the latest ones
     /// (oldest first), the bytes answered, and the row bands of the layout.
     pub(crate) fn stats(&self) -> Value {
@@ -764,6 +860,11 @@ impl crate::TableDocument {
     /// The grid's bands as one batch (`gridBands`, see the module's documentation).
     pub fn grid_bands(&mut self, epoch: u32, keys: &[u32], dpr: f64, icons: u32, tiles: &[String]) -> Result<Vec<u8>, String> {
         self.bands.bands(Source { file: &self.file, revision: self.revision }, epoch, keys, dpr, icons, tiles)
+    }
+
+    /// What each linear row of the laid-out grid is (`gridRows`, see `Bands::rows_bytes`).
+    pub fn grid_rows(&self) -> Result<Vec<u8>, String> {
+        self.bands.rows_bytes()
     }
 
     /// One band rasterized (`gridRaster`): width and height (u32 each), then RGBA8.
@@ -804,6 +905,12 @@ mod web {
         pub fn grid_bands(&mut self, epoch: u32, keys: &[u32], dpr: f64, icons: u32, tiles: &str) -> Result<Vec<u8>, JsError> {
             let tiles: Vec<String> = serde_json::from_str(tiles).map_err(|e| error(e.to_string()))?;
             self.0.grid_bands(epoch, keys, dpr, icons, &tiles).map_err(error)
+        }
+
+        /// What each linear row of the laid-out grid is: a record, a group header or an add row.
+        #[wasm_bindgen(js_name = gridRows)]
+        pub fn grid_rows(&self) -> Result<Vec<u8>, JsError> {
+            self.0.grid_rows().map_err(error)
         }
 
         /// One band as the engine rasterizes it (for the parity test): width, height, RGBA8.

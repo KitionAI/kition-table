@@ -87,7 +87,12 @@
         "paramsJson"
       ],
       "returns": "string",
-      "description": "Lays out an axis from gridOpen or gridSync for the grid ({tableId, viewId?, theme?, brand?}): row heights as runs, columns, header and row head sizes, band sizes and skeleton colors, as JSON."
+      "description": "Lays out an axis from gridOpen or gridSync for the grid ({tableId, viewId?, theme?, brand?}): row heights as runs, columns, header and row head sizes, band sizes, skeleton colors, the overlay's colors, sizes and row head control icons, and the group headers' ids, as JSON."
+    },
+    "gridRows": {
+      "params": [],
+      "returns": "Uint8Array",
+      "description": "What each linear row of the grid gridAxes laid out is (a record and its id, a group header, an add row), for the page's hit testing and selection."
     },
     "gridBands": {
       "params": [

@@ -1,0 +1,26 @@
+format: 1
+id: table.editor.grid/interaction-engine
+feature: table.editor.grid
+intent: >-
+  The engine tells the page what it needs to interact without laying anything out itself:
+  gridRows names each linear row of the laid-out arrangement (a record and its id in the
+  arrangement's order, a group header and its index, an add row and the record above it whose
+  group a new record joins); each record's row head band has one slot per control (drag handle
+  only when rows can be dragged, checkbox, expand), as tall as the row at every row height so a
+  control centred in it is centred on the row; the header's checkbox is a hit centred on the box
+  it draws, over the records' checkboxes; and gridAxes gives the overlay's colors (checked boxes
+  and outlines in the brand, the host's brand included, the mark in the color drawn on it) and the
+  controls' icons, which the next gridBands batch brings.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, sections 3.1, 3.4 and F15 (card tg4a)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: grid_interaction, features: [headless] }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

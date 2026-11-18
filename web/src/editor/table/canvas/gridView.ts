@@ -17,7 +17,6 @@ import { type Area, Axes, type AxesInput, bandKeys, keyId } from './axes'
 import { decodeBatch } from './bandBatch'
 import { BandCache } from './bandCache'
 import { type BandKey, Layer } from './displayList'
-import type { GridAxisGroup } from '../lib/gridAxis'
 import { GridFonts } from './gridFonts'
 import type { OverlayStyle } from './overlay'
 import { play } from './player'
@@ -33,6 +32,9 @@ const FAST_SCROLL = 3000
 /** The colors of a band not here yet, from the engine's theme. */
 export type Skeleton = { background: string; line: string }
 
+/** A group header of the arrangement (`gridAxes`' `groups`, in order; `GridRows.groupIndex` indexes them). */
+export type GridGroup = { id: string; depth: number; collapsed: boolean }
+
 export type GridOpened = {
   axes: AxesInput
   skeleton: Skeleton
@@ -40,8 +42,8 @@ export type GridOpened = {
   rows?: GridRows
   /** How the overlay draws (`gridAxes`' `overlay`). */
   overlay?: OverlayStyle
-  /** The arrangement's group headers (`gridOpen`), for their ids. */
-  groups?: GridAxisGroup[]
+  /** The arrangement's group headers, for their ids. */
+  groups?: GridGroup[]
 }
 
 /** What the view asks the engine (through `KitEngine.invoke`). */

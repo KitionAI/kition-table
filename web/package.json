@@ -17,6 +17,7 @@
     "test:flow": "node tests/flow.mjs chromium && node tests/flow.mjs webkit",
     "test:modes": "node tests/modes.mjs chromium && node tests/modes.mjs webkit",
     "test:grid": "node tests/widths.mjs chromium && node tests/widths.mjs webkit && node tests/parity.mjs chromium && node tests/parity.mjs webkit",
+    "test:grid:interaction": "node tests/gridInteraction.mjs chromium && node tests/gridInteraction.mjs webkit",
     "test:perf": "node tests/perf.mjs chromium"
   },
   "dependencies": {

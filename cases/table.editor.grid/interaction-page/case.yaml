@@ -1,0 +1,33 @@
+format: 1
+id: table.editor.grid/interaction-page
+feature: table.editor.grid
+intent: >-
+  On the development page, in Chromium and WebKit: a click makes a cell active and outlines it in
+  the brand; a drag selects a range and redraws the overlay only when the cell under the pointer
+  changes, never the content; Shift+click extends; arrows, Shift+arrows, Tab and Cmd/Ctrl+arrows move
+  the active cell and scroll it into view, stepping over group headers and add rows; Enter, F2 and a
+  typed key ask to edit; Escape collapses a range and Cmd/Ctrl+A selects every cell; Cmd/Ctrl+Z runs
+  one engine undo and Cmd/Ctrl+Shift+Z one redo; a hovered row is tinted and shows its controls; row
+  checkboxes, Shift and the header's box check rows, drawn in the brand in light and dark; the
+  expand control, a right click on a cell (the record menu, at 145,48), a column's caret (the column
+  menu, closed by Escape), the add-field column and the add row reach the editor's handlers; a
+  press on a header selects the column; a drag past the bottom edge scrolls and keeps selecting; a
+  group's toggle collapses and expands it.
+layer: gate
+source:
+  kind: synthetic
+  from: web/tests/gridInteraction.mjs (card tg4a; the intents of the old grid's tests in the grid plan's section 6)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [node, web/tests/gridInteraction.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/gridInteraction.mjs, webkit]
+expected:
+  - actual: out:exit
+    compare: exit
+requires: [chromium, webkit]
+tags: [browser]
+timeout_s: 240
+since: "2026-11-18"

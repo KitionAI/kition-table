@@ -13,6 +13,7 @@
 mod cells;
 pub mod format;
 mod layout;
+pub mod overlay;
 pub mod text;
 pub mod theme;
 
