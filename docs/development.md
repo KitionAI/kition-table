@@ -153,7 +153,7 @@ pnpm run test:grid:interaction   # selection, keyboard, hover and menus, in Chro
 pnpm run test:grid:editing   # editors, clipboard, drags, pictures, AI overlay, in Chromium and WebKit
 pnpm run test:perf    # scrolling 100,000 records (writes target/perf/ on first run; minutes)
 PERF_TIER=strict PERF_HEADED=1 pnpm run test:perf   # the lines themselves, on a maintainer's machine
-node tests/perfEdit.mjs chromium   # 50 edits and a whole-column clear on the same 100,000 records
+node tests/perfEdit.mjs chromium   # 50 edits, then a whole column cleared, pasted and filled, on the same 100,000 records
 ```
 
 The editor depends on the `@kition/*` packages of kition-sdk and Kition Tessera from npm, at the

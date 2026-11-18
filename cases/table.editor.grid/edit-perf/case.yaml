@@ -7,7 +7,8 @@ intent: >-
   after another (a typed value, then Enter) are each written and redrawn, from the Enter to the
   first frame that shows the value, within the edit-to-redraw line (p95 50 ms on the owner's
   machine; the headless run relaxes it by the scroll lines' factor); and a whole number column of
-  the 100,000 records cleared with Delete is written and redrawn, every record cleared.
+  the 100,000 records cleared with Delete, then pasted (one line for each record) and filled down
+  from its first cell, is each time written and redrawn, every record holding what was written.
 layer: corpus
 dimension: performance
 source:

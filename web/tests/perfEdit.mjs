@@ -5,7 +5,9 @@
 // each timed from the Enter to the first frame that draws the written value (every band the
 // viewport shows exact again, the write done): edit-to-redraw p95 against the line (50 ms; the
 // headless tier relaxes it three times, as tests/perf.mjs does). Then a whole number column of
-// the 100,000 records cleared with Delete, timed the same way and checked in the engine.
+// the 100,000 records cleared with Delete, a value pasted into every record of it (a pasted line
+// for each), and the first record's value filled down over all the others (the fill handle's
+// action), each timed the same way from the key or the action and checked in the engine.
 //
 // The fixture is tests/perf.mjs's (bindings/wasm/examples/perf_fixture.rs, in target/perf/; it is
 // written when missing). PERF_TIER=strict checks the line itself (owner's machine, PERF_HEADED=1);
@@ -46,14 +48,18 @@ const step = (name, ok, detail) => {
 const f = (value) => value.toFixed(1)
 
 /**
- * Times every Enter or Delete from its key to the first content frame after which the write is
- * done and every band the viewport shows is exact: `window.__ktableEditTimes`.
+ * Times every Enter or Delete from its key (or a write from `window.__ktableEditStart()`) to the
+ * first content frame after which the write is done and every band the viewport shows is exact:
+ * `window.__ktableEditTimes`.
  */
 function installProbe() {
   const { view, editing } = window.__ktableGrid
   const times = []
   window.__ktableEditTimes = times
   let started = 0
+  window.__ktableEditStart = () => {
+    started = performance.now()
+  }
   window.addEventListener(
     'keydown',
     (event) => {
@@ -147,6 +153,46 @@ try {
   results.clear = { ms: clearMs, records: rows }
   console.log(`clear a column of ${rows} records: ${f(clearMs)} ms from Delete to the redraw`)
   step('a whole column is cleared', left.every((value) => value == null), JSON.stringify(left))
+
+  // The same column pasted (one line for each record) from its first cell, then that cell's value
+  // filled down over every other record.
+  const sampled = () =>
+    page.evaluate(async (col) => {
+      const { interaction, data, view } = window.__ktableGrid
+      const field = data.field(view.currentAxes.columns[col].fieldId)
+      const rows = interaction.rows
+      const at = [0, Math.floor(rows.count / 2), rows.count - 2]
+      const ids = at.map((row) => rows.recordId(row))
+      const values = (await data.records(ids, [field.name])).map((record) => record.values[field.name] ?? null)
+      return { at, values }
+    }, columns.number)
+  const timedWrite = async (name, write) => {
+    const before = await page.evaluate(() => window.__ktableEditTimes.length)
+    await page.evaluate(write, columns.number)
+    await page.waitForFunction((count) => window.__ktableEditTimes.length > count, before, { timeout: 600_000, polling: 50 })
+    const ms = (await page.evaluate(() => window.__ktableEditTimes.slice()))[before]
+    results[name] = { ms, records: rows }
+    console.log(`${name} a column of ${rows} records: ${f(ms)} ms from the action to the redraw`)
+  }
+  const cell = await centre(0, columns.number)
+  await page.mouse.click(box.left + cell.x, box.top + cell.y)
+  await settled(page)
+  await timedWrite('paste', () => {
+    const { editing, interaction } = window.__ktableGrid
+    const text = Array.from({ length: interaction.rows.count }, (_, row) => String(row % 97)).join('\n')
+    window.__ktableEditStart()
+    void editing.paste(text)
+  })
+  const pasted = await sampled()
+  step('a whole column is pasted', pasted.values.every((value, index) => value === pasted.at[index] % 97), JSON.stringify(pasted.values))
+  await timedWrite('fill', (col) => {
+    const { editing, interaction } = window.__ktableGrid
+    window.__ktableEditStart()
+    // The fill handle's action, as a drag from the first cell to the last record calls it.
+    editing.dragActions().fill({ top: 0, bottom: 0, left: col, right: col }, { from: 1, to: interaction.rows.count - 1, down: true })
+  })
+  const filled = await sampled()
+  step('a whole column is filled', filled.values.every((value) => value === 0), JSON.stringify(filled.values))
   step('page errors', errors.length === 0, errors.slice(0, 3).join(' | ') || 'none')
   await context.close()
 } catch (error) {
