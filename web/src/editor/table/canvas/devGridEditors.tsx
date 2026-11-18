@@ -1,7 +1,7 @@
 /**
  * The development page's popup editors (`dev/grid.html`): the grid's date and choice editors
  * (`GridCellEditors.tsx`) in a React root of their own, with the editor's strings, as the editor
- * will hold them in its own tree.
+ * holds them in its own tree (`TableEditorGridView`).
  */
 import { createRoot } from 'react-dom/client'
 import { I18nextProvider } from 'react-i18next'

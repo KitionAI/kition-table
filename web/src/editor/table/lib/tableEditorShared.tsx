@@ -1,6 +1,4 @@
 import { CalendarDaysIcon as CalendarDays, CheckIcon as Check, CircleDotIcon as CircleDot, FileTextIcon as FileText, HashIcon as Hash, Link2Icon as Link2, StarIcon as Star, Table2Icon as Table2, UserIcon as User, WorkflowIcon as Workflow, GalleryHorizontalEndIcon as GalleryHorizontalEnd, SquareKanbanIcon as KanbanSquare } from '@kition/tessera-icons/react'
-import type { IGroupCollection, IGridColumn } from '../grid/interface'
-import { CellType, type ICell } from '../grid/renderers/cell-renderer/interface'
 import type {
   DataAttachment,
   DataField,
@@ -78,28 +76,9 @@ export type DataInlineViewConfig = {
   search_query?: string
 }
 export type GridCellSelection = { recordId: number | null; fieldName: string } | null
-export type DataRecordWindow = { limit?: number; offset?: number }
 
 export type GridRowHeightKey = 'short' | 'medium' | 'tall' | 'extra_tall'
 
-export const gridRowHeightPresets: Record<GridRowHeightKey, number> = {
-  short: 32,
-  medium: 40,
-  tall: 56,
-  extra_tall: 88,
-}
-
-export function resolveGridRowHeight(key?: GridRowHeightKey | null): number {
-  return gridRowHeightPresets[key ?? 'medium'] ?? gridRowHeightPresets.medium
-}
-
-export const gridRowHeight = 40
-export const gridRowNumberColumnWidth = 48
-export const gridFieldColumnWidth = 180
-export const gridAddColumnWidth = 180
-export const gridRecordPageSize = 300
-export const gridRecordOverscanRows = 16
-export const maxVirtualGridCanvasHeight = 16_000_000
 
 export const selectPalette = ['green', 'blue', 'yellow', 'red', 'purple', 'gray'] as const
 export const fieldColorTones = [
@@ -479,18 +458,6 @@ export function reorderById<T extends { id: number }>(items: T[], sourceId: numb
   return nextItems
 }
 
-export function reorderByIdAtPosition<T extends { id: number }>(items: T[], sourceId: number, targetId: number, position: RowDropPosition) {
-  if (sourceId === targetId) return items
-  const nextItems = [...items]
-  const sourceIndex = nextItems.findIndex((item) => item.id === sourceId)
-  if (sourceIndex < 0) return items
-  const [moved] = nextItems.splice(sourceIndex, 1)
-  const targetIndex = nextItems.findIndex((item) => item.id === targetId)
-  if (targetIndex < 0) return items
-  nextItems.splice(position === 'after' ? targetIndex + 1 : targetIndex, 0, moved)
-  return nextItems
-}
-
 export function readViewConfig(view?: DataView | null): DataInlineViewConfig {
   return (view?.config || {}) as DataInlineViewConfig
 }
@@ -507,29 +474,4 @@ export type FieldSaveUpdates = {
   readonly?: boolean
   options?: DataFieldOptions | null
   formula?: string
-}
-
-export function buildGroupCollection(
-  groupItems: DataInlineGroupItem[],
-  fields: DataField[],
-): IGroupCollection {
-  const groupColumns: IGridColumn[] = groupItems.map((item, index) => {
-    const field = fields.find((candidate) => candidate.name === item.field_name)
-    return {
-      id: `group:${index}:${item.field_name}`,
-      name: field?.title || item.field_name,
-    }
-  })
-
-  return {
-    groupColumns,
-    getGroupCell: (cellValue: unknown): ICell => {
-      const text = displayValue(cellValue as DataRecordValue).trim() || 'Empty'
-      return {
-        type: CellType.Text,
-        data: text,
-        displayData: text,
-      }
-    },
-  }
 }

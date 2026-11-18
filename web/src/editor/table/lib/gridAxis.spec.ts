@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { decodeGridAxis, decodeGridHits, gridGroupPoints, type GridAxis } from './gridAxis'
+import { decodeGridAxis, decodeGridHits, type GridAxis } from './gridAxis'
 
 /** An axis in format v2, as the engine writes it (kition-table-arrange `Axis::encode`). */
 function encode(axis: GridAxis, version = 2): Uint8Array {
@@ -72,41 +72,5 @@ describe('decodeGridHits', () => {
     expect(() => decodeGridHits(encodeHits(1, 0, [[0]], 1, 2), [7])).toThrow('version 2')
     expect(() => decodeGridHits(encodeHits(1, 0, [[0]], 1), [7, 8])).toThrow('other fields')
     expect(() => decodeGridHits(new Uint8Array(40), [7])).toThrow('not grid hits')
-  })
-})
-
-describe('gridGroupPoints', () => {
-  const axis = (count: number, groups: GridAxis['groups']): GridAxis => ({ epoch: 1, total: count, ids: Array.from({ length: count }, (_, index) => index + 1), groups })
-
-  it('has no points without records', () => {
-    expect(gridGroupPoints(axis(0, []))).toEqual([])
-  })
-
-  it('emits each header, then the run of records up to the next one', () => {
-    expect(gridGroupPoints(axis(3, [header(0, 3, 0, 'Done', 'g0:"Done"')]))).toEqual([
-      { id: 'g0:"Done"', type: 0, depth: 0, value: 'Done', isCollapsed: false },
-      { type: 1, count: 3 },
-    ])
-  })
-
-  it('nests inner headers under outer ones and keeps collapsed marks', () => {
-    const points = gridGroupPoints(axis(3, [
-      header(0, 2, 0, 'Done', 'g0:"Done"', true),
-      header(0, 1, 1, 'Alice', 'g0:"Done"::g1:"Alice"'),
-      header(1, 1, 1, 'Bob', 'g0:"Done"::g1:"Bob"'),
-      header(2, 1, 0, 'Todo', 'g0:"Todo"'),
-      header(2, 1, 1, 'Alice', 'g0:"Todo"::g1:"Alice"'),
-    ]))
-    expect(points.map((point) => ('depth' in point ? `H${point.depth}:${String(point.value)}` : 'count' in point ? `R${point.count}` : 'A'))).toEqual([
-      'H0:Done',
-      'H1:Alice',
-      'R1',
-      'H1:Bob',
-      'R1',
-      'H0:Todo',
-      'H1:Alice',
-      'R1',
-    ])
-    expect(points[0]).toMatchObject({ isCollapsed: true })
   })
 })

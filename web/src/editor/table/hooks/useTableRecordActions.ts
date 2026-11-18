@@ -16,8 +16,6 @@ import {
   emptyRecordValues,
   kanbanGroupToValue,
   reorderById,
-  reorderByIdAtPosition,
-  type DataRecordWindow,
   type RecordContextMenuState,
   type RowDropPosition,
 } from '../lib/tableEditorShared'
@@ -86,7 +84,7 @@ type UseTableRecordActionsArgs = {
   setSelectedRecord: Dispatch<SetStateAction<DataRecord | null>>
   setSelectedRecordIds: Dispatch<SetStateAction<Set<number>>>
   setRecordContextMenu: Dispatch<SetStateAction<RecordContextMenuState>>
-  loadRecords: (window?: DataRecordWindow) => Promise<void>
+  loadRecords: () => Promise<void>
   setStatus: (message: string) => void
   copyTextToClipboard: (text: string, successMessage: string) => Promise<void>
   /** Refreshes the undo/redo toolbar state after a server write; optional so existing callers and tests keep working untouched. */
@@ -374,8 +372,9 @@ export function useTableRecordActions({
     try {
       const runtimeModel = await ai.resolveRuntimeModel(config)
       if (hasAIFieldPromptPlaceholders(config)) {
+        const read = new Map((await recordsOf(ids)).map((record) => [record.id, record]))
         const generated = await mapWithConcurrency(ids, 3, async (recordId) => {
-          const record = records.find((item) => item.id === recordId)
+          const record = read.get(recordId) as DataRecord | undefined
           if (!record) return { recordId, error: 'Record is not loaded' } as const
           try {
             const executionConfig = materializeAIFieldPrompt(config, record, fields)
@@ -474,73 +473,6 @@ export function useTableRecordActions({
     }
   }
 
-  async function clearCells(
-    cells: Array<{ record: DataRecord; field: DataField }>,
-  ) {
-    if (!document || !activeTable || !cells.length) return
-    const docId = document.id
-    const tableIdActive = activeTable.id
-
-    const byRecord = new Map<number, { record: DataRecord; fields: DataField[] }>()
-    for (const { record, field } of cells) {
-      if (!isClearableField(field)) continue
-      const existing = byRecord.get(record.id)
-      const entry = existing ?? { record, fields: [] as DataField[] }
-      if (!entry.fields.some((item) => item.id === field.id)) entry.fields.push(field)
-      if (!existing) byRecord.set(record.id, entry)
-    }
-    if (!byRecord.size) return
-
-    const updates: Array<{ recordId: number; rowKey: string; values: Record<string, DataRecordValue> }> = []
-    for (const { record, fields } of byRecord.values()) {
-      if (!record.row_key) continue
-      const values: Record<string, DataRecordValue> = {}
-      for (const field of fields) values[field.name] = coerceValue(field, null)
-      updates.push({ recordId: record.id, rowKey: record.row_key, values })
-    }
-    if (!updates.length) return
-
-    const patchByRecordId = new Map(updates.map((entry) => [entry.recordId, entry.values]))
-    setRecords((items) =>
-      items.map((item) => {
-        const patch = patchByRecordId.get(item.id)
-        if (!patch) return item
-        return { ...item, values: { ...item.values, ...patch } }
-      }),
-    )
-    setSelectedRecord((current) => {
-      if (!current) return current
-      const patch = patchByRecordId.get(current.id)
-      if (!patch) return current
-      return { ...current, values: { ...current.values, ...patch } }
-    })
-
-    setBusy(true)
-    try {
-      await dataSource.transact({ documentId: docId, ops: [{
-        op: 'cells.set',
-        tableId: tableIdActive,
-        records: updates.map((entry) => ({ rowKey: entry.rowKey, values: entry.values })),
-      }] })
-      const cleared = updates.reduce(
-        (total, entry) => total + Object.keys(entry.values).length,
-        0,
-      )
-      setStatus(`Cleared ${cleared} cell${cleared === 1 ? '' : 's'}`)
-      window.dispatchEvent(new CustomEvent('kition:data-document:record:upsert', {
-        detail: { vaultPath: document.path, tableId: tableIdActive, recordIds: updates.map((u) => u.recordId) },
-      }))
-      refreshHistoryState?.()
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error ? requestError.message : 'Clear cells failed',
-      )
-      void loadRecords()
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function removeRecord(recordId: number) {
     if (!document || !activeTable) return
     setBusy(true)
@@ -568,12 +500,26 @@ export function useTableRecordActions({
     }
   }
 
+  /**
+   * The records `ids` of the active table, as the editor holds them or read now (the grid holds
+   * only the records it read: it draws the rest from the engine), in the order asked.
+   */
+  async function recordsOf(ids: number[]): Promise<Array<Pick<DataRecord, 'id' | 'row_key' | 'values'>>> {
+    if (!activeTable) return []
+    const held = new Map<number, Pick<DataRecord, 'id' | 'row_key' | 'values'>>(records.map((record) => [record.id, record]))
+    const missing = ids.filter((id) => !held.has(id))
+    if (missing.length) for (const record of await dataSource.grid.records({ tableId: activeTable.id, ids: missing })) held.set(record.id, record)
+    return ids.flatMap((id) => held.get(id) ?? [])
+  }
+
+  async function selectedRowKeys(): Promise<string[]> {
+    return (await recordsOf(Array.from(selectedRecordIds))).map((record) => record.row_key).filter(Boolean)
+  }
+
   async function removeSelectedRecords() {
-    if (!document || !activeTable || !records.length) return
+    if (!document || !activeTable) return
     if (!selectedRecordIds.size) return
-    const rowKeys = Array.from(selectedRecordIds)
-      .map((id) => records.find((record) => record.id === id)?.row_key)
-      .filter((key): key is string => Boolean(key))
+    const rowKeys = await selectedRowKeys()
     if (!rowKeys.length) return
     const idsSnapshot = new Set(selectedRecordIds)
     setBusy(true)
@@ -607,11 +553,9 @@ export function useTableRecordActions({
   }
 
   async function duplicateSelectedRecords() {
-    if (!document || !activeTable || !records.length) return
+    if (!document || !activeTable) return
     if (!selectedRecordIds.size) return
-    const rowKeys = Array.from(selectedRecordIds)
-      .map((id) => records.find((record) => record.id === id)?.row_key)
-      .filter((key): key is string => Boolean(key))
+    const rowKeys = await selectedRowKeys()
     if (!rowKeys.length) return
     setBusy(true)
     try {
@@ -628,46 +572,6 @@ export function useTableRecordActions({
       )
     } finally {
       setBusy(false)
-    }
-  }
-
-  async function reorderRecords(
-    sourceRecordId: number,
-    targetRecordId: number,
-    position: RowDropPosition = 'before',
-  ) {
-    if (
-      !document ||
-      !activeTable ||
-      !canReorderRows ||
-      sourceRecordId === targetRecordId
-    )
-      return
-    const sourceRecord = records.find((item) => item.id === sourceRecordId)
-    if (!sourceRecord?.row_key) return
-    const nextRecords = reorderByIdAtPosition(
-      records,
-      sourceRecordId,
-      targetRecordId,
-      position,
-    )
-    if (nextRecords === records) return
-    setRecords(nextRecords)
-    const movedIndex = nextRecords.findIndex((item) => item.id === sourceRecordId)
-    const beforeRowKey = nextRecords[movedIndex + 1]?.row_key ?? null
-    try {
-      await dataSource.transact({ documentId: document.id, ops: [{
-        op: 'records.move',
-        tableId: activeTable.id,
-        rowKeys: [sourceRecord.row_key],
-        before: beforeRowKey,
-      }] })
-      refreshHistoryState?.()
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error ? requestError.message : 'Failed to save row order',
-      )
-      void loadRecords()
     }
   }
 
@@ -742,51 +646,6 @@ export function useTableRecordActions({
     }
   }
 
-  async function fillCells(
-    cells: Array<{ record: DataRecord; field: DataField; value: DataRecordValue }>,
-  ) {
-    if (!document || !activeTable || !cells.length) return
-    const byRecord = new Map<number, { record: DataRecord; values: Record<string, DataRecordValue> }>()
-    for (const { record, field, value } of cells) {
-      if (field.readonly || !record.row_key) continue
-      const entry = byRecord.get(record.id) ?? { record, values: {} }
-      entry.values[field.name] = coerceValue(field, value)
-      if (!byRecord.has(record.id)) byRecord.set(record.id, entry)
-    }
-    if (!byRecord.size) return
-
-    const patchByRecordId = new Map(
-      [...byRecord.values()].map((entry) => [entry.record.id, entry.values]),
-    )
-    setRecords((items) =>
-      items.map((item) => {
-        const patch = patchByRecordId.get(item.id)
-        return patch ? { ...item, values: { ...item.values, ...patch } } : item
-      }),
-    )
-    setSelectedRecord((current) => {
-      if (!current) return current
-      const patch = patchByRecordId.get(current.id)
-      return patch ? { ...current, values: { ...current.values, ...patch } } : current
-    })
-
-    const ops: TableOp[] = [{
-      op: 'cells.set',
-      tableId: activeTable.id,
-      records: [...byRecord.values()].map((entry) => ({
-        rowKey: entry.record.row_key,
-        values: entry.values,
-      })),
-    }]
-    try {
-      await dataSource.transact({ documentId: document.id, ops })
-      refreshHistoryState?.()
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Fill failed')
-      void loadRecords()
-    }
-  }
-
   async function copyRecordURL(record: DataRecord) {
     const base = window.location.href.split('#')[0]
     await copyTextToClipboard(
@@ -797,16 +656,13 @@ export function useTableRecordActions({
 
   return {
     addRecord,
-    clearCells,
     copyRecordURL,
     duplicateRecord,
     duplicateSelectedRecords,
-    fillCells,
     insertRecordsNear,
     moveKanbanRecord,
     removeRecord,
     removeSelectedRecords,
-    reorderRecords,
     runAIField,
     runAIFieldBatchForRecords,
     updateCell,

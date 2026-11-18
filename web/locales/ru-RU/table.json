@@ -63,7 +63,6 @@
     "descending": "По убыванию"
   },
   "footer": {
-    "showingRange": "Показано {{start}}–{{end}}",
     "recordsCount": "Записей: {{count}}",
     "aggregate": "{{title}}: сумма {{sum}} · среднее {{avg}}",
     "selectedCount": "Выбрано: {{count}}",

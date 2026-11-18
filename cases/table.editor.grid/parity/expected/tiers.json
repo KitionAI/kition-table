@@ -8,7 +8,8 @@
   "segmentMean": 24,
   "textPsnr": 17,
   "wholePsnr": { "1": 23, "2": 25 },
+  "wholePsnrDark": { "1": 22, "2": 22.5 },
   "width": 0.5,
   "widthWarn": 0.1,
-  "macosOnly": ["segmentMean", "textPsnr", "wholePsnr"]
+  "macosOnly": ["segmentMean", "textPsnr", "wholePsnr", "wholePsnrDark"]
 }

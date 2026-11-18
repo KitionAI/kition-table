@@ -2,7 +2,9 @@
 // Starts the Vite dev server itself, opens fixtures the built engine makes (public/engine) in
 // dev.html, and prints PASS or FAIL per step. The steps port Kition's former table editor gate
 // (e2e/kitable.spec.ts): its HTTP requests are now engine commands, read from the editor's engine
-// worker (every `execute` it is sent, with its answer) and from the engine's state (`ai.run`).
+// worker (every `execute` it is sent, with its answer, and how many records each arrangement's
+// axis shows) and from the engine's state (`ai.run`). The grid is the engine's (grid plan phase 5):
+// it draws bands the engine lays out, so its text is read from the canvas's `fillText` calls.
 // FLOW_ONLY=<regex> runs only the tests whose names match; FLOW_SHOTS=<folder> keeps a screenshot of each failure.
 import fs from 'node:fs'
 import { chromium, webkit } from 'playwright'
@@ -71,6 +73,9 @@ await context.grantPermissions(which === 'webkit' ? ['clipboard-read'] : ['clipb
 await context.addInitScript(() => {
   const calls = []
   window.__engineCalls = calls
+  // How many records each axis the editor's arrangement answered shows (gridOpen, gridSync).
+  const arranged = []
+  window.__arranged = arranged
   const Base = window.Worker
   if (Base) {
     window.Worker = class extends Base {
@@ -83,6 +88,13 @@ await context.addInitScript(() => {
           const call = data && pending.get(data.id)
           if (!call) return
           pending.delete(data.id)
+          if (call.invoke) {
+            // An arrangement's axis (format v2): how many records it shows is at byte 16.
+            const value = data.value
+            const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : ArrayBuffer.isView(value) ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength) : null
+            if (bytes && bytes.byteLength >= 32) arranged.push(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(16, true))
+            return
+          }
           call.ok = data.ok === true
           if (call.ok) {
             try {
@@ -101,6 +113,8 @@ await context.addInitScript(() => {
           const call = { command: request.command, params: JSON.parse(JSON.stringify(request.params ?? {})) }
           calls.push(call)
           this.__pending.set(message.id, call)
+        } else if (request && request.method === 'invoke' && (request.name === 'gridOpen' || request.name === 'gridSync')) {
+          this.__pending.set(message.id, { invoke: request.name })
         }
         return super.postMessage(message, ...rest)
       }
@@ -144,7 +158,11 @@ async function test(name, body) {
 const kit = page.frameLocator('#kit')
 const frame = () => page.frames().find((candidate) => candidate !== page.mainFrame() && candidate.url().includes('index.html'))
 const editor = () => kit.getByTestId('ktable-editor')
-const stage = () => kit.locator('.data-inline-grid-canvas [data-t-grid-stage="true"]')
+const stage = () => kit.locator('.data-inline-grid-canvas [data-ktable-grid-stage="true"]')
+/** The grid's text editor: the focused textarea on the active cell, shown while a cell is edited. */
+const cellEditor = () => kit.locator('.data-inline-grid-canvas textarea[data-ktable-grid-input]')
+/** Waits for the cell editor to show (the textarea is on the grid, invisible, until a cell is edited). */
+const editorShown = () => until(() => cellEditor().evaluate((element) => element.style.pointerEvents === 'auto'))
 /** The engine commands the editor's worker was sent since `from` (a count from `mark()`), with their answers. */
 const mark = async () => frame().evaluate(() => window.__engineCalls.length)
 const sent = async (from, command) => (await frame().evaluate((from) => window.__engineCalls.slice(from), from)).filter((call) => call.ok !== undefined && (!command || call.command === command))
@@ -272,8 +290,8 @@ try {
   await test('a text cell editor has one brand border', async () => {
     await stage().click({ position: { x: 145, y: 48 } })
     await stage().dblclick({ position: { x: 145, y: 48 } })
-    const input = kit.locator('.data-inline-grid-canvas input.cursor-text')
-    await input.waitFor({ timeout: 5000 })
+    const input = cellEditor()
+    await editorShown()
     const focused = await input.evaluate((element) => element === document.activeElement)
     const style = await input.evaluate((element) => {
       const computed = getComputedStyle(element)
@@ -285,8 +303,15 @@ try {
 
   // 12. Content is centred, dates are formatted, and Copy goes to the system clipboard.
   await test('copies the selected cell to the system clipboard', async () => {
-    const centred = await until(() => drew((draw) => draw.text === 'Phase 2 wrap' && draw.textAlign === 'center' && Math.abs(draw.y - 52) < 0.75))
-    step('draws grid content centred', centred)
+    // The first row's middle is at 52 (a 32 px header, 40 px rows); the engine puts the text's
+    // alphabetic baseline below it by half of Inter's ascent less its descent (the face the grid
+    // draws with), as a browser centres a line box.
+    const below = await frame().evaluate(() => {
+      const metrics = Object.assign(document.createElement('canvas').getContext('2d'), { font: '13px KitionTableSans' }).measureText('x')
+      return (metrics.fontBoundingBoxAscent - metrics.fontBoundingBoxDescent) / 2
+    })
+    const centred = await until(() => frame().evaluate((baseline) => window.__textDraws.some((draw) => draw.text === 'Phase 2 wrap' && draw.textAlign === 'center' && Math.abs(draw.y - baseline) < 0.75), 52 + below))
+    step('draws grid content centred', centred, JSON.stringify({ baseline: 52 + below, drawn: await frame().evaluate(() => window.__textDraws.filter((draw) => draw.text === 'Phase 2 wrap').slice(-2)) }))
     const dates = await frame().evaluate(() => {
       const raw = '2026-07-23T04:14:47Z'
       const date = new Date(raw)
@@ -312,8 +337,8 @@ try {
     // An edit to undo: type over the first title.
     await stage().click({ position: { x: 145, y: 48 } })
     await stage().dblclick({ position: { x: 145, y: 48 } })
-    const input = kit.locator('.data-inline-grid-canvas input.cursor-text')
-    await input.waitFor({ timeout: 5000 })
+    const input = cellEditor()
+    await editorShown()
     await input.fill('Phase 2 renamed')
     await page.keyboard.press('Enter')
     await until(async () => (await records(table.id))[0].values.title === 'Phase 2 renamed')
@@ -440,10 +465,9 @@ try {
     const [table] = await tables()
     const title = table.fields.find((field) => field.is_primary)
     const box = await stage().boundingBox()
-    const container = kit.locator('.data-inline-grid-canvas [data-t-grid-stage="true"]')
-    const cursor = () => container.evaluate(async (node) => {
+    const cursor = () => stage().evaluate(async (node) => {
       await new Promise((resolve) => requestAnimationFrame(() => resolve()))
-      return node.parentElement?.style.cursor
+      return node.style.cursor
     })
     // Three 24px row controls, and every field starts 200px wide.
     const expected = box.x + 72 + 200
@@ -461,7 +485,7 @@ try {
     await until(async () => (await writes(from)).length > 0)
     await page.waitForTimeout(300)
     const made = await writes(from)
-    // The width is saved 250 ms after the last move, so a slow drag may save a width on the way too.
+    // The width is saved once, on release.
     const saved = made.length >= 1 && made.every((call) => call.command === 'table.views.patchField' && call.params.fieldId === title.id && call.ok) && made.at(-1).params.width === 280
     step('saves the width with views.patchField', saved, JSON.stringify(made.map((call) => [call.command, call.params])))
     await page.mouse.move(boundary + 80, y)
@@ -473,7 +497,8 @@ try {
     await page.setViewportSize({ width: 720, height: 720 })
     await open('Tasks.ktable', SMALL)
     const canvas = kit.locator('.data-inline-grid-canvas')
-    const scroller = canvas.locator('[data-t-grid-horizontal-scroller]')
+    // The grid's scroll container is the stage: its scroll bars are the grid's own.
+    const scroller = canvas.locator('[data-ktable-grid-stage="true"]')
     await scroller.waitFor({ timeout: 5000 })
     const [canvasBox, scrollerBox] = await Promise.all([canvas.boundingBox(), scroller.boundingBox()])
     const range = await scroller.evaluate((element) => ({ maximum: element.scrollWidth - element.clientWidth, scrollLeft: element.scrollLeft }))
@@ -499,21 +524,23 @@ try {
     await page.setViewportSize({ width: 1440, height: 900 })
   })
 
-  // 2. The whole record set loads, in one read without a window, and a sort keeps it whole.
-  await test('loads the whole record set', async () => {
+  // 2. The grid reads no records: the engine arranges every record of the table (the axis holds
+  // all 1,137) and the grid draws them from its bands; the footer counts them, and a sort keeps
+  // every one.
+  await test('arranges the whole table without reading it', async () => {
     await open('Messages.ktable', LARGE)
     const reads = (await sent(0, 'table.records.list')).filter((call) => call.ok)
-    const windowed = reads.some((call) => call.params.limit != null || call.params.offset != null)
-    const loaded = reads.some((call) => call.result?.items?.length === 1137)
     const footer = kit.locator('.data-inline-footer')
-    step('loads the whole record set without a window', !windowed && loaded && (await footer.textContent()).includes('1137 records'), JSON.stringify(reads.map((call) => call.params)))
+    const shown = async () => (await frame().evaluate(() => window.__arranged)).at(-1)
+    step('arranges the whole table without reading it', reads.length === 0 && (await shown()) === 1137 && (await footer.textContent()).includes('1137 records'), JSON.stringify({ reads: reads.map((call) => call.params), axis: await shown() }))
     await kit.getByTestId('ktable-toolbar-sort').click()
     await kit.getByTestId('ktable-toolbar-sort-menu').getByRole('button', { name: 'Add another sort' }).click()
     await until(async () => (await kit.getByTestId('ktable-toolbar-sort').textContent()).includes('Sort (1)'))
     const label = await kit.getByTestId('ktable-toolbar-sort').textContent()
     await page.keyboard.press('Escape')
     await page.waitForTimeout(300)
-    step('a sort keeps every record', label.includes('Sort (1)') && (await footer.textContent()).includes('1137 records'), `${label} / ${await footer.textContent()}`)
+    const sorted = await shown()
+    step('a sort keeps every record', label.includes('Sort (1)') && sorted === 1137 && (await footer.textContent()).includes('1137 records') && (await sent(0, 'table.records.list')).length === 0, `${label} / ${await footer.textContent()} / ${sorted}`)
   })
 
   // Changes made through the engine from outside the editor (the agent, a host feature) show live.
@@ -531,8 +558,8 @@ try {
     // The person's own edit, then a workflow's record (a system origin).
     await stage().click({ position: { x: 145, y: 88 } })
     await stage().dblclick({ position: { x: 145, y: 88 } })
-    const input = kit.locator('.data-inline-grid-canvas input.cursor-text')
-    await input.waitFor({ timeout: 5000 })
+    const input = cellEditor()
+    await editorShown()
     await input.fill('Mine')
     await page.keyboard.press('Enter')
     await until(async () => (await records(table.id)).some((record) => record.values.title === 'Mine'))

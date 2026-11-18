@@ -7,6 +7,7 @@ import {
   type DataTable,
   type TableDataSource,
 } from './editor'
+import type { GridFieldSummary, GridRecordRead } from './editor/table/ports/TableDataSource'
 import { decodeGridAxis, decodeGridHits } from './editor/table/lib/gridAxis'
 
 /** What a data-document request answers from the engine: the route's answer, and what it changed. */
@@ -226,10 +227,13 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
       }
     },
     grid: {
-      open: async (params) => decodeGridAxis(await engine.invoke<Uint8Array>('gridOpen', JSON.stringify(params))),
+      open: async (params) => {
+        const bytes = await engine.invoke<Uint8Array>('gridOpen', JSON.stringify(params))
+        return { ...decodeGridAxis(bytes), bytes }
+      },
       sync: async () => {
         const bytes = await engine.invoke<Uint8Array>('gridSync')
-        return bytes.byteLength ? decodeGridAxis(bytes) : null
+        return bytes.byteLength ? { ...decodeGridAxis(bytes), bytes } : null
       },
       hits: async (params) => decodeGridHits(await engine.invoke<Uint8Array>('gridHits', JSON.stringify(params)), params.fieldIds),
       subscribe(listener) {
@@ -238,6 +242,24 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
           gridListeners.delete(listener)
         }
       },
+      layout: async ({ axis, ...params }) => {
+        const axes = JSON.parse(await engine.invoke<string>('gridAxes', axis, JSON.stringify(params))) as unknown
+        return { axes, rows: await engine.invoke<Uint8Array>('gridRows') }
+      },
+      bands: (epoch, keys, dpr, session, draft) => engine.invoke<Uint8Array>('gridBands', epoch, keys, dpr, session, draft),
+      records: async (params) => JSON.parse(await engine.invoke<string>('gridRecords', JSON.stringify(params))) as GridRecordRead[],
+      clear: async ({ ids, ...params }) => {
+        if (!ids.length) return
+        await engine.invoke<string>('gridClear', JSON.stringify(params), Float64Array.from(ids)).catch((error: unknown) => {
+          throw refusalMessage(error)
+        })
+        // The engine wrote outside a command: a read through the session brings its state (the
+        // revision, unsaved) up to date.
+        await engine.run('table.historyState', {}, 'all')
+        seen = engine.revision()
+        changed()
+      },
+      summary: async (params) => JSON.parse(await engine.invoke<string>('gridSummary', JSON.stringify(params))) as GridFieldSummary[],
     },
     command: <T>(method: string, params?: Record<string, unknown>) => call<T>(method, params),
     observe(revision) {

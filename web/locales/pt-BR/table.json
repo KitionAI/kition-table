@@ -63,7 +63,6 @@
     "descending": "Decrescente"
   },
   "footer": {
-    "showingRange": "Exibindo {{start}}–{{end}}",
     "recordsCount": "{{count}} registros",
     "aggregate": "{{title}}: soma {{sum}} · média {{avg}}",
     "selectedCount": "{{count}} selecionados",

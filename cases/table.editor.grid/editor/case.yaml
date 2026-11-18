@@ -1,0 +1,43 @@
+format: 1
+id: table.editor.grid/editor
+feature: table.editor.grid
+intent: >-
+  The table editor's grid view is the engine's grid: the engine arranges the view (every record of
+  the table, 1,137 of them, in the axis) and lays out and draws it in bands, and the editor reads
+  no record to show it, sorted or not; the footer counts the arrangement's records and sums its
+  number fields through the engine (gridSummary); the grid follows the view's settings as the
+  editor holds them before they are saved (gridAxes with the editor's config: hidden fields, row
+  height, frozen columns, groups). In the editor, in Chromium and WebKit, a text cell opens its
+  editor (the focused textarea on the cell, one brand border), the content is centred on its row
+  and dates are formatted, copy reaches the system clipboard, Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z run
+  one engine undo and redo, a date cell opens the compact calendar on a click, a 3x3 paste is one
+  transact, a row and a column drag are one records.move and one fields.move, a column's edge
+  saves its width, the stage scrolls sideways over the grid's width, and edits made outside the
+  editor show in the open grid.
+layer: gate
+source:
+  kind: synthetic
+  from: web/tests/flow.mjs, the steps moved to the new grid in the grid plan's phase 5 (card tg5)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "grid_tests::the_summary_counts_and_sums_the_numbers_of_the_shown_records", features: [headless] }
+  - cargo-test: { package: kition-table-kit, filter: "the_axes_follow_the_editors_config_before_it_is_saved", features: [headless] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "arranges the whole table without reading it", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "a text cell editor has one brand border", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "copies the selected cell to the system clipboard", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "Undo and Redo keys run the engine", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "opens a date cell in a compact calendar", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "pastes a 3x3 block as one transact", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "drags a row as one records.move", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "drags a column as one fields.move", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "resizes a column and saves the width", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "aligns the horizontal scrollbar with the grid", browsers: [chromium, webkit] }
+  - flow: { spec: web/tests/flow.mjs, scenario: "shows changes made outside the editor", browsers: [chromium, webkit] }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+requires: [chromium, webkit]
+tags: [browser]
+since: "2026-11-18"

@@ -63,7 +63,6 @@
     "descending": "Descending"
   },
   "footer": {
-    "showingRange": "Showing {{start}}–{{end}}",
     "recordsCount": "{{count}} records",
     "aggregate": "{{title}}: sum {{sum}} · avg {{avg}}",
     "selectedCount": "{{count}} selected",

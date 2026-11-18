@@ -71,6 +71,28 @@ export type GridOpenParams = {
 }
 
 /**
+ * What the grid lays out (`gridAxes`): an axis `open` or `sync` answered (its bytes), for a view
+ * of a table with the view's config as the editor holds it, its dates read in the page's time
+ * zone, in a theme and a brand color (`#rrggbb`, or null for the kit's own).
+ */
+export type GridLayoutParams = {
+  axis: Uint8Array
+  tableId: number
+  viewId: number | null
+  config: Record<string, unknown>
+  /** The page's time zone, where dates are read: `[from (Unix ms), minutes east of UTC]` changes, oldest first. */
+  zone: Array<[number, number]>
+  theme: 'light' | 'dark'
+  brand: string | null
+}
+
+/** A record as the grid reads it to edit (`gridRecords`): its id, its row key and its values by field name. */
+export type GridRecordRead = { id: number; row_key: string; values: Record<string, DataRecordValue> }
+
+/** How many shown records hold a number in a field, and their sum (`gridSummary`). */
+export type GridFieldSummary = { field: string; count: number; sum: number }
+
+/**
  * Everything the table editor (table and dashboard) reads from and writes to a table document.
  *
  * Member names are the `kition-table-api` method names (`crates/kition-table-api`, `METHODS`),
@@ -149,12 +171,24 @@ export interface TableDataSource {
    * hold the search (`[index into the axis's ids, field id]`), and fails for an axis that is no
    * longer the latest; `subscribe` calls back after every change to the document (the editor's own
    * writes too), when a `sync` may answer a new axis.
+   *
+   * The grid draws the arrangement from the engine's bands without the records on the page:
+   * `layout` lays an axis out (`gridAxes`, then what each linear row is, `gridRows`), `bands`
+   * answers a batch of bands of the layout (`gridBands`), `records` reads just the records a
+   * write or a menu acts on (`gridRecords`), `clear` empties cells of many records in one
+   * transaction the engine builds (`gridClear`), and `summary` sums number fields over the
+   * arrangement's records (`gridSummary`, the footer's).
    */
   grid: {
     open(params: GridOpenParams): Promise<GridAxis>
     sync(): Promise<GridAxis | null>
     hits(params: GridHitsParams): Promise<Array<[number, number]>>
     subscribe(listener: () => void): () => void
+    layout(params: GridLayoutParams): Promise<{ axes: unknown; rows: Uint8Array }>
+    bands(epoch: number, keys: Uint32Array, dpr: number, session: number, draft: boolean): Promise<Uint8Array>
+    records(params: { tableId: number; ids: number[]; fields?: string[] }): Promise<GridRecordRead[]>
+    clear(params: { tableId: number; ids: number[]; values: Record<string, DataRecordValue> }): Promise<void>
+    summary(params: { fields: string[] }): Promise<GridFieldSummary[]>
   }
 }
 

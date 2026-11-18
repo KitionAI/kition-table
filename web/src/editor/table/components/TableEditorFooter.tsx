@@ -1,46 +1,26 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { DataField } from '../../types/dataDocument'
-
-type NumericSummary = {
-  field: DataField
-  sum: number
-  average: number
-}
+import type { NumericSummary } from '../hooks/useGridSummary'
 
 export function TableEditorFooter({
-  gridTotalRows,
-  canUseVirtualGrid,
-  recordOffset,
-  loadedRecordCount,
-  recordTotal,
+  shownCount,
   numericSummaries,
   selectedRecordCount,
   end,
 }: {
-  gridTotalRows: number
-  canUseVirtualGrid: boolean
-  recordOffset: number
-  loadedRecordCount: number
-  recordTotal: number
+  /** How many records the view shows. */
+  shownCount: number
   numericSummaries: NumericSummary[]
   selectedRecordCount: number
   /** After the hint: the host's document state, when it draws no status bar. */
   end?: ReactNode
 }) {
   const { t } = useTranslation('table')
-  const visibleRangeLabel =
-    canUseVirtualGrid && recordTotal > loadedRecordCount
-      ? ` · ${t('footer.showingRange', {
-          start: (recordOffset + 1).toLocaleString(),
-          end: Math.min(recordOffset + loadedRecordCount, recordTotal).toLocaleString(),
-        })}`
-      : ''
 
   return (
     <div className="data-inline-footer">
       <span>
-        {t('footer.recordsCount', { count: gridTotalRows })}{visibleRangeLabel}
+        {t('footer.recordsCount', { count: shownCount })}
       </span>
       {numericSummaries.length ? (
         <div className="data-inline-aggregates">

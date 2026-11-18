@@ -24,6 +24,8 @@ import { boundsOf, type CellBounds, type GridSelection } from './selection'
 export const MIN_COLUMN_WIDTH = 100
 /** How far either side of the frozen edge a press grabs it. */
 export const FREEZE_GRAB = 4
+/** How long the pointer rests on the frozen edge before its handle shows (ms). */
+export const FREEZE_HOVER_MS = 200
 /** The fill handle's side, and how far around it a press grabs it. */
 export const FILL_HANDLE = 8
 export const FILL_GRAB = 4
@@ -55,6 +57,15 @@ export function rowDrop(rows: GridRows, source: number, over: number): { target:
   if (target < 0) target = rows.recordFrom(over, over < source ? -1 : 1)
   if (target < 0 || target === source) return null
   return { target, after: target > source }
+}
+
+/**
+ * Where the freeze guide runs on the viewport: from below the header to the last row or the
+ * viewport's bottom, whichever comes first, and never shorter than the header.
+ */
+export function freezeGuide(axes: Axes, viewport: Viewport): { top: number; bottom: number } {
+  const top = axes.headerHeight
+  return { top, bottom: Math.max(top, Math.min(viewport.height, axes.height - viewport.scrollY)) }
 }
 
 /** How many columns a freeze drag at viewport `x` freezes: the leading columns whose middle is left of the pointer. */
@@ -293,25 +304,28 @@ export function installDrags(interaction: GridInteraction, actions: DragActions)
     if (!a || hit.y < a.headerHeight || hit.y >= Math.min(view.viewport.height, a.height - view.viewport.scrollY)) return false
     return Math.abs(hit.x - a.bodyLeft) <= FREEZE_GRAB
   }
-  /** The freeze handle at viewport `x` (a line down the rows and a grip at the pointer's height). */
+  /** The freeze handle at viewport `x`: a neutral guide down the rows and a grip in the brand at the pointer's height. */
   const paintFreeze = (frame: OverlayFrame, x: number, y: number) => {
-    const a = frame.axes
-    const bottom = Math.min(frame.viewport.height, a.height - frame.viewport.scrollY)
+    const { top, bottom } = freezeGuide(frame.axes, frame.viewport)
     const ctx = frame.ctx
     ctx.save()
     ctx.setTransform(frame.dpr, 0, 0, frame.dpr, 0, 0)
+    ctx.fillStyle = frame.style.control
+    ctx.fillRect(x - 1, top, 2, bottom - top)
     ctx.fillStyle = frame.style.border
-    ctx.fillRect(x - 1, a.headerHeight, 2, bottom - a.headerHeight)
     ctx.beginPath()
-    ctx.roundRect(x - 3, Math.min(Math.max(y - 16, a.headerHeight), bottom - 32), 6, 32, 3)
+    ctx.roundRect(x - 3, Math.max(top, Math.min(y - 16, bottom - 32)), 6, 32, 3)
     ctx.fill()
     ctx.restore()
   }
   let freezeHover = false
+  let freezeTimer = 0
+  removers.push(() => window.clearTimeout(freezeTimer))
   removers.push(
     interaction.addGesture({
       down(hit) {
         if (!onFreezeEdge(hit) || onHandle(hit)) return false
+        window.clearTimeout(freezeTimer)
         freeze = { x: hit.x, y: hit.y }
         set((frame) => {
           if (!freeze) return
@@ -335,6 +349,8 @@ export function installDrags(interaction: GridInteraction, actions: DragActions)
       up(hit) {
         const done = freeze
         freeze = null
+        // After a drag the handle shows again only after the hover delay.
+        freezeHover = false
         set(null)
         const a = axes()
         if (!done || !a) return
@@ -350,7 +366,10 @@ export function installDrags(interaction: GridInteraction, actions: DragActions)
         const over = onFreezeEdge(hit)
         if (over !== freezeHover) {
           freezeHover = over
-          set(over ? (frame) => paintFreeze(frame, frame.axes.bodyLeft, hit.y) : null)
+          window.clearTimeout(freezeTimer)
+          // The handle shows after the pointer rests on the edge a moment, and goes at once when it leaves.
+          if (over) freezeTimer = window.setTimeout(() => set((frame) => paintFreeze(frame, frame.axes.bodyLeft, hit.y)), FREEZE_HOVER_MS)
+          else set(null)
         }
         return over ? 'col-resize' : null
       },

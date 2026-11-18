@@ -21,7 +21,8 @@ import {
 type UseTableColumnHeaderActionsArgs = {
   document: DataDocument | null
   activeTable: DataTable | null
-  records: DataRecord[]
+  /** Every record of the active table (the grid holds none of them: this reads them when asked). */
+  allRecords: () => Promise<DataRecord[]>
   visibleFields: DataField[]
   sortItems: DataInlineSortItem[]
   setBusy: Dispatch<SetStateAction<boolean>>
@@ -43,7 +44,7 @@ type UseTableColumnHeaderActionsArgs = {
 export function useTableColumnHeaderActions({
   document,
   activeTable,
-  records,
+  allRecords,
   visibleFields,
   sortItems,
   setBusy,
@@ -106,7 +107,7 @@ export function useTableColumnHeaderActions({
   }
 
   async function copyColumnValuesForChat(field: DataField) {
-    const values = records
+    const values = (await allRecords())
       .map((record) => record.values?.[field.name])
       .filter((value) => value !== null && value !== undefined && value !== '')
     await copyTextToClipboard(
@@ -115,9 +116,9 @@ export function useTableColumnHeaderActions({
     )
   }
 
-  function downloadAllFiles(field: DataField) {
+  async function downloadAllFiles(field: DataField) {
     let count = 0
-    for (const record of records) {
+    for (const record of await allRecords()) {
       const attachments = normalizeAttachmentValue(record.values?.[field.name])
       for (const attachment of attachments) {
         const href = attachment.url ? resolveTableFileURL(host, attachment.url) : ''

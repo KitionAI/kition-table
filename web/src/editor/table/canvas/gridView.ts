@@ -583,7 +583,8 @@ export class GridView {
       .catch((error: unknown) => {
         // What the engine sent may not be here: ask for everything again.
         this.resources.renewSession()
-        console.error('grid: gridBands failed', error)
+        // The engine laid out a newer arrangement meanwhile (its axes are on their way): expected.
+        if (!/is laid out for arrangement/.test(String(error))) console.error('grid: gridBands failed', error)
       })
       .finally(() => {
         this.inFlight = false

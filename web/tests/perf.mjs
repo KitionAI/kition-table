@@ -145,7 +145,7 @@ function summarize(name, run) {
     interval: { p50: quantile(gaps, 0.5), p95: quantile(gaps, 0.95), p99: quantile(gaps, 0.99), max: Math.max(0, ...gaps) },
     play: { p50: quantile(plays, 0.5), p95: quantile(plays, 0.95), max: Math.max(0, ...plays) },
     skeletonFrames: run.frames.filter((frame) => frame.skeleton).length,
-    // Frames that drew a draft band (no skeleton): shown, not a line.
+    // Frames that drew a draft band (no skeleton): content in the skeleton lines (the owner, 2026-11-18), counted apart.
     draftFrames: run.frames.filter((frame) => frame.draft && !frame.skeleton).length,
     longestSkeleton: longestSkeleton(run.frames),
     frameBytesMax: Math.max(0, ...run.frames.map((frame) => frame.bytes)),

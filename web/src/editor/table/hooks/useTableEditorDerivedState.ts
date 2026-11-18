@@ -1,18 +1,9 @@
-import { useMemo, type CSSProperties } from 'react'
+import { useMemo } from 'react'
 import type { DataField, DataRecord } from '../../types/dataDocument'
-import { gridGroupPoints, type GridAxis } from '../lib/gridAxis'
+import type { GridAxis } from '../lib/gridAxis'
 import {
-  buildGroupCollection,
   displayValue,
-  filterTreeHasActiveCondition,
-  gridAddColumnWidth,
-  gridFieldColumnWidth,
-  gridRecordPageSize,
-  gridRowHeight,
-  gridRowNumberColumnWidth,
-  maxVirtualGridCanvasHeight,
   normalizeChoiceList,
-  type DataInlineFilterGroup,
   type DataInlineGroupItem,
   type DataInlineSortItem,
   type SortDirection,
@@ -24,18 +15,10 @@ type UseTableEditorDerivedStateArgs = {
   fields: DataField[]
   hiddenFieldNames: Set<string>
   coverFieldName: string
-  filterFieldName: string
-  filterOperator: string
-  filterTree?: DataInlineFilterGroup | null
-  filterValue: string
   groupFieldName: string
   groupItems?: DataInlineGroupItem[]
-  query: string
   recordContextMenuRecordId: number | null
-  recordOffset: number
   records: DataRecord[]
-  recordTotal: number
-  selectedRecordIds: Set<number>
   sortDirection: SortDirection
   sortFieldName: string
   sortItems?: DataInlineSortItem[]
@@ -47,18 +30,10 @@ export function useTableEditorDerivedState({
   fields,
   hiddenFieldNames,
   coverFieldName,
-  filterFieldName,
-  filterOperator,
-  filterTree,
-  filterValue,
   groupFieldName,
   groupItems,
-  query,
   recordContextMenuRecordId,
-  recordOffset,
   records,
-  recordTotal,
-  selectedRecordIds,
   sortDirection,
   sortFieldName,
   sortItems,
@@ -102,9 +77,9 @@ export function useTableEditorDerivedState({
   const coverField = useMemo(() => {
     return fields.find((field) => field.name === coverFieldName) || fields.find((field) => field.type === 'attachment') || fields.find((field) => field.type === 'url') || null
   }, [coverFieldName, fields])
-  const filterTreeActive = useMemo(() => filterTreeHasActiveCondition(filterTree ?? null), [filterTree])
   // The view's records in its order: the engine filters, sorts, groups and searches them
-  // (kition-table-arrange); the editor keeps the records' contents.
+  // (kition-table-arrange); the editor keeps the records' contents (the kanban, calendar and
+  // gallery read them all; the grid draws from the engine and holds only the records it read).
   const recordsById = useMemo(() => new Map(records.map((record) => [record.id, record])), [records])
   const sortedAndFilteredRecords = useMemo(() => {
     if (!axis) return []
@@ -115,8 +90,8 @@ export function useTableEditorDerivedState({
     }
     return arranged
   }, [axis, recordsById])
-  // The arrangement the grid asks for the cells holding the search, while there is one.
-  const searchAxis = query.trim() ? axis : null
+  // How many records the view shows (the footer's count), from the arrangement.
+  const shownCount = axis?.ids.length ?? 0
   const groupedRecords = useMemo(() => {
     const groups = new Map<string, DataRecord[]>()
     if (groupField?.type === 'single_select') {
@@ -132,80 +107,29 @@ export function useTableEditorDerivedState({
     })
     return Array.from(groups.entries())
   }, [groupField, sortedAndFilteredRecords])
-  const groupPoints = useMemo(() => {
-    if (!effectiveGroupItems.length) return null
-    return axis ? gridGroupPoints(axis) : []
-  }, [effectiveGroupItems, axis])
-
-  const groupCollection = useMemo(() => {
-    if (!effectiveGroupItems.length) return null
-    return buildGroupCollection(effectiveGroupItems, fields)
-  }, [effectiveGroupItems, fields])
-  const allVisibleSelected = useMemo(() => {
-    return sortedAndFilteredRecords.length > 0 && sortedAndFilteredRecords.every((record) => selectedRecordIds.has(record.id))
-  }, [selectedRecordIds, sortedAndFilteredRecords])
   const contextMenuRecord = useMemo(() => {
     return recordContextMenuRecordId ? records.find((record) => record.id === recordContextMenuRecordId) || null : null
   }, [recordContextMenuRecordId, records])
   const canReorderRows = viewMode === 'grid' && effectiveSortItems.length === 0 && effectiveGroupItems.length === 0
   const canMoveKanbanCards = Boolean(groupField && !groupField.readonly && groupableFields.some((field) => field.name === groupField.name))
-  const isFilterActive = filterTreeActive || Boolean(filterFieldName && (filterOperator === 'empty' || filterOperator === 'not_empty' || filterValue.trim()))
-  const canUseVirtualGrid = viewMode === 'grid' && effectiveGroupItems.length === 0 && effectiveSortItems.length === 0 && !query.trim() && !isFilterActive
-  const gridTotalRows = canUseVirtualGrid ? recordTotal : sortedAndFilteredRecords.length
-  const renderedGridRecords = canUseVirtualGrid ? records : sortedAndFilteredRecords
-  const gridVirtualCanvasHeight = canUseVirtualGrid ? Math.min(recordTotal * gridRowHeight, maxVirtualGridCanvasHeight) : 0
-  const gridTableMinWidth = gridRowNumberColumnWidth + visibleFields.length * gridFieldColumnWidth + gridAddColumnWidth
-  const gridTableStyle = useMemo(() => {
-    return { '--data-inline-grid-min-width': `${gridTableMinWidth}px` } as CSSProperties
-  }, [gridTableMinWidth])
-  const gridVirtualBlockHeight = records.length * gridRowHeight
-  const gridVirtualMaxPageOffset = Math.floor(Math.max(0, recordTotal - gridRecordPageSize) / gridRecordPageSize) * gridRecordPageSize
-  const gridVirtualBlockTop = canUseVirtualGrid && recordTotal > gridRecordPageSize
-    ? Math.round((recordOffset / Math.max(1, gridVirtualMaxPageOffset)) * Math.max(0, gridVirtualCanvasHeight - gridVirtualBlockHeight))
-    : 0
-  const numericSummaries = useMemo(() => {
-    return visibleFields
-      .filter((field) => field.type === 'number')
-      .map((field) => {
-        const values = sortedAndFilteredRecords
-          .map((record) => Number(record.values?.[field.name]))
-          .filter((value) => Number.isFinite(value))
-        const sum = values.reduce((total, value) => total + value, 0)
-        const average = values.length ? sum / values.length : 0
-        return { field, count: values.length, sum, average }
-      })
-      .filter((item) => item.count > 0)
-      .slice(0, 3)
-  }, [sortedAndFilteredRecords, visibleFields])
-
   const groupFieldNames = useMemo(
     () => effectiveGroupItems.map((item) => item.field_name),
     [effectiveGroupItems],
   )
 
   return {
-    allVisibleSelected,
     canMoveKanbanCards,
     canReorderRows,
-    canUseVirtualGrid,
     contextMenuRecord,
     coverField,
     coverFields,
     dateField,
-    gridTableStyle,
-    gridTotalRows,
-    gridVirtualBlockTop,
-    gridVirtualCanvasHeight,
-    groupCollection,
     groupField,
     groupFieldNames,
-    groupPoints,
     groupedRecords,
     groupableFields,
-    numericSummaries,
     primaryField,
-    renderedGridRecords,
-    searchAxis,
+    shownCount,
     sortedAndFilteredRecords,
     visibleFields,
   }

@@ -8,8 +8,8 @@
  * `cells.set` without the page reading the records. Uploads go through the host's or the kit's
  * path for attachments (`attachments.put`), as the old grid's did.
  *
- * `engineData` is the implementation over the kit's engine (`KitEngine.invoke`); the editor's
- * wiring (phase 5) and the development page use it.
+ * `engineData` is the implementation over the kit's engine (`KitEngine.invoke`), for the
+ * development page; the editor's is `editorData`, over its data source.
  */
 import type { KitEngine } from '@kition/kit-editor'
 import { type AnyAIConfig, normalizeAIConfig } from '../../types/aiConfig'

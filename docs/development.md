@@ -131,14 +131,18 @@ pnpm run test:flow   # browser flows in Chromium and WebKit (Playwright; run wit
 
 The flow tests need Playwright's browsers (`pnpm exec playwright install chromium webkit`).
 
-The new grid (the engine's bands played on a canvas, not yet the editor's) has a development page,
-`web/dev/grid.html` (`pnpm dev`, then `/dev/grid.html?file=<a .ktable URL>&view=<id>`; `hud=1`
-shows its frame and band timings), which is not part of `pnpm build`. Its interaction (selection,
+The editor's grid is the engine's: the engine arranges the view, lays it out and draws it in bands,
+which the page plays on a canvas (`web/src/editor/table/canvas/`, shown by
+`components/TableEditorGridView.tsx`); the editor holds no records for it. The grid also has a
+development page, `web/dev/grid.html` (`pnpm dev`, then
+`/dev/grid.html?file=<a .ktable URL>&view=<id>`; `hud=1` shows its frame and band timings), which
+is not part of `pnpm build` and opens a file in the engine without the editor. Its interaction (selection,
 keyboard, hover, the row head controls, menus' entry points) and its editing (the cell editors,
 the clipboard, the drags, attachment pictures and uploads, the AI overlay; writes through the
 engine's commands, each logged to `window.__ktableGridWrites`, after which the view follows with
 `gridSync` and fetches again only the written records' bands) work there; it stands in for the editor's
-other handlers and logs each call to `window.__ktableGridEvents`. It draws with the same font
+other handlers and logs each call to `window.__ktableGridEvents`. The browser flows
+(`tests/flow.mjs`) drive the same grid inside the editor. It draws with the same font
 files the engine shapes with: `pnpm fonts` copies them from `KITION_FONTS_DIR` into
 `web/public/fonts/` and refuses any whose SHA-256 is not in `web/fonts.lock.json`; `pnpm build`
 packages them from there. Its tests, with no HTTP proxy set:
@@ -193,7 +197,7 @@ let bytes = document.save(None)?;
 | `crates/engine/file` | `kition-table-file`: the `.ktable` file, SQLite holding the document's KDM replica and its relational projection (derived values, history, blobs, dashboards) |
 | `crates/engine/api` | `kition-table-api`: the request layer, `handle(file, method, params)` |
 | `crates/engine/time` | `kition-time`: millisecond timestamps that build for wasm32 |
-| `crates/engine/arrange` | `kition-table-arrange`: the view model, which records a view shows and in what order (filter, sorts, groups, search), kept up to date edit by edit: the editor's views (extras `gridOpen`, `gridSync`, `gridHits`, `gridStats`), the agent's `read` and the picture |
+| `crates/engine/arrange` | `kition-table-arrange`: the view model, which records a view shows and in what order (filter, sorts, groups, search), kept up to date edit by edit: the editor's views (extras `gridOpen`, `gridSync`, `gridHits`, `gridSummary`, `gridStats`), the agent's `read` and the picture |
 | `crates/engine/ai-field` | `kition-table-ai`: AI fields' prompts and results; the host runs the model (`host/generate`) |
 | `crates/formats/import` | `kition-table-import`: CSV, TSV and XLSX import with type inference |
 | `crates/view/*` | The picture and the grid: fonts (`fonts`), the grid's layout (`grid`), its display list and rasterizer (`display`), the whole picture (`picture`) |

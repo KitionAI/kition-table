@@ -1,477 +1,275 @@
-import { forwardRef, useCallback, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type {
-  ClipboardEvent as ReactClipboardEvent,
-  CSSProperties,
-  MouseEvent as ReactMouseEvent,
-} from 'react'
-import type { DataAttachment, DataField, DataRecord, DataRecordValue } from '../../types/dataDocument'
-import {
-  normalizeAttachmentValue,
-  type DataRecordWindow,
-  type GridCellSelection,
-  type RowDropPosition,
-} from '../lib/tableEditorShared'
-import { cn } from '../../../lib/cn'
-
-import { Grid } from '../grid'
-import { getGridTheme } from '../grid/configs'
+import type { DataAttachment, DataField } from '../../types/dataDocument'
 import { useIsDark } from '../../lib/useIsDark'
-import {
-  DraggableType,
-  RowControlType,
-  type CombinedSelection,
-  type IAIOverlayCell,
-  type ICellRange,
-  type IGridRef,
-  type IGroupCollection,
-  type IGroupPoint,
-  type IPosition,
-  type IRange,
-  type IRectangle,
-  type IRowControlItem,
-} from '../grid'
-import { useGridAdapter } from '../grid/useGridAdapter'
-import { useSearchHits, type ShownRows } from '../hooks/useSearchHits'
+import type { GridCellSelection } from '../lib/tableEditorShared'
 import type { GridAxis } from '../lib/gridAxis'
-import { useTableColumnWidths } from '../hooks/useTableColumnWidths'
-import { buildCellKey } from '../store/aiCellGenerationStore'
-import { serializeTableSelection } from '../lib/tableClipboard'
-import { useTableHost, useTableNotify } from '../ports/TableHost'
+import { useTableDataSource } from '../ports/TableDataSource'
+import { resolveTableFileURL, useTableHost, useTableNotify } from '../ports/TableHost'
+import { aiCellStore } from '../store/aiCellGenerationStore'
+import { arrangedSource, type ArrangedSource } from '../canvas/editorSource'
+import { editorData } from '../canvas/editorData'
+import { GridCellPopup } from '../canvas/GridCellEditors'
+import { type CellPopup, GridEditing } from '../canvas/gridEditing'
+import { showsRecords, type Written } from '../canvas/gridSync'
+import { GridView as GridCanvas } from '../canvas/gridView'
+import { GridInteraction } from '../canvas/interaction'
+import { SearchHighlight } from '../canvas/searchHits'
+import { timeZoneChanges } from '../canvas/timeZone'
+import { NO_SELECTION, selectedRecordIds } from '../canvas/selection'
 
-type GridViewProps = {
+/** What the editor's grid shows and hands back to the editor. */
+export type GridViewProps = {
   documentId: number
   tableId: number
-  viewId?: number
+  viewId: number | null
+  /** The table's fields, marked read-only for a person who may only view the table. */
   fields: DataField[]
-  visibleFields: DataField[]
-  groupedRecords: Array<[string, DataRecord[]]>
-  groupFieldName: string
-  groupFieldNames: string[]
-  groupPoints: IGroupPoint[] | null
-  groupCollection: IGroupCollection | null
+  /** The engine's arrangement of the view (`useTableArrangement`), null until the first one. */
+  axis: GridAxis | null
+  /** The view's config as the editor holds it (`viewConfigOf`): the grid is laid out with it before it is saved. */
+  config: Record<string, unknown>
+  /** Whether a search is on: the cells holding it are tinted. */
+  searching: boolean
+  readOnly: boolean
   collapsedGroupIds: ReadonlySet<string>
+  /** How many records the editor counts as checked: when it clears them (a bulk action), the grid unchecks its rows. */
+  checkedCount: number
   onCollapsedGroupChanged: (next: Set<string>) => void
-  selectedRecordIds: Set<number>
-  selectedGridCell: GridCellSelection
-  sortedAndFilteredRecords: DataRecord[]
-  renderedGridRecords: DataRecord[]
-  canReorderRows: boolean
-  canUseVirtualGrid: boolean
-  gridVirtualCanvasHeight: number
-  gridVirtualBlockTop: number
-  gridTableStyle: CSSProperties
-  recordOffset: number
-  recordTotal: number
-  pageSize: number
-  overscanRows: number
-  allVisibleSelected: boolean
-  resetScrollKey: string
-  rowHeight?: number
-  freezeColumnCount?: number
-  /** The engine's arrangement while a search is on (asked for the cells holding the search), else null. */
-  searchAxis: GridAxis | null
-  onColumnFreeze?: (count: number) => void
-  onLoadWindow: (window: DataRecordWindow) => void
-  onToggleAllSelected: () => void
-  onToggleRecordSelected: (recordId: number, checked?: boolean) => void
+  onFrozenColumnCount: (count: number) => void
   onSelectCell: (selection: GridCellSelection) => void
-  onOpenRecord: (record: DataRecord) => void
-  onOpenDocument?: (path: string) => void
-  onOpenRecordContextMenu: (
-    record: DataRecord,
-    event: Pick<ReactMouseEvent, 'clientX' | 'clientY' | 'preventDefault' | 'stopPropagation'>
-  ) => void
+  onCheckRecords: (recordIds: number[]) => void
+  onOpenRecord: (recordId: number) => void
+  onOpenRecordContextMenu: (recordId: number, at: { clientX: number; clientY: number }) => void
   onOpenColumnHeaderMenu?: (field: DataField, position: { x: number; y: number }) => void
-  onReorderField: (field: DataField, fromIndex: number, dropIndex: number) => void
-  onReorderRecords: (sourceRecordId: number, targetRecordId: number, position: RowDropPosition) => void
-  onRegenerate?: (record: DataRecord, field: DataField) => void
-  onUpdateCell: (record: DataRecord, field: DataField, value: DataRecordValue) => void
-  onClearCells: (cells: Array<{ record: DataRecord; field: DataField }>) => void
-  onFillCells?: (cells: Array<{ record: DataRecord; field: DataField; value: DataRecordValue }>) => void
-  onPreviewAttachments: (items: DataAttachment[], index: number) => void
-  onPaste: (event: ReactClipboardEvent<HTMLDivElement>) => void
-  onAddRecord: (initialValues?: Record<string, DataRecordValue>) => void
+  /** The add row: a new record, with the group values of `anchorRecordId` when the view groups. */
+  onAddRecord: (anchorRecordId: number | null) => void
   onOpenFieldCreator: () => void
+  onPreviewAttachments: (items: DataAttachment[], index: number) => void
+  onRegenerate?: (recordId: number, field: DataField) => void
+  onRunButton: (recordId: number, field: DataField) => void
+  onOpenLink: (recordId: number, field: DataField) => void
   onUndo: () => void
   onRedo: () => void
 }
 
-export const GridView = forwardRef<IGridRef, GridViewProps>(function GridView(props, gridRef) {
-  const { t } = useTranslation('table')
-  const {
-    tableId,
-    viewId,
-    visibleFields,
-    selectedRecordIds,
-    sortedAndFilteredRecords,
-    canReorderRows,
-    rowHeight,
-    freezeColumnCount,
-    searchAxis,
-    onColumnFreeze,
-    onToggleRecordSelected,
-    onSelectCell,
-    onOpenRecord,
-    onOpenDocument,
-    onOpenRecordContextMenu,
-    onOpenColumnHeaderMenu,
-    onReorderField,
-    onReorderRecords,
-    onRegenerate,
-    onUpdateCell,
-    onClearCells,
-    onFillCells,
-    onPaste,
-    onAddRecord,
-    onOpenFieldCreator,
-    onPreviewAttachments,
-    onUndo,
-    onRedo,
-    groupPoints,
-    groupCollection,
-    groupFieldNames,
-    collapsedGroupIds,
-    onCollapsedGroupChanged,
-  } = props
+/** The grid as the page holds it while the editor shows a table view. */
+type Mounted = { view: GridCanvas; source: ArrangedSource; interaction: GridInteraction; editing: GridEditing; search: SearchHighlight }
 
-  const { columnWidths, resizeColumn } = useTableColumnWidths({
-    documentId: props.documentId,
-    tableId,
-    viewId,
-  })
-  const { uploadAttachment } = useTableHost()
+/** The kit's brand as `#rrggbb` when the host keeps its own primary color (`theme.brand: "host"`), else null: the engine's theme has the kit's. */
+function hostBrand(): string | null {
+  const root = document.documentElement
+  if (root.dataset.brand !== 'host') return null
+  const hsl = getComputedStyle(root).getPropertyValue('--primary').trim().split(/\s+/).map((part) => Number.parseFloat(part))
+  if (hsl.length < 3 || hsl.some((part) => !Number.isFinite(part))) return null
+  const [h, s, l] = [hsl[0], hsl[1] / 100, hsl[2] / 100]
+  const a = s * Math.min(l, 1 - l)
+  const channel = (n: number) => {
+    const k = (n + h / 30) % 12
+    return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))))
+  }
+  return `#${[channel(0), channel(8), channel(4)].map((value) => value.toString(16).padStart(2, '0')).join('')}`
+}
+
+/**
+ * The table view's grid (grid plan phase 5): the engine lays out the editor's arrangement and
+ * draws it in bands (`canvas/`); the page plays them, and holds the selection, the editors and the
+ * drags. The records stay in the engine: a write reads only the records it touches, and the
+ * editor's menus and drawer read the one record they show.
+ */
+export function GridView(props: GridViewProps) {
+  const { i18n } = useTranslation('table')
+  const dataSource = useTableDataSource()
+  const host = useTableHost()
   const notify = useTableNotify()
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null)
-  const attachmentTargetRef = useRef<{ record: DataRecord; field: DataField } | null>(null)
-  const attachmentUploadInProgressRef = useRef(false)
-
-  const openAttachmentPicker = useCallback((record: DataRecord, field: DataField) => {
-    if (field.readonly || attachmentUploadInProgressRef.current) return
-    attachmentTargetRef.current = { record, field }
-    attachmentInputRef.current?.click()
-  }, [])
-
-  const handleAttachmentFiles = useCallback(async (files: File[]) => {
-    const target = attachmentTargetRef.current
-    attachmentTargetRef.current = null
-    if (!target || !files.length || attachmentUploadInProgressRef.current || !uploadAttachment) return
-    attachmentUploadInProgressRef.current = true
-    try {
-      const uploaded = await Promise.all(
-        files.map((file) => uploadAttachment({ documentId: props.documentId, tableId, file })),
-      )
-      const current = normalizeAttachmentValue(target.record.values?.[target.field.name] ?? null)
-      onUpdateCell(target.record, target.field, [...current, ...uploaded])
-    } catch (error) {
-      notify.error(t('cell.uploadFailed'), {
-        description: error instanceof Error ? error.message : String(error),
-      })
-    } finally {
-      attachmentUploadInProgressRef.current = false
-    }
-  }, [notify, onUpdateCell, props.documentId, t, tableId, uploadAttachment])
-
-  const adapter = useGridAdapter({
-    visibleFields,
-    sortedAndFilteredRecords,
-    columnWidths,
-    tableId,
-    onCellEdited: (record, field, value) => onUpdateCell(record, field, value),
-    onRowExpand: (record) => onOpenRecord(record),
-    onOpenDocument,
-
-    onRowAppend: (targetIndex) => {
-      if (!groupFieldNames.length) return onAddRecord()
-      const anchor =
-        typeof targetIndex === 'number' ? sortedAndFilteredRecords[targetIndex] : null
-      if (!anchor) return onAddRecord()
-      const initialValues: Record<string, DataRecordValue> = {}
-      for (const name of groupFieldNames) {
-        initialValues[name] = (anchor.values?.[name] ?? null) as DataRecordValue
-      }
-      onAddRecord(initialValues)
-    },
-    onColumnAppend: () => onOpenFieldCreator(),
-    onColumnResize: resizeColumn,
-    onColumnOrdered: onReorderField,
-    onRowOrdered: (sourceRecords, targetRecord) => {
-      if (!canReorderRows || !targetRecord || !sourceRecords.length) return
-      onReorderRecords(sourceRecords[0].id, targetRecord.id, 'before')
-    },
-    onPreviewAttachment: (record, field, index) => {
-      const attachments = normalizeAttachmentValue(record.values?.[field.name] ?? null)
-      if (attachments.length) onPreviewAttachments(attachments, index)
-    },
-    onAddAttachment: uploadAttachment ? openAttachmentPicker : undefined,
-    onCellAIAction: onRegenerate ? (record, field) => onRegenerate(record, field) : undefined,
-  })
-
-  const aiOverlayCells = useMemo<IAIOverlayCell[]>(() => {
-    const cells: IAIOverlayCell[] = []
-    for (let columnIndex = 0; columnIndex < visibleFields.length; columnIndex++) {
-      const field = visibleFields[columnIndex]
-      if (!field.ai_config?.enabled) continue
-      for (let rowIndex = 0; rowIndex < sortedAndFilteredRecords.length; rowIndex++) {
-        const record = sortedAndFilteredRecords[rowIndex]
-        cells.push({
-          cellItem: [columnIndex, rowIndex],
-          cellKey: buildCellKey(tableId, record.id, field.id),
-        })
-      }
-    }
-    return cells
-  }, [visibleFields, sortedAndFilteredRecords, tableId])
-
-  const handleSelectionChanged = useCallback(
-    (selection: CombinedSelection) => {
-      if (selection.isCellSelection) {
-        const range = selection.ranges[0] as IRange | undefined
-        if (!range) return
-        const [columnIndex, rowIndex] = range
-        const record = sortedAndFilteredRecords[rowIndex]
-        const field = visibleFields[columnIndex]
-        if (record && field) onSelectCell({ recordId: record.id, fieldName: field.name })
-        return
-      }
-      if (selection.isRowSelection) {
-        const next = new Set<number>()
-        for (const range of selection.ranges) {
-          const [a, b] = range
-          const lo = Math.min(a, b)
-          const hi = Math.max(a, b)
-          for (let i = lo; i <= hi; i++) {
-            const record = sortedAndFilteredRecords[i]
-            if (record) next.add(record.id)
-          }
-        }
-        for (const id of next) {
-          if (!selectedRecordIds.has(id)) onToggleRecordSelected(id, true)
-        }
-        for (const id of selectedRecordIds) {
-          if (!next.has(id)) onToggleRecordSelected(id, false)
-        }
-        return
-      }
-      if (selection.isNoneSelection && selectedRecordIds.size > 0) {
-        for (const id of selectedRecordIds) onToggleRecordSelected(id, false)
-      }
-    },
-    [
-      sortedAndFilteredRecords,
-      visibleFields,
-      selectedRecordIds,
-      onSelectCell,
-      onToggleRecordSelected,
-    ]
-  )
-
-  const handleContextMenu = useCallback(
-    (selection: CombinedSelection, position: IPosition) => {
-      const range = selection.ranges[0] as IRange | undefined
-      if (!range) return
-      const rowIndex = selection.isCellSelection ? range[1] : range[0]
-      const record = sortedAndFilteredRecords[rowIndex]
-      if (!record) return
-      if (selection.isCellSelection) {
-        const field = visibleFields[range[0]]
-        if (field) onSelectCell({ recordId: record.id, fieldName: field.name })
-      }
-      onOpenRecordContextMenu(record, {
-        clientX: position.x,
-        clientY: position.y,
-        preventDefault: () => undefined,
-        stopPropagation: () => undefined,
-      })
-    },
-    [sortedAndFilteredRecords, visibleFields, onOpenRecordContextMenu, onSelectCell]
-  )
-
-  const handleDelete = useCallback(
-    (selection: CombinedSelection) => {
-      const cells: Array<{ record: DataRecord; field: DataField }> = []
-      if (selection.isCellSelection) {
-        const [a, b] = selection.ranges
-        if (!a || !b) return
-        const minCol = Math.min(a[0], b[0])
-        const maxCol = Math.max(a[0], b[0])
-        const minRow = Math.min(a[1], b[1])
-        const maxRow = Math.max(a[1], b[1])
-        for (let r = minRow; r <= maxRow; r++) {
-          const record = sortedAndFilteredRecords[r]
-          if (!record) continue
-          for (let c = minCol; c <= maxCol; c++) {
-            const field = visibleFields[c]
-            if (field) cells.push({ record, field })
-          }
-        }
-      } else if (selection.isRowSelection) {
-        for (const range of selection.ranges) {
-          const lo = Math.min(range[0], range[1])
-          const hi = Math.max(range[0], range[1])
-          for (let r = lo; r <= hi; r++) {
-            const record = sortedAndFilteredRecords[r]
-            if (!record) continue
-            for (const field of visibleFields) cells.push({ record, field })
-          }
-        }
-      } else if (selection.isColumnSelection) {
-        for (const range of selection.ranges) {
-          const lo = Math.min(range[0], range[1])
-          const hi = Math.max(range[0], range[1])
-          for (let c = lo; c <= hi; c++) {
-            const field = visibleFields[c]
-            if (!field) continue
-            for (const record of sortedAndFilteredRecords) cells.push({ record, field })
-          }
-        }
-      }
-      if (cells.length) onClearCells(cells)
-    },
-    [sortedAndFilteredRecords, visibleFields, onClearCells],
-  )
-
-  const handleFillSelection = useCallback(
-    (selectionRanges: [IRange, IRange], targetEndRealRowIndex: number) => {
-      if (!onFillCells) return
-      const [start, end] = selectionRanges as [ICellRange, ICellRange]
-      const minCol = Math.min(start[0], end[0])
-      const maxCol = Math.max(start[0], end[0])
-      const minRow = Math.min(start[1], end[1])
-      const maxRow = Math.max(start[1], end[1])
-      const sourceRowCount = maxRow - minRow + 1
-      const fillingDown = targetEndRealRowIndex > maxRow
-      const targetRows: number[] = []
-      if (fillingDown) {
-        for (let row = maxRow + 1; row <= targetEndRealRowIndex; row++) targetRows.push(row)
-      } else {
-        for (let row = minRow - 1; row >= targetEndRealRowIndex; row--) targetRows.push(row)
-      }
-      if (!targetRows.length) return
-
-      const cells: Array<{ record: DataRecord; field: DataField; value: DataRecordValue }> = []
-      targetRows.forEach((rowIndex, step) => {
-        const record = sortedAndFilteredRecords[rowIndex]
-        if (!record) return
-        // Cycle through the selected rows' pattern, repeating it past the
-        // selection's edge in the drag direction (the usual spreadsheet
-        // fill-handle behavior).
-        const sourceRowIndex = fillingDown
-          ? minRow + (step % sourceRowCount)
-          : maxRow - (step % sourceRowCount)
-        const sourceRecord = sortedAndFilteredRecords[sourceRowIndex]
-        if (!sourceRecord) return
-        for (let col = minCol; col <= maxCol; col++) {
-          const field = visibleFields[col]
-          if (!field || field.readonly) continue
-          cells.push({ record, field, value: sourceRecord.values?.[field.name] ?? null })
-        }
-      })
-      if (cells.length) onFillCells(cells)
-    },
-    [sortedAndFilteredRecords, visibleFields, onFillCells],
-  )
-
-  const handleCopy = useCallback(
-    (selection: CombinedSelection, event: ReactClipboardEvent) => {
-      const text = serializeTableSelection(selection, visibleFields, sortedAndFilteredRecords)
-      if (!text) return
-      event.clipboardData.setData('text/plain', text)
-      event.clipboardData.setData('text/tab-separated-values', text)
-      event.preventDefault()
-    },
-    [sortedAndFilteredRecords, visibleFields],
-  )
-
-  const getClipboardText = useCallback(
-    (selection: CombinedSelection) =>
-      serializeTableSelection(selection, visibleFields, sortedAndFilteredRecords),
-    [sortedAndFilteredRecords, visibleFields],
-  )
-
-  const canvasRef = useRef<HTMLDivElement | null>(null)
-  const handleColumnHeaderMenuClick = useCallback(
-    (colIndex: number, bounds: { x: number; y: number; width: number; height: number }) => {
-      const field = visibleFields[colIndex]
-      if (!field || !onOpenColumnHeaderMenu) return
-      const canvasRect = canvasRef.current?.getBoundingClientRect()
-      const offsetX = canvasRect?.left ?? 0
-      const offsetY = canvasRect?.top ?? 0
-      onOpenColumnHeaderMenu(field, {
-        x: offsetX + bounds.x + bounds.width,
-        y: offsetY + bounds.y + bounds.height,
-      })
-    },
-    [visibleFields, onOpenColumnHeaderMenu]
-  )
-
-  const draggable = useMemo<DraggableType>(
-    () => (canReorderRows ? DraggableType.All : DraggableType.Column),
-    [canReorderRows]
-  )
-
-  const rowControls = useMemo<IRowControlItem[]>(() => {
-    const controls: IRowControlItem[] = []
-    if (canReorderRows) controls.push({ type: RowControlType.Drag })
-    controls.push({ type: RowControlType.Checkbox })
-    controls.push({ type: RowControlType.Expand })
-    return controls
-  }, [canReorderRows])
-
-  const [shownRows, setShownRows] = useState<ShownRows | null>(null)
-  const handleVisibleRegionChanged = useCallback((region: IRectangle) => {
-    setShownRows((previous) => (previous?.from === region.y && previous.to === region.y + region.height ? previous : { from: region.y, to: region.y + region.height }))
-  }, [])
-  const visibleFieldIds = useMemo(() => visibleFields.map((field) => field.id), [visibleFields])
-  const searchHits = useSearchHits(searchAxis, shownRows, visibleFieldIds, sortedAndFilteredRecords)
-
-  // Pick the canvas theme based on the current `<html>.dark` state. Memoised
-  // so the prop identity stays stable across renders and only flips when the
-  // theme actually toggles — Grid uses the prop's identity to invalidate its
-  // internal paint cache.
   const isDark = useIsDark()
-  const gridTheme = useMemo(() => getGridTheme(isDark), [isDark])
+  const theme: 'light' | 'dark' = isDark ? 'dark' : 'light'
+  const latest = useRef(props)
+  latest.current = props
+  const services = useRef({ host, notify })
+  services.current = { host, notify }
+  const element = useRef<HTMLDivElement | null>(null)
+  const mounted = useRef<Mounted | null>(null)
+  const [popup, setPopup] = useState<CellPopup | null>(null)
+  const configKey = JSON.stringify(props.config)
+  const fieldsKey = useMemo(() => JSON.stringify(props.fields.map((field) => [field.id, field.name, field.type, field.order, field.readonly, field.options ?? null, field.ai_config ?? null])), [props.fields])
+  const { documentId, tableId, viewId, readOnly } = props
+
+  // The grid of this view: made once per table and view, destroyed with them.
+  useEffect(() => {
+    const host = element.current
+    if (!host) return
+    const at = () => latest.current
+    let ownWrites = 0
+    const source = arrangedSource(dataSource, documentId, { axis: null, tableId, viewId, config: {}, zone: timeZoneChanges(), theme: 'light', brand: null })
+    const view = new GridCanvas(host, source, { fontsBase: new URL('fonts/', document.baseURI).href })
+    const data = editorData({
+      dataSource,
+      documentId,
+      tableId,
+      viewId,
+      fields: () => at().fields,
+      setFrozen: (count) => at().onFrozenColumnCount(count),
+      upload: services.current.host.uploadAttachment ? (file) => services.current.host.uploadAttachment!({ documentId, tableId, file }) : undefined,
+      writing: async (write) => {
+        ownWrites += 1
+        try {
+          return await write()
+        } finally {
+          ownWrites -= 1
+        }
+      },
+    })
+    const field = (fieldId: number) => at().fields.find((item) => item.id === fieldId)
+    const mount: { current: Mounted | null } = { current: null }
+    const editing = new GridEditing(
+      data,
+      {
+        onPopup: setPopup,
+        onPreviewAttachments: ({ items, index }) => at().onPreviewAttachments(items, index),
+        onButton: ({ recordId, fieldId }) => {
+          const target = field(fieldId)
+          if (target) at().onRunButton(recordId, target)
+        },
+        onOpenLink: ({ recordId, fieldId }) => {
+          const target = field(fieldId)
+          if (target) at().onOpenLink(recordId, target)
+        },
+        onRegenerate: at().onRegenerate
+          ? ({ recordId, fieldId }) => {
+              const target = field(fieldId)
+              if (target) at().onRegenerate?.(recordId, target)
+            }
+          : undefined,
+        onWritten: (written) => followWrite(written),
+        onError: (error) => services.current.notify.error(error instanceof Error ? error.message : String(error)),
+        resolveFileURL: (url) => resolveTableFileURL(services.current.host, url),
+      },
+      { readOnly },
+    )
+    const interaction = new GridInteraction(view, {
+      ...editing.gridHandlers,
+      onUndo: () => at().onUndo(),
+      onRedo: () => at().onRedo(),
+      onContextMenu: ({ recordIds, cell, clientX, clientY }) => {
+        const recordId = (cell ? interaction.rows?.recordId(cell.row) : null) ?? recordIds[0]
+        if (recordId != null) at().onOpenRecordContextMenu(recordId, { clientX, clientY })
+      },
+      onColumnMenu: ({ fieldId, anchor }) => {
+        const target = field(fieldId)
+        if (target) at().onOpenColumnHeaderMenu?.(target, { x: anchor.x + anchor.width, y: anchor.y + anchor.height })
+      },
+      onExpandRecord: (recordId) => at().onOpenRecord(recordId),
+      onAppendRecord: ({ anchorRecordId }) => at().onAddRecord(anchorRecordId),
+      onAppendField: () => at().onOpenFieldCreator(),
+      onToggleGroup: ({ groupId, collapsed }) => {
+        const next = new Set(at().collapsedGroupIds)
+        if (collapsed) next.add(groupId)
+        else next.delete(groupId)
+        at().onCollapsedGroupChanged(next)
+      },
+    })
+    editing.attach(interaction)
+    const search = new SearchHighlight(interaction, (params) => dataSource.grid.hits(params))
+    mount.current = { view, source, interaction, editing, search }
+    mounted.current = mount.current
+
+    // A write of the grid's own: its records' bands are fetched again (a new axis, if the write
+    // moved a record, comes through the editor's arrangement); a write to the columns lays out again.
+    async function followWrite(written: Written) {
+      if (written.kind === 'layout') return relayout(mount.current)
+      const axes = view.currentAxes
+      const rows = view.opened?.rows
+      if (!axes || !rows) return
+      view.cache.markStale(showsRecords(rows, axes.bandRows, written.records ? new Set(written.records) : null))
+      view.invalidate()
+      search.refresh()
+    }
+    // Any other change to the document (the editor's own writes elsewhere, undo, an agent, a
+    // co-editor): every band is fetched again, drawn as it was until then.
+    const unsubscribe = dataSource.grid.subscribe(() => {
+      if (ownWrites > 0 || !view.currentAxes) return
+      view.cache.markStale(() => true)
+      view.invalidate()
+      search.refresh()
+    })
+    // The selection: the active cell and the checked records go to the editor.
+    const unwatch = interaction.onChange((state) => {
+      const rows = interaction.rows
+      const axes = view.currentAxes
+      const active = state.active
+      const recordId = active && rows ? rows.recordId(active.row) : null
+      const fieldId = active ? axes?.columns[active.col]?.fieldId : null
+      const name = fieldId != null ? field(fieldId)?.name : undefined
+      at().onSelectCell(recordId != null && name ? { recordId, fieldName: name } : null)
+      at().onCheckRecords(rows && state.selection.kind === 'rows' ? selectedRecordIds(state.selection, rows) : [])
+    })
+    // Cells being generated by an AI field turn a spinner.
+    const generating = () => {
+      const cells = aiCellStore.pendingKeys().flatMap((key) => {
+        const [table, recordId, fieldId] = key.split(':').map(Number)
+        return table === tableId ? [{ recordId, fieldId }] : []
+      })
+      editing.setGenerating(cells)
+    }
+    const unsubscribeAI = aiCellStore.subscribeAll(generating)
+    generating()
+    return () => {
+      unsubscribe()
+      unwatch()
+      unsubscribeAI()
+      search.destroy()
+      editing.destroy()
+      interaction.destroy()
+      view.destroy()
+      view.element.remove()
+      mounted.current = null
+      setPopup(null)
+    }
+  }, [dataSource, documentId, tableId, viewId, readOnly])
+
+  // Lays the editor's latest axis out with its settings, theme and fields.
+  const axisBytes = props.axis?.bytes ?? null
+  useEffect(() => {
+    const mount = mounted.current
+    if (!mount || !axisBytes) return
+    mount.source.update({ axis: axisBytes, config: JSON.parse(configKey) as Record<string, unknown>, theme, brand: hostBrand() })
+    mount.search.setAxis(latest.current.searching && latest.current.axis ? latest.current.axis : null)
+    void relayout(mount)
+  }, [axisBytes, configKey, theme, fieldsKey, props.searching, dataSource, documentId, tableId, viewId, readOnly])
+
+  // The editor cleared its checked records (a bulk action ran): the grid's checked rows go too.
+  useEffect(() => {
+    const mount = mounted.current
+    if (mount && props.checkedCount === 0 && mount.interaction.selection.kind === 'rows') mount.interaction.setSelection(NO_SELECTION, mount.interaction.active)
+  }, [props.checkedCount])
 
   return (
-    <div ref={canvasRef} className={cn('data-inline-grid-canvas relative flex-1 min-h-0')} onPaste={onPaste}>
-      <Grid
-        ref={gridRef}
-        {...adapter}
-        theme={gridTheme}
-        draggable={draggable}
-        rowControls={rowControls}
-        rowHeight={rowHeight}
-        freezeColumnCount={freezeColumnCount}
-        searchHitIndex={searchHits}
-        onVisibleRegionChanged={handleVisibleRegionChanged}
-        aiOverlayCells={aiOverlayCells}
-        groupPoints={groupPoints ?? undefined}
-        groupCollection={groupCollection ?? undefined}
-        collapsedGroupIds={collapsedGroupIds.size > 0 ? (collapsedGroupIds as Set<string>) : undefined}
-        onCollapsedGroupChanged={onCollapsedGroupChanged}
-        onColumnFreeze={onColumnFreeze}
-        onSelectionChanged={handleSelectionChanged}
-        onContextMenu={handleContextMenu}
-        getClipboardText={getClipboardText}
-        onCopy={handleCopy}
-        onDelete={handleDelete}
-        onFillSelection={onFillCells ? handleFillSelection : undefined}
-        onUndo={onUndo}
-        onRedo={onRedo}
-        onColumnHeaderMenuClick={onOpenColumnHeaderMenu ? handleColumnHeaderMenuClick : undefined}
-      />
-      <input
-        ref={attachmentInputRef}
-        type="file"
-        multiple
-        hidden
-        data-testid="table-grid-attachment-input"
-        onChange={(event) => {
-          const files = Array.from(event.target.files || [])
-          event.target.value = ''
-          void handleAttachmentFiles(files)
-        }}
-      />
+    <div className="data-inline-grid-canvas relative flex-1 min-h-0">
+      <div ref={element} className="absolute inset-0" data-testid="table-grid" />
+      <GridCellPopup popup={popup} locale={i18n.language} />
     </div>
   )
-})
+}
+
+/** Each grid's layouts, one after another (a later one starts from the source's latest target). */
+const layouts = new WeakMap<Mounted, Promise<void>>()
+
+/** Lays the source's target out (the first time, loading Inter with it); bands of an arrangement laid out again go. */
+function relayout(mount: Mounted | null): Promise<void> {
+  if (!mount) return Promise.resolve()
+  const next = (layouts.get(mount) ?? Promise.resolve())
+    .then(() => layOut(mount))
+    .catch((error: unknown) => console.error('grid: the layout failed', error))
+  layouts.set(mount, next)
+  return next
+}
+
+async function layOut({ view, source }: Mounted) {
+  if (!view.element.isConnected) return
+  if (!view.opened) return view.open()
+  const opened = await source.open()
+  if (!view.element.isConnected) return
+  if (opened.axes.epoch === view.currentAxes?.epoch) view.cache.clear()
+  view.setAxes(opened)
+}

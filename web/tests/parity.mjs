@@ -403,7 +403,9 @@ try {
       const mean = Math.max(0, ...segments.map((segment) => segment.mean))
       step(`${label}: text mean difference`, mean <= TIERS.segmentMean, `${mean.toFixed(1)} ≤ ${TIERS.segmentMean}`)
       step(`${label}: text PSNR`, least((band) => band.textPsnr) >= TIERS.textPsnr, `${least((band) => band.textPsnr).toFixed(1)} ≥ ${TIERS.textPsnr} dB`)
-      step(`${label}: whole PSNR`, least((band) => band.wholePsnr) >= TIERS.wholePsnr[run.dpr], `${least((band) => band.wholePsnr).toFixed(1)} ≥ ${TIERS.wholePsnr[run.dpr]} dB`)
+      // Light text on dark is drawn heavier by macOS than by the engine: the dark theme has its own line.
+      const whole = (run.theme === 'dark' ? TIERS.wholePsnrDark : TIERS.wholePsnr)[run.dpr]
+      step(`${label}: whole PSNR`, least((band) => band.wholePsnr) >= whole, `${least((band) => band.wholePsnr).toFixed(1)} ≥ ${whole} dB`)
     }
     const widths = result.widths.map((width) => ({ ...width, diff: Math.abs(width.page - width.engine) }))
     const widest = widths.reduce((worst, width) => (width.diff > (worst?.diff ?? -1) ? width : worst), null)

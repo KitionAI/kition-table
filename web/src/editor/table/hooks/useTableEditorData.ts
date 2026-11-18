@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTableDataSource } from '../ports/TableDataSource'
 import type { DataDocument, DataRecord } from '../../types/dataDocument'
-import { parseMarker, type DataRecordWindow } from '../lib/tableEditorShared'
+import { parseMarker } from '../lib/tableEditorShared'
 
 export function useTableEditorData({
   documentPath,
@@ -15,13 +15,11 @@ export function useTableEditorData({
   onRecordsLoaded?: () => void
 }) {
   const dataSource = useTableDataSource()
-  const pendingRecordWindowRef = useRef('')
+  const pendingRecordsRef = useRef('')
   const [document, setDocument] = useState<DataDocument | null>(null)
   const [resolvedActiveTableId, setResolvedActiveTableId] = useState<number | null>(null)
   const [resolvedActiveViewId, setResolvedActiveViewId] = useState<number | null>(null)
   const [records, setRecords] = useState<DataRecord[]>([])
-  const [recordTotal, setRecordTotal] = useState(0)
-  const [recordOffset, setRecordOffset] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -85,27 +83,24 @@ export function useTableEditorData({
     )
   }
 
-  async function loadRecords(window?: DataRecordWindow) {
+  /** Reads every record of the active table (the kanban, calendar and gallery show them all). */
+  async function loadRecords() {
     if (!document || !resolvedActiveTableId) {
       setRecords([])
-      setRecordTotal(0)
-      setRecordOffset(0)
       return
     }
-    const windowKey = `${document.id}:${resolvedActiveTableId}:${window?.limit || 0}:${window?.offset || 0}`
-    if (pendingRecordWindowRef.current === windowKey) return
-    pendingRecordWindowRef.current = windowKey
+    const readKey = `${document.id}:${resolvedActiveTableId}`
+    if (pendingRecordsRef.current === readKey) return
+    pendingRecordsRef.current = readKey
     try {
-      const result = await dataSource.records.list({ documentId: document.id, tableId: resolvedActiveTableId, ...window })
+      const result = await dataSource.records.list({ documentId: document.id, tableId: resolvedActiveTableId })
       setRecords(result.items)
-      setRecordTotal(result.total)
-      setRecordOffset(result.offset || 0)
       onRecordsLoaded?.()
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to load records')
     } finally {
-      if (pendingRecordWindowRef.current === windowKey) {
-        pendingRecordWindowRef.current = ''
+      if (pendingRecordsRef.current === readKey) {
+        pendingRecordsRef.current = ''
       }
     }
   }
@@ -123,10 +118,6 @@ export function useTableEditorData({
     setActiveViewId: setResolvedActiveViewId,
     records,
     setRecords,
-    recordTotal,
-    setRecordTotal,
-    recordOffset,
-    setRecordOffset,
     loading,
     setLoading,
     error,

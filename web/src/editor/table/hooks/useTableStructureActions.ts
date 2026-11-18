@@ -18,9 +18,7 @@ import {
   nextViewTitle,
   normalizeLegacyViewTitle,
   type DataInlineViewMode,
-  type DataRecordWindow,
 } from '../lib/tableEditorShared'
-import { reorderTableFields } from '../lib/tableColumnOrdering'
 import type { TableAction } from '../lib/tableActions'
 import { useConfirm } from '@kition/kit-editor'
 
@@ -30,7 +28,8 @@ type UseTableStructureActionsArgs = {
   activeTable: DataTable | null
   tableViews: DataView[]
   fields: DataField[]
-  records: DataRecord[]
+  /** Every record of the active table (the grid holds none of them: this reads them when asked). */
+  allRecords: () => Promise<DataRecord[]>
   newFieldTitle: string
   newFieldType: DataFieldType
   importInputRef: RefObject<HTMLInputElement | null>
@@ -43,7 +42,7 @@ type UseTableStructureActionsArgs = {
   setViewCreateOpen: Dispatch<SetStateAction<boolean>>
   setActiveViewId: Dispatch<SetStateAction<number | null>>
   refreshDocument: (preferredTableId?: number | null, preferredViewId?: number | null) => Promise<void>
-  loadRecords: (window?: DataRecordWindow) => Promise<void>
+  loadRecords: () => Promise<void>
   setStatus: (message: string) => void
   copyTextToClipboard: (text: string, successMessage: string) => Promise<void>
   /** Refreshes the undo/redo toolbar state after a server write; optional so existing callers and tests keep working untouched. */
@@ -56,7 +55,7 @@ export function useTableStructureActions({
   activeTable,
   tableViews,
   fields,
-  records,
+  allRecords,
   newFieldTitle,
   newFieldType,
   importInputRef,
@@ -133,6 +132,7 @@ export function useTableStructureActions({
         fields: fields.map(makeDuplicateFieldSeed),
         views: tableViews.map(makeDuplicateViewSeed),
       })
+      const records = await allRecords()
       if (records.length) {
         await Promise.all(records.map((record) => dataSource.records.create({ documentId: document.id, tableId: created.id, values: record.values || {} })))
       }
@@ -453,50 +453,6 @@ export function useTableStructureActions({
     }
   }
 
-  async function reorderField(
-    field: DataField,
-    fromIndex: number,
-    dropIndex: number,
-    visibleFields: DataField[],
-  ) {
-    if (!document || !activeTable || visibleFields[fromIndex]?.id !== field.id) return
-    const reorderedFields = reorderTableFields(fields, visibleFields, field.id, dropIndex)
-    if (reorderedFields === fields) return
-    const toIndex = reorderedFields.findIndex((item) => item.id === field.id)
-    if (toIndex < 0) return
-
-    setBusy(true)
-    setDocument((current) => current ? {
-      ...current,
-      tables: current.tables?.map((table) => table.id === activeTable.id ? {
-        ...table,
-        fields: reorderedFields,
-      } : table),
-    } : current)
-
-    try {
-      await dataSource.transact({
-        documentId: document.id,
-        ops: [{
-          op: 'fields.move',
-          tableId: activeTable.id,
-          fieldIds: [field.id],
-          toIndex,
-        }],
-      })
-      refreshHistoryState?.()
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Failed to reorder field')
-      try {
-        await refreshDocument(activeTable.id)
-      } catch {
-        // Keep the original request error visible if recovery also fails.
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function removeField(field: DataField) {
     if (!document || !activeTable || field.is_primary) return
     setBusy(true)
@@ -523,7 +479,6 @@ export function useTableStructureActions({
     deleteView,
     duplicateView,
     renameView,
-    reorderField,
     removeField,
     runTableAction,
     saveField,

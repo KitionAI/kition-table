@@ -1,5 +1,3 @@
-import { LinearRowType, type IGroupPoint } from '../grid/interface'
-
 /** A group header of the engine's arrangement: it sits before the record at `at` and holds `count` records. */
 export type GridAxisGroup = {
   at: number
@@ -24,6 +22,8 @@ export type GridAxis = {
   total: number
   ids: number[]
   groups: GridAxisGroup[]
+  /** The axis as the engine wrote it, which the grid hands back to lay it out (`gridAxes`); kept by the data source. */
+  bytes?: Uint8Array
 }
 
 const MAGIC = 'KTAX'
@@ -79,20 +79,4 @@ export function decodeGridHits(bytes: Uint8Array, fieldIds: number[]): Array<[nu
     }
   }
   return hits
-}
-
-/** The grid's group points for an axis: each header, then the run of records up to the next header. */
-export function gridGroupPoints(axis: GridAxis): IGroupPoint[] {
-  const points: IGroupPoint[] = []
-  let next = 0
-  for (let index = 0; index <= axis.groups.length; index += 1) {
-    const group = axis.groups[index]
-    const end = group ? group.at : axis.ids.length
-    if (end > next) {
-      points.push({ type: LinearRowType.Row, count: end - next })
-      next = end
-    }
-    if (group) points.push({ id: group.id, type: LinearRowType.Group, depth: group.depth, value: group.value, isCollapsed: group.collapsed })
-  }
-  return points
 }

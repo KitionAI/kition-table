@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { DataField } from '../../types/dataDocument'
 import { Axes, type AxesInput } from './axes'
 import { clearOps, coveredCells, fieldDropIndex, fillOps, moveFieldOps, moveRecordOps, pasteOps, recordsFrom, serializeCells, writable } from './editOps'
-import { columnDrop, fillSpan, freezeCount, freezeEdge, MIN_COLUMN_WIDTH, resizedWidth, rowDrop } from './gestures'
+import { columnDrop, fillSpan, freezeCount, freezeEdge, freezeGuide, MIN_COLUMN_WIDTH, resizedWidth, rowDrop } from './gestures'
 import type { GridRecord } from './gridData'
 import { aiButtonArea, editText } from './gridEditing'
 import { GridRows, RowKind } from './rows'
@@ -176,6 +176,14 @@ describe("the drags' geometry", () => {
     expect(freezeEdge(axes, viewport, 0)).toBe(72)
     expect(freezeEdge(axes, viewport, 2)).toBe(272)
     expect(freezeEdge(axes, { ...viewport, scrollX: 150 }, 3)).toBe(322)
+  })
+
+  it('runs the freeze guide from the header to the last row, never shorter than the header', () => {
+    // Nine rows of 40 below a 32 px header end at 392, above the viewport's bottom.
+    expect(freezeGuide(axes, viewport)).toEqual({ top: 32, bottom: 392 })
+    expect(freezeGuide(axes, { ...viewport, height: 300 })).toEqual({ top: 32, bottom: 300 })
+    expect(freezeGuide(axes, { ...viewport, scrollY: 100 })).toEqual({ top: 32, bottom: 292 })
+    expect(freezeGuide(axes, { ...viewport, scrollY: 380 })).toEqual({ top: 32, bottom: 32 })
   })
 
   it('fills the rows beyond the range the handle was dragged over', () => {

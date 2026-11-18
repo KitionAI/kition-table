@@ -17,8 +17,17 @@ source:
 input: []
 steps:
   - exec:
-      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/grid/RenderLayer.spec.tsx, src/editor/table/grid/components/editor/TextEditor.spec.tsx, src/editor/table/grid/renderers/cell-renderer/textCellRenderer.spec.ts]
+      cmd: [node, web/tests/gridInteraction.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/gridInteraction.mjs, webkit]
+  - exec:
+      cmd: [node, web/tests/gridEditing.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/gridEditing.mjs, webkit]
 expected:
   - actual: out:exit
     compare: exit
+requires: [chromium, webkit]
+tags: [browser]
+timeout_s: 300
 since: "2026-11-16"

@@ -1,12 +1,17 @@
 import type { KitEngineInfo, KitModuleManifest } from '@kition/kit-editor'
+import { engineFontUrls } from './editor/table/canvas/gridFonts'
 
-/** The engine, from this package's own folder. */
+/**
+ * The engine, from this package's own folder, with the faces the grid's bands are shaped with
+ * (the package's `fonts/`, the files the page draws them with: platform rule E9, `addFont`).
+ */
 export function engineManifest(): KitModuleManifest {
   return {
     kitId: 'kit.table',
     base: new URL('./engine/', document.baseURI).href,
     module: 'kition_table_kit',
     documentClass: 'TableDocument',
+    fonts: engineFontUrls(new URL('./fonts/', document.baseURI).href),
   }
 }
 

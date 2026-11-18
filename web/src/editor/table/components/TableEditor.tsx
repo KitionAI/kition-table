@@ -18,11 +18,7 @@ import {
   DATA_TABLE_ACTION_EVENT,
   type TableActionEventDetail,
 } from '../lib/tableActions'
-import {
-  gridRecordOverscanRows,
-  gridRecordPageSize,
-  resolveGridRowHeight,
-} from '../lib/tableEditorShared'
+import { buttonConfig } from '../lib/buttonAction'
 import { buildTableLiveChangeHandlers } from '../lib/tableLiveChangeDispatch'
 
 import { TableColumnHeaderMenu } from './TableColumnHeaderMenu'
@@ -35,12 +31,12 @@ import { FieldConfigPanel } from './TableFieldConfigPanel'
 import { TableRecordContextMenu } from './TableRecordContextMenu'
 import { RecordDetailDrawer } from './TableRecordDetailDrawer'
 import { useApplyAICellPatches } from '../hooks/useApplyAICellPatches'
-import { useTableClipboard } from '../hooks/useTableClipboard'
 import { useTableColumnHeaderActions } from '../hooks/useTableColumnHeaderActions'
 import { useTableEditorActions } from '../hooks/useTableEditorActions'
 import { useGridCollapsedGroup } from '../hooks/useGridCollapsedGroup'
 import { useTableEditorData } from '../hooks/useTableEditorData'
 import { useTableEditorDerivedState } from '../hooks/useTableEditorDerivedState'
+import { useGridSummary } from '../hooks/useGridSummary'
 import { useTableEditorUiState } from '../hooks/useTableEditorUiState'
 import { useTableHistory } from '../hooks/useTableHistory'
 import { useTableLiveChanges } from '../ports/useTableLiveChanges'
@@ -126,8 +122,6 @@ function TableEditorBody({
     setSelectedRecord,
     setSelectedRecordIds,
     setToolbarPanel,
-    toggleAllSelected,
-    toggleRecordSelected,
     toolbarPanel,
   } = useTableEditorUiState()
   const {
@@ -138,19 +132,18 @@ function TableEditorBody({
     setActiveViewId,
     records,
     setRecords,
-    recordTotal,
-    recordOffset,
     loading,
     error,
     setError,
     refreshDocument,
-    loadRecords,
+    loadRecords: loadAllRecords,
   } = useTableEditorData({
     documentPath,
     markerContent,
     pinnedTableId,
     onRecordsLoaded: resetSelectedRecordIds,
   })
+  // The editor's settings of the shown view, as it holds them (saved or not).
   const [busy, setBusy] = useState(false)
   const [query, setQuery] = useState('')
   const [newFieldTitle, setNewFieldTitle] = useState('')
@@ -228,6 +221,21 @@ function TableEditorBody({
   // The view's settings as the editor holds them, saved or not: the engine arranges with these
   // (only the keys that change which records show and their order, so hiding a field or changing
   // the row height arranges nothing again).
+  const viewConfig = useMemo(() => viewConfigOf({
+    hiddenFieldNames,
+    filterFieldName,
+    filterOperator,
+    filterValue,
+    filterTree,
+    sortFieldName,
+    sortDirection,
+    sortItems,
+    groupFieldName,
+    groupItems,
+    coverFieldName,
+    rowHeightKey,
+    frozenColumnCount,
+  }) as Record<string, unknown>, [hiddenFieldNames, filterFieldName, filterOperator, filterValue, filterTree, sortFieldName, sortDirection, sortItems, groupFieldName, groupItems, coverFieldName, rowHeightKey, frozenColumnCount])
   const arrangedConfig = useMemo(() => {
     const config = viewConfigOf({
       hiddenFieldNames,
@@ -262,28 +270,18 @@ function TableEditorBody({
     revision: arrangedRevision,
   })
   const {
-    allVisibleSelected,
     canMoveKanbanCards,
     canReorderRows,
-    canUseVirtualGrid,
     contextMenuRecord,
     coverField,
     coverFields,
     dateField,
-    gridTableStyle,
-    gridTotalRows,
-    gridVirtualBlockTop,
-    gridVirtualCanvasHeight,
-    groupCollection,
     groupField,
     groupFieldNames,
-    groupPoints,
     groupedRecords,
     groupableFields,
-    numericSummaries,
     primaryField,
-    renderedGridRecords,
-    searchAxis,
+    shownCount,
     sortedAndFilteredRecords,
     visibleFields,
   } = useTableEditorDerivedState({
@@ -291,23 +289,61 @@ function TableEditorBody({
     fields,
     hiddenFieldNames,
     coverFieldName,
-    filterFieldName,
-    filterOperator,
-    filterTree,
-    filterValue,
     groupFieldName,
     groupItems,
-    query,
     recordContextMenuRecordId: recordContextMenu?.recordId ?? null,
-    recordOffset,
     records,
-    recordTotal,
-    selectedRecordIds,
     sortDirection,
     sortFieldName,
     sortItems,
     viewMode,
   })
+  const numericSummaries = useGridSummary(axis, visibleFields)
+
+  // The grid draws the view's records from the engine, so in it the editor never reads the whole
+  // table: it holds only the records a menu, the drawer or an action read (`readRecords`), and
+  // reads those again where it would read every record. The kanban, calendar and gallery read
+  // every record.
+  const gridMode = viewMode === 'grid'
+  const held = useRef({ gridMode, records })
+  held.current = { gridMode, records }
+  const readRecords = useCallback(async (ids: number[]): Promise<DataRecord[]> => {
+    const tableId = activeTable?.id
+    const documentId = document?.id
+    if (tableId == null || documentId == null || !ids.length) return []
+    const made = (await dataSource.grid.records({ tableId, ids })).map((item): DataRecord => ({
+      ...item,
+      table_id: tableId,
+      document_id: documentId,
+      // Not part of what the grid reads, and nothing the editor shows.
+      user_id: 0,
+      order: 0,
+      created_at: '',
+      updated_at: '',
+    }))
+    setRecords((current) => {
+      const byId = new Map(current.map((record) => [record.id, record]))
+      for (const record of made) byId.set(record.id, record)
+      return [...byId.values()]
+    })
+    return made
+  }, [activeTable?.id, document?.id, dataSource, setRecords])
+  const loadRecords = useCallback(async () => {
+    if (!held.current.gridMode) return loadAllRecords()
+    // The records held, read again (gone when they were deleted).
+    const ids = held.current.records.map((record) => record.id)
+    if (!ids.length) return
+    const made = await readRecords(ids)
+    const kept = new Set(made.map((record) => record.id))
+    setRecords((current) => current.filter((record) => kept.has(record.id)))
+  }, [loadAllRecords, readRecords, setRecords])
+
+  /** Every record of the table: what the editor holds outside the grid, else read now (an action that needs them all). */
+  async function allRecords(): Promise<DataRecord[]> {
+    if (!gridMode) return records
+    if (!document || !activeTable) return []
+    return (await dataSource.records.list({ documentId: document.id, tableId: activeTable.id })).items
+  }
 
   function setStatus(message: string) {
     notify.success(message)
@@ -375,8 +411,9 @@ function TableEditorBody({
   ])
 
   useEffect(() => {
-    void loadRecords()
-  }, [document?.id, activeTable?.id, viewMode])
+    if (gridMode) setRecords([])
+    else void loadAllRecords()
+  }, [document?.id, activeTable?.id, gridMode])
 
   useEffect(() => {
     setEditingField(null)
@@ -394,24 +431,20 @@ function TableEditorBody({
     addField,
     addDefaultField,
     addRecord,
-    clearCells,
     copyTextToClipboard,
     copyRecordURL,
     createView,
     deleteView,
     duplicateRecord,
     duplicateView,
-    fillCells,
     insertRecordsNear,
     moveKanbanRecord,
     openAttachmentPreview,
     renameView,
-    reorderField,
     removeField,
     removeRecord,
     removeSelectedRecords,
     duplicateSelectedRecords,
-    reorderRecords,
     runAIField,
     runAIFieldBatchForRecords,
     runTableAction,
@@ -424,6 +457,7 @@ function TableEditorBody({
     tableViews,
     fields,
     records,
+    allRecords,
     groupField,
     canReorderRows,
     canMoveKanbanCards,
@@ -451,7 +485,7 @@ function TableEditorBody({
   const columnActions = useTableColumnHeaderActions({
     document,
     activeTable,
-    records,
+    allRecords,
     visibleFields,
     sortItems,
     setBusy,
@@ -470,8 +504,36 @@ function TableEditorBody({
   })
 
   function handleColumnAIBatch(field: DataField) {
-    const ids = sortedAndFilteredRecords.map((record) => record.id)
-    void runAIFieldBatchForRecords(field, ids, 'column-menu')
+    void runAIFieldBatchForRecords(field, axis?.ids ?? [], 'column-menu')
+  }
+
+  /** A record the grid names, as the editor holds it or read now. */
+  async function gridRecord(recordId: number): Promise<DataRecord | null> {
+    return records.find((record) => record.id === recordId) ?? (await readRecords([recordId]))[0] ?? null
+  }
+
+  /** A button cell: its link opens, or its workflow runs in the host (without one, nothing happens). */
+  function runButton(recordId: number, field: DataField) {
+    const { action } = buttonConfig(field, '')
+    if (action.kind === 'open_url' && action.url) window.open(action.url, '_blank', 'noopener,noreferrer')
+    else if (action.kind === 'run_workflow' && action.workflow_id != null) void host.runWorkflow?.({ workflowId: action.workflow_id, tableId: field.table_id, recordId })
+  }
+
+  /** A document link cell opens its document in the host. */
+  async function openLink(recordId: number, field: DataField) {
+    if (field.type !== 'document_link' || !onOpenDocument) return
+    const record = await gridRecord(recordId)
+    const path = record?.values?.[field.name]
+    if (typeof path === 'string' && path) onOpenDocument(path)
+  }
+
+  /** The add row: a record with the group values of the record above it, when the view groups. */
+  async function addGridRecord(anchorRecordId: number | null) {
+    const anchor = anchorRecordId != null && groupFieldNames.length ? await gridRecord(anchorRecordId) : null
+    if (!anchor) return void addRecord()
+    const initialValues: Record<string, DataRecordValue> = {}
+    for (const name of groupFieldNames) initialValues[name] = (anchor.values?.[name] ?? null) as DataRecordValue
+    void addRecord(initialValues)
   }
 
   useEffect(() => {
@@ -485,24 +547,6 @@ function TableEditorBody({
     return () =>
       window.removeEventListener(DATA_TABLE_ACTION_EVENT, handleDataTableAction)
   }, [documentPath, runTableAction])
-
-  const { pasteRecords } = useTableClipboard({
-    documentId: document?.id,
-    tableId: activeTable?.id,
-    viewMode,
-    visibleFields,
-    sortedAndFilteredRecords,
-    records,
-    selectedGridCell,
-    setBusy,
-    setError,
-    setStatus,
-    setRecords,
-    reloadRecords: () => {
-      void loadRecords()
-    },
-    refreshHistoryState,
-  })
 
   function closeRecordContextMenu() {
     setRecordContextMenu(null)
@@ -668,43 +712,16 @@ function TableEditorBody({
         </FrameChrome>
 
         <TableEditorContent
-          documentId={document.id}
           tableId={activeTable.id}
-          viewId={activeView.id}
           viewMode={viewMode}
-          fields={shownFields}
           visibleFields={shownVisibleFields}
           groupField={groupField}
           groupedRecords={groupedRecords}
-          groupPoints={groupPoints}
-          groupCollection={groupCollection}
-          collapsedGroupIds={collapsedGroupIds}
-          onCollapsedGroupChanged={setCollapsedGroupIds}
           primaryField={primaryField}
           dateField={dateField}
           coverField={coverField}
           sortedAndFilteredRecords={sortedAndFilteredRecords}
-          renderedGridRecords={renderedGridRecords}
-          groupFieldName={groupFieldName}
-          groupFieldNames={groupFieldNames}
-          selectedRecordIds={selectedRecordIds}
-          selectedGridCell={selectedGridCell}
           canMoveKanbanCards={canMoveKanbanCards}
-          canReorderRows={canReorderRows}
-          canUseVirtualGrid={canUseVirtualGrid}
-          gridVirtualCanvasHeight={gridVirtualCanvasHeight}
-          gridVirtualBlockTop={gridVirtualBlockTop}
-          gridTableStyle={gridTableStyle}
-          recordOffset={recordOffset}
-          recordTotal={recordTotal}
-          pageSize={gridRecordPageSize}
-          overscanRows={gridRecordOverscanRows}
-          allVisibleSelected={allVisibleSelected}
-          resetScrollKey={`${document.id}:${activeTable.id}:${viewMode}`}
-          rowHeight={resolveGridRowHeight(rowHeightKey)}
-          freezeColumnCount={frozenColumnCount}
-          searchAxis={searchAxis}
-          onColumnFreeze={viewOnly(setFrozenColumnCount)}
           draggingRecordId={kanbanDraggingRecordId}
           dragOverRecordId={kanbanDragOverRecordId}
           dragOverGroup={kanbanDragOverGroup}
@@ -719,33 +736,35 @@ function TableEditorBody({
           onOpenRecord={setSelectedRecord}
           onOpenDocument={onOpenDocument}
           onPreviewAttachments={openAttachmentPreview}
-          onLoadWindow={(window) => void loadRecords(window)}
-          onToggleAllSelected={() =>
-            toggleAllSelected(
-              sortedAndFilteredRecords.map((record) => record.id),
-              allVisibleSelected,
-            )
-          }
-          onToggleRecordSelected={toggleRecordSelected}
-          onSelectCell={setSelectedGridCell}
-          onOpenRecordContextMenu={openRecordContextMenu}
-          onOpenColumnHeaderMenu={openColumnHeaderMenu}
-          onReorderField={viewOnly((field, fromIndex, dropIndex) => {
-            void reorderField(field, fromIndex, dropIndex, visibleFields)
-          })}
-          onReorderRecords={viewOnly((sourceRecordId, targetRecordId, position) =>
-            void reorderRecords(sourceRecordId, targetRecordId, position)
-          )}
           onRegenerate={host.ai ? viewOnly((record, field) => void runAIField(record, field)) : undefined}
-          onUpdateCell={viewOnly((record, field, value) =>
-            void updateCell(record, field, value)
-          )}
-          onClearCells={viewOnly((cells) => void clearCells(cells))}
-          onFillCells={viewOnly((cells) => void fillCells(cells))}
-          onPaste={viewOnly((event) => void pasteRecords(event))}
-          onOpenFieldCreator={viewOnly(() => void addDefaultField())}
-          onUndo={viewOnly(() => void undo())}
-          onRedo={viewOnly(() => void redo())}
+          grid={{
+            documentId: document.id,
+            tableId: activeTable.id,
+            viewId: activeView?.id ?? null,
+            fields: shownFields,
+            axis,
+            config: viewConfig,
+            searching: Boolean(query.trim()),
+            readOnly,
+            collapsedGroupIds,
+            checkedCount: selectedRecordIds.size,
+            onCollapsedGroupChanged: setCollapsedGroupIds,
+            onFrozenColumnCount: viewOnly(setFrozenColumnCount),
+            onSelectCell: setSelectedGridCell,
+            onCheckRecords: (ids) => setSelectedRecordIds((current) => (ids.length === current.size && ids.every((id) => current.has(id)) ? current : new Set(ids))),
+            onOpenRecord: (recordId) => void gridRecord(recordId).then((record) => record && setSelectedRecord(record)),
+            onOpenRecordContextMenu: (recordId, at) =>
+              void gridRecord(recordId).then((record) => record && openRecordContextMenu(record, { ...at, preventDefault: () => undefined, stopPropagation: () => undefined })),
+            onOpenColumnHeaderMenu: openColumnHeaderMenu,
+            onAddRecord: viewOnly((anchorRecordId) => void addGridRecord(anchorRecordId)),
+            onOpenFieldCreator: viewOnly(() => void addDefaultField()),
+            onPreviewAttachments: openAttachmentPreview,
+            onRegenerate: host.ai && !readOnly ? (recordId, field) => void gridRecord(recordId).then((record) => record && runAIField(record, field)) : undefined,
+            onRunButton: viewOnly(runButton),
+            onOpenLink: (recordId, field) => void openLink(recordId, field),
+            onUndo: viewOnly(() => void undo()),
+            onRedo: viewOnly(() => void redo()),
+          }}
         />
         <TableRecordContextMenu
           menu={
@@ -803,11 +822,7 @@ function TableEditorBody({
         />
         <FrameChrome>
           <TableEditorFooter
-            gridTotalRows={gridTotalRows}
-            canUseVirtualGrid={canUseVirtualGrid}
-            recordOffset={recordOffset}
-            loadedRecordCount={records.length}
-            recordTotal={recordTotal}
+            shownCount={shownCount}
             numericSummaries={numericSummaries}
             selectedRecordCount={selectedRecordIds.size}
             end={footerEnd}
@@ -826,10 +841,12 @@ function TableEditorBody({
       ) : null}
 
       {selectedRecord ? (() => {
-        const navList = sortedAndFilteredRecords
-        const navIndex = navList.findIndex((item) => item.id === selectedRecord.id)
+        // The view's order is the engine's arrangement; a neighbour is read when the drawer moves to it.
+        const navList = axis?.ids ?? []
+        const navIndex = navList.indexOf(selectedRecord.id)
         const canPrev = navIndex > 0
         const canNext = navIndex >= 0 && navIndex < navList.length - 1
+        const moveTo = (recordId: number) => void gridRecord(recordId).then((record) => record && setSelectedRecord(record))
         return (
           <RecordDetailDrawer
             record={
@@ -844,8 +861,8 @@ function TableEditorBody({
             navTotal={navList.length || undefined}
             canNavigatePrev={canPrev}
             canNavigateNext={canNext}
-            onNavigatePrev={canPrev ? () => setSelectedRecord(navList[navIndex - 1]) : undefined}
-            onNavigateNext={canNext ? () => setSelectedRecord(navList[navIndex + 1]) : undefined}
+            onNavigatePrev={canPrev ? () => moveTo(navList[navIndex - 1]) : undefined}
+            onNavigateNext={canNext ? () => moveTo(navList[navIndex + 1]) : undefined}
             onPreviewAttachments={openAttachmentPreview}
             onOpenDocument={onOpenDocument}
             onClose={() => setSelectedRecord(null)}

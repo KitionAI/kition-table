@@ -63,7 +63,6 @@
     "descending": "Décroissant"
   },
   "footer": {
-    "showingRange": "Affichage de {{start}}–{{end}}",
     "recordsCount": "{{count}} enregistrements",
     "aggregate": "{{title}} : somme {{sum}} · moy. {{avg}}",
     "selectedCount": "{{count}} sélectionnés",

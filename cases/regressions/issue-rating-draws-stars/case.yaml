@@ -14,8 +14,8 @@ source:
   license: owned
 input: []
 steps:
-  - exec:
-      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/grid/renderers/cell-renderer/ratingCellRenderer.spec.ts]
+  - cargo-test: { package: kition-table-grid, filter: "tests::typed_cells" }
+  - cargo-test: { package: kition-table-grid, filter: "tests::a_thumbs_rating_draws_thumbs" }
 expected:
   - actual: out:exit
     compare: exit

@@ -43,7 +43,7 @@ import type { GridData, GridRecord, TableOp } from './gridData'
 import type { Written } from './gridSync'
 import { fieldColumnCount, type GridHit, HitKind } from './hitTest'
 import type { ClientRect, GridHandlers, GridInteraction, OverlayFrame } from './interaction'
-import { type CellBounds, type CellRef, cellSelection, type GridSelection, sameSelection } from './selection'
+import { type CellBounds, type CellRef, cellSelection, type GridSelection, sameCell, sameSelection } from './selection'
 
 /** A popup editor the editor draws over a cell (a date or a choice). */
 export type CellPopup = {
@@ -93,7 +93,10 @@ const HELD_URL = /^(kition-blob:|data:)/i
 export const AI_BUTTON = 18
 export const AI_BUTTON_INSET = 4
 
-const TEXT_TYPES = new Set(['text', 'long_text', 'number', 'url', 'document_link'])
+/** The fields a text editor edits (a document link opens on a click instead, as the old grid's did). */
+const TEXT_TYPES = new Set(['text', 'long_text', 'number', 'url'])
+/** Rows taller than this (two 20 px lines and their padding) edit long text in the cell. */
+const TALL_ROW = 48
 
 /** The attachment add button's area on the viewport, for a cell at `area` (centred on its height). */
 export function addButtonArea(area: Area): Area {
@@ -144,6 +147,8 @@ export class GridEditing {
   constructor(
     readonly data: GridData,
     private readonly handlers: EditingHandlers = {},
+    /** `readOnly`: a table this person may only view: no editor opens, nothing is written, nothing drags. */
+    private readonly options: { readOnly?: boolean } = {},
   ) {
     const input = document.createElement('textarea')
     input.dataset.ktableGridInput = 'true'
@@ -195,6 +200,7 @@ export class GridEditing {
     on(view.scroller, 'pointerdown', () => {
       if (this.session) this.commit()
     }, true)
+    on(view.scroller, 'click', (event) => this.onClick(event))
     on(input, 'keydown', (event) => this.onKey(event))
     on(input, 'compositionstart', () => {
       this.composing = true
@@ -207,14 +213,21 @@ export class GridEditing {
     on(input, 'input', () => {
       // Text that reached the hidden textarea without a key the grid saw (a dead key, dictation).
       if (!this.session && !this.composing && input.value) this.startTyping(input.value, false)
+      // Long text in a tall row keeps its lines centred as they grow.
+      else if (this.session?.kind === 'text' && this.session.field.type === 'long_text') this.place()
     })
     on(input, 'copy', (event) => this.onCopy(event, false))
     on(input, 'cut', (event) => this.onCopy(event, true))
-    on(input, 'paste', (event) => this.onPaste(event))
+    // A paste while the grid has the focus (it reaches the window from the textarea, or is sent there).
+    const onWindowPaste = (event: ClipboardEvent) => {
+      if (event.target === input || document.activeElement === input) this.onPaste(event)
+    }
+    window.addEventListener('paste', onWindowPaste)
+    this.cleanup.push(() => window.removeEventListener('paste', onWindowPaste))
     this.cleanup.push(interaction.onChange(() => this.onSelection()))
     this.cleanup.push(interaction.onGeometry(() => this.place()))
     this.cleanup.push(view.onImages((images) => this.loadImages(images)))
-    this.cleanup.push(installDrags(interaction, this.dragActions()))
+    if (!this.options.readOnly) this.cleanup.push(installDrags(interaction, this.dragActions()))
     this.cleanup.push(interaction.addPainter((frame) => this.paintAI(frame), 120))
     this.cleanup.push(interaction.addPainter((frame) => this.paintAdd(frame), 121))
     this.cleanup.push(
@@ -293,8 +306,10 @@ export class GridEditing {
         return
       }
       style.visibility = 'visible'
-      const height = long ? Math.max(area.height, 96) : area.height
-      // One line centred in the row; long text from the top, taller than the row.
+      // One line centred in the row. Long text in a row taller than two lines edits in the cell,
+      // its lines centred as the grid draws them; in a shorter row it opens a taller box from the top.
+      const tall = long && area.height > TALL_ROW
+      const height = long && !tall ? Math.max(area.height, 96) : area.height
       const padY = long ? 6 : Math.max(0, (area.height - 20) / 2 - 2)
       style.cssText = [
         'position:absolute',
@@ -310,16 +325,22 @@ export class GridEditing {
         'box-shadow:none',
         'outline:none',
         'resize:none',
-        'overflow:hidden',
+        `overflow:${tall ? 'auto' : 'hidden'}`,
         'z-index:2',
         'opacity:1',
         'pointer-events:auto',
+        'cursor:text',
         'background:hsl(var(--background, 0 0% 100%))',
         'color:hsl(var(--foreground, 0 0% 10%))',
         'font:13px/20px Inter, system-ui, sans-serif',
         'text-align:center',
         'white-space:pre-wrap',
       ].join(';')
+      if (tall) {
+        const padding = `${this.centredPadding(area.height)}px`
+        style.paddingTop = padding
+        style.paddingBottom = padding
+      }
       return
     }
     if (session?.kind === 'popup' && session.popup) {
@@ -332,6 +353,21 @@ export class GridEditing {
       style.width = `${Math.max(1, area.width)}px`
       style.height = `${Math.max(1, area.height)}px`
     }
+  }
+
+  /** The top and bottom padding that centres the text's lines (20 px each, the editor's line) in a row `height` tall. */
+  private centredPadding(height: number): number {
+    // The text's own height, as the editor lays it out: measured with no vertical padding in a box of no height.
+    const style = this.input.style
+    const [top, bottom, boxHeight] = [style.paddingTop, style.paddingBottom, style.height]
+    style.paddingTop = '0px'
+    style.paddingBottom = '0px'
+    style.height = '0px'
+    const lines = Math.max(1, Math.round(this.input.scrollHeight / 20))
+    style.paddingTop = top
+    style.paddingBottom = bottom
+    style.height = boxHeight
+    return Math.max(2, (height - 4 - lines * 20) / 2)
   }
 
   private clientRect(area: Area): ClientRect {
@@ -357,9 +393,27 @@ export class GridEditing {
 
   // ---- editing --------------------------------------------------------------------------------
 
+  /**
+   * A click on a date cell opens its calendar, and on a document link opens the document, as the
+   * old grid did (a date edits on one click; a document link is read here and opens); other cells
+   * need a double click, Enter or a key.
+   */
+  private onClick(event: MouseEvent) {
+    if (this.session || event.button !== 0 || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return
+    const grid = this.interaction
+    const hit = grid.hitAt(event.clientX, event.clientY)
+    const active = grid.active
+    const selection = grid.selection
+    if (hit.region !== 'cell' || hit.part || !active || active.row !== hit.row || active.col !== hit.col) return
+    if (selection.kind !== 'cells' || !sameCell(selection.anchor, selection.focus)) return
+    const at = this.cellOf(active)
+    if (at?.field.type === 'document_link') this.handlers.onOpenLink?.({ recordId: at.recordId, fieldId: at.field.id, index: 0 })
+    else if (at && (at.field.type === 'date' || at.field.type === 'datetime')) this.edit(active, null)
+  }
+
   /** Enter, F2, a double click (`text` null) or a typed character on a cell. */
   edit(cell: CellRef, text: string | null) {
-    if (this.session) return
+    if (this.session || this.options.readOnly) return
     const at = this.cellOf(cell)
     if (!at || !writable(at.field)) return
     const { recordId, field } = at
@@ -387,7 +441,7 @@ export class GridEditing {
   /** Typing reached the textarea while no editor was open (an input method, a dead key). */
   private startTyping(text: string, composing: boolean) {
     const active = this.grid?.active
-    if (!active) {
+    if (!active || this.options.readOnly) {
       this.input.value = ''
       return
     }
@@ -581,7 +635,7 @@ export class GridEditing {
   clear(selection: GridSelection) {
     const grid = this.interaction
     const rows = grid.rows
-    if (this.session || !rows) return Promise.resolve()
+    if (this.session || !rows || this.options.readOnly) return Promise.resolve()
     const { recordIds, cols } = coveredCells(selection, rows, grid.columnCount)
     const fields = this.fieldsOf(cols)
     if (!recordIds.length || !fields.length) return Promise.resolve()
@@ -651,7 +705,7 @@ export class GridEditing {
   }
 
   private onPaste(event: ClipboardEvent) {
-    if (this.session) return
+    if (this.session || this.options.readOnly) return
     // Files pasted on an attachment cell are added to it (as the old grid did); elsewhere the text is pasted.
     const files = extractClipboardFiles(event.clipboardData)
     const active = this.grid?.active
@@ -669,6 +723,7 @@ export class GridEditing {
 
   /** Pastes `text` (tab-separated, or one value) from the active cell (a range's top left) on. */
   paste(text: string) {
+    if (this.options.readOnly) return Promise.resolve()
     const grid = this.interaction
     const rows = grid.rows
     const selection = grid.selection

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import type { DataField } from '../../types/dataDocument'
 
 import {
-  buildGroupCollection,
   displayValue,
   getSortDirectionLabels,
   normalizeLegacyViewTitle,
@@ -42,41 +41,6 @@ describe('displayValue — phase 2 ref shapes', () => {
 
   it('returns empty string for an empty link/user array', () => {
     expect(displayValue([])).toBe('')
-  })
-})
-
-describe('buildGroupCollection', () => {
-  const field = (name: string, title: string): DataField =>
-    ({ id: 1, name, title, type: 'single_select', readonly: false, is_primary: false } as unknown as DataField)
-
-  const item = (field_name: string) => ({
-    id: `g:${field_name}`,
-    field_name,
-    direction: 'asc' as const,
-  })
-
-  it('emits one column per group item, using the field title when known', () => {
-    const collection = buildGroupCollection(
-      [item('status'), item('owner')],
-      [field('status', 'Status'), field('owner', 'Owner')],
-    )
-    expect(collection.groupColumns).toHaveLength(2)
-    expect(collection.groupColumns[0].name).toBe('Status')
-    expect(collection.groupColumns[1].name).toBe('Owner')
-  })
-
-  it('falls back to field_name when no matching field is found', () => {
-    const collection = buildGroupCollection([item('ghost')], [])
-    expect(collection.groupColumns[0].name).toBe('ghost')
-  })
-
-  it('renders a Text cell with the displayValue, falling back to "Empty"', () => {
-    const collection = buildGroupCollection([item('status')], [field('status', 'Status')])
-    const cell = collection.getGroupCell('Done', 0)
-    expect(cell).toMatchObject({ type: 'Text', data: 'Done', displayData: 'Done' })
-
-    const emptyCell = collection.getGroupCell(null, 0)
-    expect(emptyCell).toMatchObject({ type: 'Text', data: 'Empty', displayData: 'Empty' })
   })
 })
 

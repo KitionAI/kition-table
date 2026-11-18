@@ -35,6 +35,24 @@ export type GridTarget = {
 
 type AxesAnswer = AxesInput & { skeleton: Skeleton; overlay: OverlayStyle; groups: GridGroup[] }
 
+/** What a layout is to the view: `gridAxes`' answer (parsed) and `gridRows`' bytes. */
+export function gridOpened(answer: unknown, rows: Uint8Array): GridOpened {
+  const { skeleton, overlay, groups, ...axes } = answer as AxesAnswer
+  return { axes, skeleton, overlay, rows: GridRows.decode(rows), groups }
+}
+
+/** The blob a picture's url names among the document's (`kition-blob:<sha256>`), or null. */
+export function blobHash(url: string): string | null {
+  return BLOB_URL.exec(url.trim())?.[1] ?? null
+}
+
+/** A picture decoded at most at the engine's thumbnail size (its longest side `THUMBNAIL`), as the headless picture decodes it. */
+export function thumbnail(blob: Blob, width: number, height: number): Promise<ImageBitmap> {
+  const scale = Math.min(1, THUMBNAIL / Math.max(width, height, 1))
+  const resize = width > 0 && height > 0 && scale < 1 ? { resizeWidth: Math.max(1, Math.round(width * scale)), resizeHeight: Math.max(1, Math.round(height * scale)), resizeQuality: 'high' as const } : {}
+  return createImageBitmap(blob, resize)
+}
+
 /**
  * A `GridSource` whose target can change (the search, the collapsed groups); `GridView.reopen` then
  * arranges again. `sync` answers the new layout after a write when the arrangement's axis changed,
@@ -46,10 +64,8 @@ export function engineSource(engine: KitEngine, initial: GridTarget): EngineSour
   let target = { ...initial }
   const layout = async (axis: Uint8Array): Promise<GridOpened> => {
     const view = { tableId: target.tableId, viewId: target.viewId ?? null }
-    const answer = JSON.parse(await engine.invoke<string>('gridAxes', axis, JSON.stringify({ ...view, theme: target.theme ?? 'light', brand: target.brand ?? null }))) as AxesAnswer
-    const rows = GridRows.decode(await engine.invoke<Uint8Array>('gridRows'))
-    const { skeleton, overlay, groups, ...axes } = answer
-    return { axes, skeleton, overlay, rows, groups }
+    const answer = JSON.parse(await engine.invoke<string>('gridAxes', axis, JSON.stringify({ ...view, theme: target.theme ?? 'light', brand: target.brand ?? null }))) as unknown
+    return gridOpened(answer, await engine.invoke<Uint8Array>('gridRows'))
   }
   return {
     get target() {
@@ -67,17 +83,13 @@ export function engineSource(engine: KitEngine, initial: GridTarget): EngineSour
       return axis.byteLength ? layout(axis) : null
     },
     async image(url: string, width: number, height: number): Promise<ImageBitmap | null> {
-      const hash = BLOB_URL.exec(url.trim())?.[1]
+      const hash = blobHash(url)
       let blob: Blob | null = null
       if (hash) {
         const answer = JSON.parse(await engine.invoke<string>('call', 'attachments.read', JSON.stringify({ hash }))) as { result?: { data: string; mimeType: string } }
         if (answer.result) blob = new Blob([Uint8Array.from(atob(answer.result.data), (c) => c.charCodeAt(0))], { type: answer.result.mimeType })
       } else if (url.startsWith('data:')) blob = await (await fetch(url)).blob()
-      if (!blob) return null
-      // At most the engine's thumbnail size (its longest side THUMBNAIL), as the headless picture decodes it.
-      const scale = Math.min(1, THUMBNAIL / Math.max(width, height, 1))
-      const resize = width > 0 && height > 0 && scale < 1 ? { resizeWidth: Math.max(1, Math.round(width * scale)), resizeHeight: Math.max(1, Math.round(height * scale)), resizeQuality: 'high' as const } : {}
-      return createImageBitmap(blob, resize)
+      return blob ? thumbnail(blob, width, height) : null
     },
     bands(epoch: number, keys: BandKey[], dpr: number, session: number, draft: boolean): Promise<Uint8Array> {
       const flat = new Uint32Array(keys.length * 3)

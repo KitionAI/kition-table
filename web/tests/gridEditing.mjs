@@ -23,6 +23,13 @@
 // and adds them in one records.update, and files pasted on an attachment cell are added the same
 // way (TableEditorGridView's picker, useTableClipboard's file paste, imageCellRenderer.spec); a
 // picture at a web address is drawn (the old grid's ImageManager loaded such urls).
+//
+// Card tg5, the rest of the old grid's specs: a date cell opens on one click (textCellRenderer),
+// and a read-only one never; long text edits centred in a tall row and from the top in a short
+// one, under the text cursor (TextEditor.spec); a dragged column follows the pointer
+// (RenderLayer.spec); the frozen edge's handle shows after 200 ms, a neutral guide with a brand
+// grip (useColumnFreeze.spec, layoutRenderer.spec); a click in an AI cell's middle asks for
+// nothing (aiActionLayer.spec).
 // Prints PASS or FAIL per step; exits 1 on any FAIL.
 import zlib from 'node:zlib'
 import { checkPackage, launch, nodeEngine, openGrid, settled, startServer } from './gridPage.mjs'
@@ -368,6 +375,21 @@ try {
     await page.waitForFunction(() => !window.__ktableGrid.editing.editing, null, { timeout: 5000 })
   })
 
+  // The old grid's textCellRenderer.spec: a date edits on one click (isEditingOnClick).
+  await test('a click on a date cell opens its calendar', async () => {
+    const at = await cell(page, 1, col('due'))
+    await page.mouse.click(at.x, at.y)
+    const calendar = page.getByTestId('table-date-calendar')
+    const opened = await calendar.waitFor({ timeout: 5000 }).then(() => true, () => false)
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => !window.__ktableGrid.editing.editing, null, { timeout: 5000 })
+    const other = await cell(page, 1, col('notes'))
+    await page.mouse.click(other.x, other.y)
+    await page.waitForTimeout(200)
+    const none = await page.evaluate(() => !window.__ktableGrid.editing.editing)
+    step('a click on a date cell opens its calendar, and on a text cell opens nothing', opened && none, JSON.stringify({ opened, none }))
+  })
+
   await test('a single choice cell opens its list; a pick writes it', async () => {
     const at = await cell(page, 0, col('status'))
     await page.mouse.click(at.x, at.y)
@@ -530,6 +552,35 @@ try {
     step('a selected column dragged is one fields.move', made.length === 1 && JSON.stringify(ops) === JSON.stringify([{ op: 'fields.move', tableId: made[0].params.ops[0].tableId, fieldIds: [made.length && ops[0].fieldIds[0]], toIndex: 0 }]) && columns[0] === made[0].params.ops[0].fieldIds[0], JSON.stringify({ ops, columns: columns.slice(0, 3) }))
   })
 
+  // The old grid's RenderLayer.spec: a dragged column follows the pointer, drawn on every move.
+  await test('a dragged column follows the pointer', async () => {
+    const box = await page.evaluate(() => window.__ktableGrid.view.scroller.getBoundingClientRect().toJSON())
+    const notes = await cell(page, 0, col('notes'))
+    const status = await cell(page, 0, col('status'))
+    await page.mouse.click(status.x, box.top + 16)
+    await page.mouse.move(status.x, box.top + 16)
+    await page.mouse.down()
+    const drawn = []
+    for (const x of [status.x - 20, status.x - 60, notes.x, notes.x - 40]) {
+      const before = await page.evaluate(() => window.__ktableGrid.view.overlayDraws)
+      await page.mouse.move(x, box.top + 60)
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done())))
+      const after = await page.evaluate(() => window.__ktableGrid.view.overlayDraws)
+      const alpha = await page.evaluate(([x, y]) => {
+        const { view } = window.__ktableGrid
+        const bounds = view.scroller.getBoundingClientRect()
+        const dpr = view.viewport.dpr
+        return view.overlay.getContext('2d').getImageData(Math.floor((x - bounds.left) * dpr), Math.floor((y - bounds.top) * dpr), 1, 1).data[3]
+      }, [x, box.top + 60])
+      drawn.push({ redrawn: after > before, alpha })
+    }
+    // Back where it started: no move is written.
+    await page.mouse.move(status.x, box.top + 16, { steps: 4 })
+    await page.mouse.up()
+    await idle(page)
+    step('a dragged column follows the pointer', drawn.slice(1).every((at) => at.redrawn && at.alpha > 0), JSON.stringify(drawn))
+  })
+
   await test('a column header that is not selected drags its column', async () => {
     const box = await page.evaluate(() => window.__ktableGrid.view.scroller.getBoundingClientRect().toJSON())
     const a = await cell(page, 0, 0)
@@ -580,6 +631,47 @@ try {
     const made = await waitWrites(page, from)
     const frozen = await page.evaluate(() => window.__ktableGrid.view.currentAxes.columns.filter((column) => column.frozen).length)
     step('the frozen edge dragged saves the frozen columns', cursor === 'col-resize' && made.length === 1 && made[0].command === 'views.patchConfig' && made[0].params.frozen_column_count === 2 && frozen === 2, JSON.stringify({ cursor, made, frozen }))
+  })
+
+  // The old grid's useColumnFreeze.spec and layoutRenderer.spec: the handle shows after the pointer
+  // rests on the frozen edge 200 ms and goes at once when it leaves; its guide is neutral and its
+  // grip the brand; it shows at once while dragged.
+  await test('the frozen edge shows its handle after a moment, neutral with a brand grip', async () => {
+    const box = await page.evaluate(() => window.__ktableGrid.view.scroller.getBoundingClientRect().toJSON())
+    const style = await page.evaluate(() => window.__ktableGrid.interaction.style)
+    const rgb = (color) => [1, 3, 5].map((i) => Number.parseInt(color.slice(i, i + 2), 16))
+    const left = await page.evaluate(() => window.__ktableGrid.view.currentAxes.bodyLeft)
+    const y = box.top + 200
+    const at = (x, yy) =>
+      page.evaluate(([x, y]) => {
+        const { view } = window.__ktableGrid
+        const bounds = view.scroller.getBoundingClientRect()
+        const dpr = view.viewport.dpr
+        return [...view.overlay.getContext('2d').getImageData(Math.floor((x - bounds.left) * dpr), Math.floor((y - bounds.top) * dpr), 1, 1).data]
+      }, [x, yy])
+    await page.mouse.move(box.left + left - 40, y)
+    await page.mouse.move(box.left + left, y)
+    const early = await at(box.left + left, y)
+    await page.waitForTimeout(350)
+    const grip = await at(box.left + left, y)
+    const guide = await at(box.left + left - 0.5, y + 120)
+    await page.mouse.move(box.left + left - 60, y)
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done())))
+    const gone = await at(box.left + left, y)
+    await page.mouse.move(box.left + left, y)
+    await page.mouse.down()
+    await page.mouse.move(box.left + left + 2, y)
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done())))
+    const dragged = await at(box.left + left + 2, y)
+    await page.mouse.move(box.left + left, y)
+    await page.mouse.up()
+    await idle(page)
+    step(
+      'the frozen edge shows its handle after a moment, neutral with a brand grip',
+      // Before the delay and after leaving, only the row's hover tint is there (not the grip).
+      early[3] < 128 && grip[3] > 200 && near(grip, [...rgb(style.border), 255], 40) && guide[3] > 200 && near(guide, [...rgb(style.control), 255], 40) && gone[3] < 128 && dragged[3] > 200,
+      JSON.stringify({ early, grip, guide, gone, dragged, border: style.border, control: style.control }),
+    )
   })
 
   await test("an attachment's picture is drawn from the document; a click previews it", async () => {
@@ -691,6 +783,17 @@ try {
     await page.evaluate(() => window.__ktableGrid.editing.setGenerating([]))
   })
 
+  // The old grid's aiActionLayer.spec: only the button asks; a click in the cell's middle does not.
+  await test("a click in an AI cell's middle asks for nothing", async () => {
+    const summary = await page.evaluate((id) => window.__ktableGrid.view.currentAxes.columns.findIndex((column) => column.fieldId === id), made.ids.summary)
+    const at = await cell(page, 2, summary)
+    const before = await page.evaluate(() => window.__ktableGridEvents.filter((event) => event.name === 'regenerate').length)
+    await page.mouse.click(at.x, at.y)
+    await page.waitForTimeout(200)
+    const after = await page.evaluate(() => window.__ktableGridEvents.filter((event) => event.name === 'regenerate').length)
+    step("a click in an AI cell's middle asks for nothing", after === before, JSON.stringify({ before, after }))
+  })
+
   await test('undo takes back one action', async () => {
     const before = await shown(page)
     const at = await cell(page, 0, col('title'))
@@ -704,6 +807,75 @@ try {
     await page.waitForFunction(() => window.__ktableGridEvents.some((event) => event.name === 'undo:done'), null, { timeout: 10_000 })
     await idle(page)
     step('undo takes back one action', (await valueAt(page, 0, N.title)) === before[0].values[N.title], JSON.stringify(await valueAt(page, 0, N.title)))
+  })
+
+  // The old grid's TextEditor.spec and case regressions/issue-grid-typing-and-drag: long text in a
+  // row taller than two lines edits in the cell with its lines centred; a shorter row opens a box
+  // from the cell's top; the pointer is the text cursor over the box.
+  await test('long text edits centred in a tall row and from the top in a short one, under the text cursor', async () => {
+    const rowHeight = (height) =>
+      page.evaluate(async ([tableId, viewId, height]) => {
+        const { engine, view } = window.__ktableGrid
+        await engine.invoke('call', 'views.patchConfig', JSON.stringify({ tableId, viewId, row_height: height }))
+        await view.reopen()
+      }, [made.tableId, made.view, height])
+    const editorBox = () =>
+      page.evaluate(() => {
+        const input = document.querySelector('[data-ktable-grid-input]')
+        const box = input.getBoundingClientRect()
+        const style = getComputedStyle(input)
+        return { y: box.y, h: box.height, padTop: parseFloat(style.paddingTop), cursor: style.cursor, align: style.textAlign, shown: style.pointerEvents === 'auto' }
+      })
+    // The column of the notes (earlier steps moved columns).
+    const notes = await page.evaluate((name) => {
+      const { view, data } = window.__ktableGrid
+      const id = data.fields().find((field) => field.name === name).id
+      return view.currentAxes.columns.findIndex((column) => column.fieldId === id)
+    }, N.notes)
+    await rowHeight('extra_tall')
+    await idle(page)
+    let at = await cell(page, 2, notes)
+    await page.mouse.click(at.x, at.y)
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(() => window.__ktableGrid.editing.editing, null, { timeout: 5000 })
+    await page.waitForTimeout(100)
+    const tall = await editorBox()
+    // One 20 px line, its middle on the row's middle.
+    const tallMiddle = tall.y + 2 + tall.padTop + 10
+    await page.keyboard.press('Escape')
+    await rowHeight('medium')
+    await idle(page)
+    at = await cell(page, 2, notes)
+    await page.mouse.click(at.x, at.y)
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(() => window.__ktableGrid.editing.editing, null, { timeout: 5000 })
+    const short = await editorBox()
+    await page.keyboard.press('Escape')
+    step(
+      'long text edits centred in a tall row and from the top in a short one, under the text cursor',
+      tall.shown && Math.abs(tall.h - 88) < 1 && Math.abs(tallMiddle - (tall.y + 44)) <= 1.5 && tall.align === 'center' && tall.cursor === 'text' && short.shown && Math.abs(short.y - at.top) < 1 && short.h >= 96 && short.cursor === 'text',
+      JSON.stringify({ tall, tallMiddle, short, at }),
+    )
+  })
+
+  // The old grid's textCellRenderer.spec: a read-only date cell opens no editor.
+  await test('a read-only date cell opens nothing', async () => {
+    const dueId = await page.evaluate((name) => window.__ktableGrid.data.fields().find((field) => field.name === name).id, N.due)
+    await page.evaluate(async ([tableId, fieldId]) => {
+      const { engine, data } = window.__ktableGrid
+      await engine.invoke('call', 'fields.update', JSON.stringify({ tableId, fieldId, readonly: true }))
+      await data.reload()
+    }, [made.tableId, dueId])
+    const due = await page.evaluate((id) => window.__ktableGrid.view.currentAxes.columns.findIndex((column) => column.fieldId === id), dueId)
+    const at = await cell(page, 3, due)
+    await page.mouse.click(at.x, at.y)
+    await page.keyboard.press('Enter')
+    await page.mouse.dblclick(at.x, at.y)
+    await page.waitForTimeout(300)
+    const from = await writes(page)
+    const opened = await page.evaluate(() => window.__ktableGrid.editing.editing)
+    const calendar = await page.getByTestId('table-date-calendar').count()
+    step('a read-only date cell opens nothing', !opened && calendar === 0 && (await writes(page)) === from, JSON.stringify({ opened, calendar }))
   })
 
   step('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '))

@@ -1,7 +1,6 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { DataAttachment, DataDocument, DataField, DataFieldType, DataRecord, DataTable, DataView } from '../../types/dataDocument'
 import {
-  type DataRecordWindow,
   type ImagePreviewState,
   type RecordContextMenuState,
 } from '../lib/tableEditorShared'
@@ -16,6 +15,8 @@ type UseTableEditorActionsArgs = {
   tableViews: DataView[]
   fields: DataField[]
   records: DataRecord[]
+  /** Every record of the active table, read when an action needs them all. */
+  allRecords: () => Promise<DataRecord[]>
   groupField: DataField | null
   canReorderRows: boolean
   canMoveKanbanCards: boolean
@@ -36,7 +37,7 @@ type UseTableEditorActionsArgs = {
   setActiveViewId: Dispatch<SetStateAction<number | null>>
   setImagePreview: Dispatch<SetStateAction<ImagePreviewState>>
   refreshDocument: (preferredTableId?: number | null, preferredViewId?: number | null) => Promise<void>
-  loadRecords: (window?: DataRecordWindow) => Promise<void>
+  loadRecords: () => Promise<void>
   /** Refreshes the undo/redo toolbar state after a server write; optional so existing callers and tests keep working untouched. */
   refreshHistoryState?: () => void
 }
@@ -48,6 +49,7 @@ export function useTableEditorActions({
   tableViews,
   fields,
   records,
+  allRecords,
   groupField,
   canReorderRows,
   canMoveKanbanCards,
@@ -97,7 +99,7 @@ export function useTableEditorActions({
     activeTable,
     tableViews,
     fields,
-    records,
+    allRecords,
     newFieldTitle,
     newFieldType,
     importInputRef,

@@ -27,25 +27,6 @@ export function useTableEditorUiState() {
     setSelectedRecordIds(new Set())
   }
 
-  function toggleAllSelected(recordIds: number[], allVisibleSelected: boolean) {
-    setSelectedRecordIds(allVisibleSelected ? new Set() : new Set(recordIds))
-  }
-
-  function toggleRecordSelected(recordId: number, checked?: boolean) {
-    setSelectedRecordIds((current) => {
-      const next = new Set(current)
-      if (checked === undefined) {
-        if (next.has(recordId)) next.delete(recordId)
-        else next.add(recordId)
-      } else if (checked) {
-        next.add(recordId)
-      } else {
-        next.delete(recordId)
-      }
-      return next
-    })
-  }
-
   function openRecordContextMenu(record: DataRecord, event: RecordContextMenuEvent) {
     event.preventDefault()
     event.stopPropagation()
@@ -94,8 +75,6 @@ export function useTableEditorUiState() {
     setSelectedRecord,
     setSelectedRecordIds,
     setToolbarPanel,
-    toggleAllSelected,
-    toggleRecordSelected,
     toolbarPanel,
   }
 }

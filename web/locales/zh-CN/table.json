@@ -63,7 +63,6 @@
     "descending": "降序"
   },
   "footer": {
-    "showingRange": "显示 {{start}}–{{end}}",
     "recordsCount": "{{count}} 条记录",
     "aggregate": "{{title}}：总和 {{sum}} · 平均 {{avg}}",
     "selectedCount": "已选 {{count}} 项",
