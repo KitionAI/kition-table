@@ -3,8 +3,10 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
-## Unreleased
+## 0.5.1
 
+- Large writes are faster: clearing, pasting or filling a column of 100,000 records no longer reads any cell back into the projection (each row is patched with the values the write carries), and the transaction prepares the maps it writes once (kition-sdk 3cbd200, KitionPkg/loro 2498cd8).
+- The engine says which faces its text still needs (`wantsFonts`) and lays text out again when a face arrives later; the editor loads every face up front until it moves to the SDK release that loads them lazily.
 - Attachment pictures in GIF (the first frame), SVG (drawn by resvg, without its text) and HEIC
   (heic-rs, a pure-Rust decoder) show as thumbnails in the grid, in the gallery's covers and in the
   headless picture, as PNG, JPEG and WebP did; a PNG's `eXIf` orientation turns it as a JPEG's
