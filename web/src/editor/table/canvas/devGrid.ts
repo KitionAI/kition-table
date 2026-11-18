@@ -29,7 +29,7 @@ import { mountPopups } from './devGridEditors'
 import { type EngineSource, engineSource } from './engineSource'
 import { engineData, type GridData } from './gridData'
 import { GridEditing } from './gridEditing'
-import { engineFontUrls } from './gridFonts'
+import { engineFonts } from './gridFonts'
 import { syncAfterWrite } from './gridSync'
 import { GridView } from './gridView'
 import { type ClientRect, type GridHandlers, GridInteraction } from './interaction'
@@ -54,7 +54,7 @@ async function start(): Promise<{ view: GridView; engine: KitEngine; source: Eng
   const file = new URL(params.get('file') ?? 'sample/Sample.ktable', root)
   const bytes = await (await fetch(file)).arrayBuffer()
   const engine = await KitEngine.open(
-    { kitId: 'kit.table', base: new URL('engine/', root).href, module: 'kition_table_kit', documentClass: 'TableDocument', fonts: engineFontUrls(fontsBase) },
+    { kitId: 'kit.table', base: new URL('engine/', root).href, module: 'kition_table_kit', documentClass: 'TableDocument', ...engineFonts(fontsBase) },
     decodeURIComponent(file.pathname.split('/').pop() ?? 'Table.ktable'),
     bytes,
   )

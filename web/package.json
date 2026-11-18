@@ -19,6 +19,7 @@
     "test:grid": "node tests/widths.mjs chromium && node tests/widths.mjs webkit && node tests/parity.mjs chromium && node tests/parity.mjs webkit",
     "test:grid:interaction": "node tests/gridInteraction.mjs chromium && node tests/gridInteraction.mjs webkit",
     "test:grid:editing": "node tests/gridEditing.mjs chromium && node tests/gridEditing.mjs webkit",
+    "test:grid:fonts": "node tests/lazyFonts.mjs chromium && node tests/lazyFonts.mjs webkit",
     "test:perf": "node tests/perf.mjs chromium"
   },
   "dependencies": {
@@ -28,10 +29,10 @@
     "@codemirror/search": "^6.7.0",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.43.0",
-    "@kition/kit-dev-host": "^0.1.0",
-    "@kition/kit-editor": "^0.1.0",
-    "@kition/kit-host": "^0.1.0",
-    "@kition/kit-ui-protocol": "^0.1.0",
+    "@kition/kit-dev-host": "^0.4.0",
+    "@kition/kit-editor": "^0.4.0",
+    "@kition/kit-host": "^0.4.0",
+    "@kition/kit-ui-protocol": "^0.4.0",
     "@kition/tessera-icons": "^0.1.0",
     "clsx": "^2.1.1",
     "i18next": "^26.3.1",

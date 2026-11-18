@@ -9,6 +9,7 @@ import {
 } from './editor'
 import type { GridFieldSummary, GridRecordRead } from './editor/table/ports/TableDataSource'
 import { decodeGridAxis, decodeGridHits } from './editor/table/lib/gridAxis'
+import type { GridEngineFonts } from './editor/table/canvas/gridFonts'
 
 /** What a data-document request answers from the engine: the route's answer, and what it changed. */
 type Answer<T> = { result: T; change: unknown }
@@ -21,6 +22,8 @@ export type TableEngineAccess = {
   invoke<T>(name: string, ...args: unknown[]): Promise<T>
   /** The engine's revision now. */
   revision(): number
+  /** The open engine's lazy fonts, which the grid follows. */
+  fonts?: GridEngineFonts
 }
 
 /** The methods that only read (the engine's `READ_METHODS`): they run without refreshing the shell. */
@@ -261,6 +264,7 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
       },
       summary: async (params) => JSON.parse(await engine.invoke<string>('gridSummary', JSON.stringify(params))) as GridFieldSummary[],
       picture: (bytes, maxSide) => engine.invoke<Uint8Array>('gridPicture', bytes, maxSide),
+      fonts: engine.fonts,
     },
     command: <T>(method: string, params?: Record<string, unknown>) => call<T>(method, params),
     observe(revision) {

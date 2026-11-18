@@ -7,6 +7,7 @@ import type {
   DataDocumentsTransactUndoRedoResponse,
 } from '../../generated/data-documents-transact'
 import type { TableChangedParams } from '../../generated/table-changed'
+import type { GridEngineFonts } from '../canvas/gridFonts'
 import type { GridAxis, GridHitsParams } from '../lib/gridAxis'
 import type {
   BulkCopyRecordsPayload,
@@ -192,6 +193,8 @@ export interface TableDataSource {
     clear(params: { tableId: number; ids: number[]; values: Record<string, DataRecordValue> }): Promise<void>
     summary(params: { fields: string[] }): Promise<GridFieldSummary[]>
     picture(bytes: Uint8Array, maxSide: number): Promise<Uint8Array>
+    /** The engine's lazy fonts (`KitEngine.onFonts`): the grid draws again as each face comes. */
+    fonts?: GridEngineFonts
   }
 }
 

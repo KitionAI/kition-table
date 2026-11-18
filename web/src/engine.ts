@@ -1,9 +1,10 @@
 import type { KitEngineInfo, KitModuleManifest } from '@kition/kit-editor'
-import { engineFontUrls } from './editor/table/canvas/gridFonts'
+import { engineFonts } from './editor/table/canvas/gridFonts'
 
 /**
  * The engine, from this package's own folder, with the faces the grid's bands are shaped with
- * (the package's `fonts/`, the files the page draws them with: platform rule E9, `addFont`).
+ * (the package's `fonts/`, the files the page draws them with: platform rule E9, `addFont`):
+ * Inter first, the others once the engine's text wants them (`lazyFonts`).
  */
 export function engineManifest(): KitModuleManifest {
   return {
@@ -11,7 +12,7 @@ export function engineManifest(): KitModuleManifest {
     base: new URL('./engine/', document.baseURI).href,
     module: 'kition_table_kit',
     documentClass: 'TableDocument',
-    fonts: engineFontUrls(new URL('./fonts/', document.baseURI).href),
+    ...engineFonts(new URL('./fonts/', document.baseURI).href),
   }
 }
 

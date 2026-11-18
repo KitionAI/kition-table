@@ -10,6 +10,7 @@
  * this is a lazy load, not a download from elsewhere). Emoji are tiles the engine draws, so the
  * page never loads the emoji face.
  */
+import type { KitModuleManifest } from '@kition/kit-editor'
 import { Face } from './displayList'
 
 /** The files under the package's `fonts/` folder: the page's faces and, for the engine, all four. */
@@ -34,12 +35,33 @@ const FILE_OF: Partial<Record<Face, string>> = {
   [Face.Hangul]: FONT_FILES.hangul,
 }
 
-/** The font files the engine registers with `addFont` (`KitModuleManifest.fonts`), as URLs. */
-export function engineFontUrls(fontsBase: string): string[] {
-  return [FONT_FILES.sans, FONT_FILES.fallback, FONT_FILES.hangul, FONT_FILES.emoji].map((file) => new URL(file, fontsBase).href)
+/**
+ * The font files the engine registers with `addFont`, as URLs: Inter before the table opens
+ * (`KitModuleManifest.fonts`), the CJK, Hangul and emoji faces only once the engine's text wants
+ * them (`lazyFonts`, about 11 MB), so the first frame never waits for them (grid plan D3).
+ */
+export function engineFonts(fontsBase: string): Pick<KitModuleManifest, 'fonts' | 'lazyFonts'> {
+  const url = (file: string) => new URL(file, fontsBase).href
+  return { fonts: [url(FONT_FILES.sans)], lazyFonts: [FONT_FILES.fallback, FONT_FILES.hangul, FONT_FILES.emoji].map(url) }
+}
+
+/**
+ * The engine's lazy fonts as the grid follows them (`KitEngine.fontsPending`, `onFonts`,
+ * `loadFonts`): until the engine has every face it lays out the characters of the faces it lacks
+ * as tofu, which the page does not draw; each face it gets makes the bands stale.
+ */
+export type GridEngineFonts = {
+  /** Whether the engine has not got every face yet. */
+  pending(): boolean
+  /** Calls `listener` each time the engine got a face; answers how to stop. */
+  subscribe(listener: () => void): () => void
+  /** Gives the engine every face now. */
+  loadAll(): Promise<void>
 }
 
 export class GridFonts {
+  /** The engine's lazy fonts, when the grid's source follows them: tofu waits until they are all in. */
+  engine: GridEngineFonts | null = null
   private readonly loaded = new Set<Face>()
   private readonly loading = new Map<Face, Promise<void>>()
   private readonly failed = new Set<Face>()
@@ -62,9 +84,14 @@ export class GridFonts {
     return false
   }
 
-  /** Every face the package holds, loaded (the tests compare pixels only once all are in). */
+  /** Whether tofu boxes can be drawn now: the engine has every face (a box may be a character a lazy face has). */
+  tofuReady(): boolean {
+    return !this.engine?.pending()
+  }
+
+  /** Every face the package holds, loaded on the page and in the engine (the tests compare pixels only once all are in). */
   async all(): Promise<void> {
-    await Promise.all([Face.Sans, Face.Fallback, Face.Hangul].map((face) => this.load(face)))
+    await Promise.all([...[Face.Sans, Face.Fallback, Face.Hangul].map((face) => this.load(face)), this.engine?.loadAll()])
   }
 
   private load(face: Face): Promise<void> {

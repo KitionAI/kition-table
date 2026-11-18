@@ -1,0 +1,30 @@
+format: 1
+id: table.editor.grid/lazy-fonts-page
+feature: table.editor.grid
+intent: >-
+  The editor gives the engine Inter before a table opens and Droid Sans Fallback, Nanum Gothic
+  and the emoji face only once its text wants them (grid plan D3; kit-editor's lazyFonts). On the
+  development page, in Chromium and WebKit: a table in Latin only never asks for them; with them
+  held back, a table in Chinese, Korean and emoji still shows its first content frame (their runs
+  are tofu in the engine then, which the page does not draw) and the engine asks for the CJK face
+  first; once they come, the bands are fetched again and hold CJK runs in Droid Sans Fallback,
+  Hangul runs in Nanum Gothic and emoji, with no tofu left.
+layer: gate
+source:
+  kind: synthetic
+  from: the lazy fonts of the engine (card sdk-fonts-lazy)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [node, web/tests/lazyFonts.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/lazyFonts.mjs, webkit]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+requires: [chromium, webkit]
+tags: [browser]
+timeout_s: 120
+since: "2026-11-18"

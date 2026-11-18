@@ -46,5 +46,6 @@ export function arrangedSource(dataSource: Pick<TableDataSource, 'grid' | 'attac
       } else if (url.startsWith('data:')) blob = await (await fetch(url)).blob()
       return blob ? thumbnail(blob, width, height, dataSource.grid.picture) : null
     },
+    fonts: dataSource.grid.fonts,
   }
 }

@@ -151,6 +151,7 @@ packages them from there. Its tests, with no HTTP proxy set:
 pnpm run test:grid    # text widths and screen == picture, in Chromium and WebKit
 pnpm run test:grid:interaction   # selection, keyboard, hover and menus, in Chromium and WebKit
 pnpm run test:grid:editing   # editors, clipboard, drags, pictures, AI overlay, in Chromium and WebKit
+pnpm run test:grid:fonts   # the engine's lazy fonts: the first frame waits only for Inter, in Chromium and WebKit
 pnpm run test:perf    # scrolling 100,000 records (writes target/perf/ on first run; minutes)
 PERF_TIER=strict PERF_HEADED=1 pnpm run test:perf   # the lines themselves, on a maintainer's machine
 node tests/perfEdit.mjs chromium   # 50 edits, then a whole column cleared, pasted and filled, on the same 100,000 records

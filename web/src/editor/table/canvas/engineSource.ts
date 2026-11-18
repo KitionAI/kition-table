@@ -13,6 +13,7 @@ import type { KitEngine } from '@kition/kit-editor'
 import type { AxesInput } from './axes'
 import type { BandKey } from './displayList'
 import type { GridGroup, GridOpened, GridSource, Skeleton } from './gridView'
+import type { GridEngineFonts } from './gridFonts'
 import type { OverlayStyle } from './overlay'
 import { GridRows } from './rows'
 
@@ -35,6 +36,11 @@ export type GridTarget = {
 }
 
 type AxesAnswer = AxesInput & { skeleton: Skeleton; overlay: OverlayStyle; groups: GridGroup[] }
+
+/** A `KitEngine`'s lazy fonts as the grid follows them. */
+export function engineFontsOf(engine: KitEngine): GridEngineFonts {
+  return { pending: () => engine.fontsPending > 0, subscribe: (listener) => engine.onFonts(listener), loadAll: () => engine.loadFonts() }
+}
 
 /** What a layout is to the view: `gridAxes`' answer (parsed) and `gridRows`' bytes. */
 export function gridOpened(answer: unknown, rows: Uint8Array): GridOpened {
@@ -132,5 +138,6 @@ export function engineSource(engine: KitEngine, initial: GridTarget): EngineSour
       keys.forEach((key, index) => flat.set([key.layer, key.colBand, key.rowBand], index * 3))
       return engine.invoke<Uint8Array>('gridBands', epoch, flat, dpr, session, draft)
     },
+    fonts: engineFontsOf(engine),
   }
 }

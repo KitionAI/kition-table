@@ -44,6 +44,9 @@ export function App({ host, i18n }: { host: HostConnection; i18n: i18n }) {
   // The data source reads the session through a ref, so the editor keeps one source.
   const latest = useRef(session)
   latest.current = session
+  // The engine's lazy fonts, followed across the engines the session opens.
+  const fontListeners = useMemo(() => new Set<() => void>(), [])
+  useEffect(() => session.doc?.onFonts(() => fontListeners.forEach((listener) => listener())), [session.doc, fontListeners])
   const source = useMemo(
     () =>
       createWorkerTableDataSource(
@@ -55,10 +58,18 @@ export function App({ host, i18n }: { host: HostConnection; i18n: i18n }) {
             return open.invoke<T>(method, ...args)
           },
           revision: () => latest.current.doc?.info.revision ?? 0,
+          fonts: {
+            pending: () => (latest.current.doc?.fontsPending ?? 0) > 0,
+            subscribe: (listener) => {
+              fontListeners.add(listener)
+              return () => fontListeners.delete(listener)
+            },
+            loadAll: async () => latest.current.doc?.loadFonts(),
+          },
         },
         path,
       ),
-    [path],
+    [path, fontListeners],
   )
   // The document opened again from its file (the file changed on disk, Load the new version) is
   // a new engine: the editor reads it again.

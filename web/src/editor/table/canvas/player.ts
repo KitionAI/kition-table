@@ -151,6 +151,10 @@ export function play(target: PlayTarget, list: DisplayList, resources: GridResou
         break
       }
       case Opcode.Tofu: {
+        if (fonts && !fonts.tofuReady()) {
+          result.missingFaces += 1
+          break
+        }
         toDevice()
         setFill(colors[op.paint])
         const x0 = snap(op.x, ox, dpr)

@@ -26,7 +26,7 @@ import { type Area, Axes, type AxesInput, bandKeys, keyId } from './axes'
 import { decodeBatch, type ImageEntry } from './bandBatch'
 import { BandCache } from './bandCache'
 import { type BandKey, DRAFT, Layer } from './displayList'
-import { GridFonts } from './gridFonts'
+import { GridFonts, type GridEngineFonts } from './gridFonts'
 import type { OverlayStyle } from './overlay'
 import { play } from './player'
 import { GridResources } from './resources'
@@ -81,6 +81,8 @@ export type GridSource = {
   bands(epoch: number, keys: BandKey[], dpr: number, session: number, draft: boolean): Promise<Uint8Array>
   /** A picture the bands show (its url, and its size as shown or 0), decoded; null when it cannot be. */
   image?(url: string, width: number, height: number): Promise<ImageBitmap | null>
+  /** The engine's lazy fonts: each face it gets makes every band stale. */
+  fonts?: GridEngineFonts
 }
 
 /** The timings a performance test reads (`window.__ktableGridStats` on the development page). */
@@ -151,6 +153,17 @@ export class GridView {
   ) {
     this.stats = options.stats ? { frames: [], requests: [], firstContent: null } : null
     this.fonts = new GridFonts(options.fontsBase, () => this.invalidate())
+    const engineFonts = source.fonts
+    if (engineFonts) {
+      this.fonts.engine = engineFonts
+      // The engine lays text out again with the face it got: every band is fetched again.
+      this.cleanup.push(
+        engineFonts.subscribe(() => {
+          this.cache.markStale(() => true)
+          this.invalidate()
+        }),
+      )
+    }
     this.element = document.createElement('div')
     this.element.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden'
     this.scroller = document.createElement('div')
@@ -245,7 +258,7 @@ export class GridView {
     this.drawOverlay()
   }
 
-  /** Every face loaded (the tests compare pixels only then). */
+  /** Every face loaded, on the page and in the engine (the tests compare pixels only then). */
   allFonts(): Promise<void> {
     return this.fonts.all()
   }
