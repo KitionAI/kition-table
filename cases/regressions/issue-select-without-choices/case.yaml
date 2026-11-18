@@ -1,0 +1,21 @@
+format: 1
+id: regressions/issue-select-without-choices
+feature: table.editor.grid
+intent: >-
+  A select field that lists no choices draws each of its values as a neutral chip (the theme's chip
+  colour and text), in the grid and in the headless picture, whatever `choice_tones` names. The old
+  grid found no choice for such a value and drew it neutral; the new grid hashed the text into a
+  palette tone, so the same value changed colour when the grid was replaced.
+layer: gate
+source:
+  kind: probe
+  from: the old grid's selectChoiceColors spec, a gap the new grid left open (cards tg5, table-polish)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-grid, filter: "format::tests::a_select_without_choices_draws_its_values_neutral" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

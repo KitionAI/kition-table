@@ -292,7 +292,11 @@ fn typed_cells() {
     assert_eq!(cells[0], vec!["rrect 20x20 r4 #0C8375", "icon check 14 #FFFFFF"], "checked");
     assert_eq!(cells[1], vec!["border 20x20 1 #797772"], "unchecked");
     assert_eq!(cells[2].len(), 2, "one chip: {:?}", cells[2]);
-    assert!(cells[2][0].starts_with("rrect") && cells[2][0].contains("x20 r6") && cells[2][1].ends_with("Left #92400E 'Lead'"), "{:?}", cells[2]);
+    assert!(
+        cells[2][0].starts_with("rrect") && cells[2][0].ends_with("x20 r6 #F6F5F4") && cells[2][1].ends_with("Left #1A1A1A 'Lead'"),
+        "neutral: the field lists no choices: {:?}",
+        cells[2]
+    );
     assert_eq!(cells[3].iter().filter(|op| op.starts_with("rrect")).count(), 2, "two chips: {:?}", cells[3]);
     let stars: Vec<&String> = cells[4].iter().collect();
     assert_eq!(stars.len(), 5);

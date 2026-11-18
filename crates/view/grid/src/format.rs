@@ -181,15 +181,16 @@ const TONES: [(&str, Tone, Tone); 6] = [
 ];
 
 /// The colours of choice `value` of a select field in `theme`: a value the field's choices do not
-/// list is neutral (the theme's chip); a listed one, or any value of a field that lists none, takes
-/// its `choice_tones` entry, else the editor's hash of the text (each character's first UTF-16
-/// unit added in, modulo the palette), in the palette of the theme's mode.
+/// list (every value of a field that lists none) is neutral, the theme's chip, as the old grid
+/// drew a value it found no choice for; a listed one takes its `choice_tones` entry, else the
+/// editor's hash of the text (each character's first UTF-16 unit added in, modulo the palette),
+/// in the palette of the theme's mode.
 pub fn tone(field: &Field, value: &str, theme: &Theme) -> Tone {
-    let listed: Vec<String> = match field.options.get("choices") {
-        Some(Value::Array(items)) => items.iter().map(|item| display(Some(item)).trim().to_owned()).filter(|label| !label.is_empty()).collect(),
-        _ => Vec::new(),
+    let listed = match field.options.get("choices") {
+        Some(Value::Array(items)) => items.iter().any(|item| display(Some(item)).trim() == value),
+        _ => false,
     };
-    if !listed.is_empty() && !listed.iter().any(|label| label == value) {
+    if !listed {
         return (theme.chip, theme.text);
     }
     let pick = |entry: &(&str, Tone, Tone)| if theme.mode == Mode::Dark { entry.2 } else { entry.1 };
@@ -260,7 +261,8 @@ mod tests {
 
     #[test]
     fn choices_take_the_editor_tones() {
-        let field = Field::default();
+        let mut field = Field::default();
+        field.options.insert("choices".into(), serde_json::json!(["A"]));
         // "A" is 65: 65 % 6 = 5, gray.
         assert_eq!(tone(&field, "A", &Theme::LIGHT), TONES[5].1);
         let mut toned = field.clone();
@@ -289,6 +291,22 @@ mod tests {
         assert_eq!(date(&field, Some(&instant)), "2026-07-23 04:14 (GMT+0)");
         let day = Field { field_type: "date".into(), ..Field::default() };
         assert_eq!(date_in(&day, Some(&Value::String("2026-11-28".into())), &new_york), "2026/11/28");
+    }
+
+    /// A select field that lists no choices draws every value neutral, in both themes, whatever
+    /// `choice_tones` says: the old grid found no choice for the value and fell back to the
+    /// theme's chip (case regressions/issue-select-without-choices).
+    #[test]
+    fn a_select_without_choices_draws_its_values_neutral() {
+        let mut field = Field { field_type: "single_select".into(), ..Field::default() };
+        for theme in [Theme::LIGHT, Theme::DARK] {
+            assert_eq!(tone(&field, "Lead", &theme), (theme.chip, theme.text));
+            assert_eq!(tone(&field, "A", &theme), (theme.chip, theme.text));
+        }
+        field.options.insert("choices".into(), serde_json::json!([]));
+        assert_eq!(tone(&field, "Lead", &Theme::LIGHT), (Theme::LIGHT.chip, Theme::LIGHT.text), "an empty list lists nothing");
+        field.options.insert("choice_tones".into(), serde_json::json!({ "Lead": "green" }));
+        assert_eq!(tone(&field, "Lead", &Theme::LIGHT), (Theme::LIGHT.chip, Theme::LIGHT.text), "a tone for a value no choice lists");
     }
 
     /// The old grid's selectChoiceColors.spec: a tone in the dark theme is the dark palette's, and
