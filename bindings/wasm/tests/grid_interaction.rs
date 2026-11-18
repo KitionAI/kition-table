@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use kition_kit::KitDocument;
 use kition_table_arrange::Axis;
-use kition_table_display::{DisplayList, HitKind, Layer, Op, decode};
+use kition_table_display::{DisplayList, Entry, HitKind, Layer, Op, decode, decode_resources};
 use kition_table_kit::TableDocument;
 use serde_json::{Value, json};
 
@@ -76,8 +76,8 @@ fn rows(bytes: &[u8]) -> (u32, Vec<(u8, f64)>) {
     (epoch, rows)
 }
 
-/// The batch's display lists and the ids of the icons it brings.
-fn batch(bytes: &[u8]) -> (Vec<DisplayList>, Vec<u16>) {
+/// The batch's display lists and the icon tiles it brings (id and color).
+fn batch(bytes: &[u8]) -> (Vec<DisplayList>, Vec<(u16, [u8; 4])>) {
     assert_eq!(&bytes[..4], b"KTDB");
     let count = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
     let mut at = 12;
@@ -87,7 +87,10 @@ fn batch(bytes: &[u8]) -> (Vec<DisplayList>, Vec<u16>) {
         let payload = &bytes[at + 8..at + 8 + length];
         match bytes[at] {
             1 => lists.push(decode(payload).unwrap()),
-            2 => icons.push(u16::from_le_bytes([payload[0], payload[1]])),
+            2 => icons.extend(decode_resources(payload).unwrap().entries.into_iter().filter_map(|entry| match entry {
+                Entry::Icon { id, style, .. } => Some((id, style.paint)),
+                _ => None,
+            })),
             _ => {}
         }
         at += 8 + length.next_multiple_of(4);
@@ -96,7 +99,7 @@ fn batch(bytes: &[u8]) -> (Vec<DisplayList>, Vec<u16>) {
 }
 
 fn band(doc: &mut TableDocument, epoch: u32, layer: u32) -> DisplayList {
-    let (lists, _) = batch(&doc.grid_bands(epoch, &[layer, 0, 0], 2.0, 0, &[]).unwrap());
+    let (lists, _) = batch(&doc.grid_bands(epoch, &[layer, 0, 0], 2.0, 0, false).unwrap());
     lists.into_iter().next().unwrap()
 }
 
@@ -207,12 +210,14 @@ fn the_overlay_draws_with_the_brand_and_gets_its_icons() {
     let (_, axes) = open(&mut doc, table_id, grid, json!({ "brand": "#5645d4" }));
     assert_eq!(axes["overlay"]["check"], json!("#5645d4"));
     assert_eq!(axes["overlay"]["checkMark"], json!("#ffffff"));
-    // The controls' icons are known by id and come with the next batch (the page holds none yet).
+    // The controls' icons are known by id and come with the next batch (the page holds none yet),
+    // as tiles in the overlay's colors: the controls muted, the check mark on the brand.
     let icons: Vec<u16> =
         ["drag", "expand", "check"].iter().map(|name| u16::try_from(axes["overlay"]["icons"][name].as_u64().unwrap()).unwrap()).collect();
     let epoch = axes["epoch"].as_u64().unwrap() as u32;
-    let (_, sent) = batch(&doc.grid_bands(epoch, &[Layer::Body as u32, 0, 0], 2.0, 0, &[]).unwrap());
-    for icon in icons {
-        assert!(sent.contains(&icon), "icon {icon} is sent");
+    let (_, sent) = batch(&doc.grid_bands(epoch, &[Layer::Body as u32, 0, 0], 2.0, 0, false).unwrap());
+    for icon in &icons {
+        assert!(sent.iter().any(|(id, _)| id == icon), "icon {icon} is sent");
     }
+    assert!(sent.contains(&(icons[2], [255, 255, 255, 255])), "the check mark in white on the brand: {sent:?}");
 }

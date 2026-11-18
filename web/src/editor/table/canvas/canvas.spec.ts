@@ -1,7 +1,7 @@
 // The page side of the grid's display list: the format v1 reader (field for field as the engine's
 // `kition-table-display` writes it), the axes, the band cache, and the gridBands batch reader.
 import { Axes, bandKeys } from './axes'
-import { decodeBatch } from './bandBatch'
+import { decodeBatch, decodeResources } from './bandBatch'
 import { BandCache } from './bandCache'
 import { Align, Axis, decodeList, type DisplayList, Face, Fit, HEADER_BYTES, Layer, Opcode } from './displayList'
 import { linePixel, snap } from './player'
@@ -255,29 +255,30 @@ describe('band cache', () => {
 })
 
 describe('gridBands batch', () => {
-  it('reads bands, icons and emoji tiles', () => {
-    const band = sample()
-    const icon = new TextEncoder().encode(JSON.stringify({ grid: 24, paths: ['M0 0L24 24'], fills: [] }))
+  /** A resource table: an icon tile, an emoji tile and an image entry. */
+  function table(): Uint8Array {
     const w = new Writer()
-    w.bytes.push(...new TextEncoder().encode('KTDB'))
+    w.bytes.push(...new TextEncoder().encode('KTRS'))
     w.u16(1)
-    w.u16(0)
+    w.u16(5)
     w.u32(3)
+    // An icon: id 3, solid, 16 px, stroke 1.5, at ratio 2, amber, a 1 x 2 tile.
     w.u8(1)
     w.u8(0)
     w.u16(0)
-    w.u32(band.length)
-    w.bytes.push(...band)
-    w.pad()
-    w.u8(2)
-    w.u8(0)
-    w.u16(0)
-    w.u32(4 + icon.length)
+    w.u32(36 + 1 * 2 * 4)
     w.u16(3)
-    w.u16(0)
-    w.bytes.push(...icon)
-    w.pad()
-    w.u8(3)
+    w.u8(1)
+    w.u8(0)
+    w.f32(16, 1.5, 2)
+    w.bytes.push(245, 158, 11, 255)
+    w.u32(1)
+    w.u32(2)
+    w.i32(-2)
+    w.i32(-2)
+    w.bytes.push(9, 8, 7, 6, 5, 4, 3, 2)
+    // An emoji: atlas 9, 13 px at ratio 2, a 2 x 1 tile.
+    w.u8(2)
     w.u8(0)
     w.u16(0)
     w.u32(28 + 2 * 1 * 4)
@@ -288,10 +289,71 @@ describe('gridBands batch', () => {
     w.i32(0)
     w.i32(-28)
     w.bytes.push(1, 2, 3, 4, 5, 6, 7, 8)
+    // An image: key 4, 640 x 480, its url.
+    const url = new TextEncoder().encode('kition-blob:ab')
+    w.u8(3)
+    w.u8(0)
+    w.u16(0)
+    w.u32(16 + url.length)
+    w.u32(4)
+    w.u32(640)
+    w.u32(480)
+    w.u32(url.length)
+    w.bytes.push(...url)
+    w.pad()
+    return w.out()
+  }
+
+  it('reads bands and the resource table', () => {
+    const band = sample()
+    const resources = table()
+    const w = new Writer()
+    w.bytes.push(...new TextEncoder().encode('KTDB'))
+    w.u16(2)
+    w.u16(0)
+    w.u32(2)
+    w.u8(1)
+    w.u8(0)
+    w.u16(0)
+    w.u32(band.length)
+    w.bytes.push(...band)
+    w.pad()
+    w.u8(2)
+    w.u8(0)
+    w.u16(0)
+    w.u32(resources.length)
+    w.bytes.push(...resources)
     const batch = decodeBatch(w.out())
     expect(batch.bands).toHaveLength(1)
     expect(batch.bands[0].header.epoch).toBe(7)
-    expect(batch.icons).toEqual([{ id: 3, data: { grid: 24, paths: ['M0 0L24 24'], fills: [] } }])
-    expect(batch.emoji).toEqual([{ atlas: 9, size: 13, dpr: 2, width: 2, height: 1, left: 0, top: -28, rgba: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]) }])
+    expect(batch.resources?.version).toBe(5)
+    expect(batch.resources?.icons).toEqual([
+      { id: 3, solid: true, size: 16, stroke: 1.5, dpr: 2, paint: (245 | (158 << 8) | (11 << 16) | (255 << 24)) >>> 0, width: 1, height: 2, left: -2, top: -2, rgba: new Uint8Array([9, 8, 7, 6, 5, 4, 3, 2]) },
+    ])
+    expect(batch.resources?.emoji).toEqual([{ atlas: 9, size: 13, dpr: 2, width: 2, height: 1, left: 0, top: -28, rgba: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]) }])
+    expect(batch.resources?.images).toEqual([{ key: 4, width: 640, height: 480, url: 'kition-blob:ab' }])
+  })
+
+  it('refuses another version, a tile that is not its size and a second table', () => {
+    const other = table()
+    other[4] = 2
+    expect(() => decodeResources(other)).toThrow(/version 2/)
+    const short = table()
+    short[16] = 35 // the icon entry's length one byte short of its tile
+    expect(() => decodeResources(short)).toThrow()
+    const resources = table()
+    const w = new Writer()
+    w.bytes.push(...new TextEncoder().encode('KTDB'))
+    w.u16(2)
+    w.u16(0)
+    w.u32(2)
+    for (let i = 0; i < 2; i += 1) {
+      w.u8(2)
+      w.u8(0)
+      w.u16(0)
+      w.u32(resources.length)
+      w.bytes.push(...resources)
+    }
+    expect(() => decodeBatch(w.out())).toThrow(/two resource tables/)
   })
 })

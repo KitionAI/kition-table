@@ -24,11 +24,9 @@ kition-table-ai = { workspace = true }
 kition-table-import = { workspace = true }
 kition-table-picture = { workspace = true }
 kition-table-fonts = { workspace = true }
-# The editor's grid in bands (`src/bands.rs`): its layout, its display lists, and Tessera's icons
-# the page draws from their path data.
+# The editor's grid in bands (`src/bands.rs`): its layout, its display lists and their resources.
 kition-table-grid = { workspace = true }
 kition-table-display = { workspace = true }
-kition-tessera-icons = { workspace = true }
 kition-kdm = { workspace = true }
 base64 = { workspace = true }
 png = { workspace = true }

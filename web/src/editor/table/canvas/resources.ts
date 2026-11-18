@@ -1,20 +1,28 @@
 /**
- * What a display list's ids refer to, on the page: Tessera icons (path data the engine sends once,
- * built into `Path2D`s), emoji tiles (pixels the engine rasterizes at the device size: WebKit has
- * no COLRv1, and both sides then show the same pixels), and attachment pictures the page decodes.
+ * What a display list's ids refer to, on the page: icon and emoji tiles (pixels the engine
+ * rasterizes at the device size, so both sides show the same pixels: no path is stroked by the
+ * browser, and WebKit has no COLRv1) and the attachment pictures the page decodes.
+ *
+ * The page names what it holds by a session number it sends with every `gridBands` call: the
+ * engine sends each resource once per session. Dropping what is held (another device pixel
+ * ratio, a batch that could not be read) starts a new session, so the engine sends it all again.
  */
+import type { EmojiTile, IconTile } from './bandBatch'
 
-/** An icon: SVG path data on Tessera's grid (`grid` units square). */
-export type IconData = { grid: number; paths: string[]; fills: string[] }
-
-/** An emoji at one font size and device pixel ratio: straight RGBA, placed from the snapped pen. */
-export type EmojiTile = { atlas: number; size: number; dpr: number; width: number; height: number; left: number; top: number; rgba: Uint8Array }
-
-type Icon = { grid: number; paths: Path2D[]; fills: Path2D[] }
 type Tile = { image: CanvasImageSource; left: number; top: number }
 
 export function emojiKey(atlas: number, size: number, dpr: number): string {
   return `${atlas}:${size}:${dpr}`
+}
+
+export function iconKey(id: number, size: number, stroke: number, solid: boolean, paint: number, dpr: number): string {
+  return `${id}:${size}:${stroke}:${solid ? 1 : 0}:${paint}:${dpr}`
+}
+
+/** A palette entry's straight RGBA bytes packed as the resource table packs a color (R in the lowest byte). */
+export function packedColor(rgba: Uint8Array, index: number): number {
+  const at = index * 4
+  return (rgba[at] | (rgba[at + 1] << 8) | (rgba[at + 2] << 16) | (rgba[at + 3] << 24)) >>> 0
 }
 
 function tileCanvas(width: number, height: number): HTMLCanvasElement | OffscreenCanvas {
@@ -25,42 +33,50 @@ function tileCanvas(width: number, height: number): HTMLCanvasElement | Offscree
   return canvas
 }
 
+function toTile(tile: { width: number; height: number; left: number; top: number; rgba: Uint8Array }): Tile | null {
+  if (tile.width === 0 || tile.height === 0) return null
+  const canvas = tileCanvas(tile.width, tile.height)
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
+  if (!ctx) return null
+  const pixels = new ImageData(tile.width, tile.height)
+  pixels.data.set(tile.rgba)
+  ctx.putImageData(pixels, 0, 0)
+  return { image: canvas, left: tile.left, top: tile.top }
+}
+
+function newSession(): number {
+  return Math.floor(Math.random() * 0x1_0000_0000) >>> 0
+}
+
 export class GridResources {
-  private readonly icons = new Map<number, Icon>()
+  private readonly icons = new Map<string, Tile>()
   private readonly tiles = new Map<string, Tile>()
   private readonly images = new Map<number, CanvasImageSource & { width: number; height: number }>()
+  private sessionId = newSession()
 
-  addIcon(id: number, data: IconData) {
-    this.icons.set(id, { grid: data.grid, paths: data.paths.map((path) => new Path2D(path)), fills: data.fills.map((path) => new Path2D(path)) })
+  /** The session the page asks the engine for resources in. */
+  get session(): number {
+    return this.sessionId
   }
 
-  icon(id: number): Icon | undefined {
-    return this.icons.get(id)
+  /** An icon tile, keyed by the ratio the page asked for (the table holds it as an f32). */
+  addIcon(tile: IconTile, dpr: number) {
+    const made = toTile(tile)
+    if (made) this.icons.set(iconKey(tile.id, tile.size, tile.stroke, tile.solid, tile.paint, dpr), made)
   }
 
-  /** How many icons the page holds: the engine sends the ones from this id on. */
-  get iconCount(): number {
-    return this.icons.size
+  icon(id: number, size: number, stroke: number, solid: boolean, paint: number, dpr: number): Tile | undefined {
+    return this.icons.get(iconKey(id, size, stroke, solid, paint, dpr))
   }
 
-  addEmoji(tile: EmojiTile) {
-    if (tile.width === 0 || tile.height === 0) return
-    const canvas = tileCanvas(tile.width, tile.height)
-    const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
-    if (!ctx) return
-    const pixels = new ImageData(tile.width, tile.height)
-    pixels.data.set(tile.rgba)
-    ctx.putImageData(pixels, 0, 0)
-    this.tiles.set(emojiKey(tile.atlas, tile.size, tile.dpr), { image: canvas, left: tile.left, top: tile.top })
+  /** An emoji tile, keyed by the ratio the page asked for. */
+  addEmoji(tile: EmojiTile, dpr: number) {
+    const made = toTile(tile)
+    if (made) this.tiles.set(emojiKey(tile.atlas, tile.size, dpr), made)
   }
 
   emoji(atlas: number, size: number, dpr: number): Tile | undefined {
     return this.tiles.get(emojiKey(atlas, size, dpr))
-  }
-
-  /** The emoji tiles the page holds (`atlas:size:dpr`), so the engine does not send them again. */
-  emojiKeys(): string[] {
-    return [...this.tiles.keys()]
   }
 
   setImage(key: number, image: CanvasImageSource & { width: number; height: number }) {
@@ -71,14 +87,22 @@ export class GridResources {
     return this.images.get(key)
   }
 
-  /** Drops what depends on the device pixel ratio (the emoji tiles). */
+  /** Drops what depends on the device pixel ratio (the tiles) and starts a new session. */
   dropTiles() {
+    this.icons.clear()
     this.tiles.clear()
+    this.sessionId = newSession()
+  }
+
+  /** What the page holds may differ from what the engine sent (a batch went unread): a new session. */
+  renewSession() {
+    this.sessionId = newSession()
   }
 
   clear() {
     this.icons.clear()
     this.tiles.clear()
     this.images.clear()
+    this.sessionId = newSession()
   }
 }

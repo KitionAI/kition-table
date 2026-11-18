@@ -12,15 +12,30 @@
 //! and select with. The row head bands carry a hit record per row head control (drag handle,
 //! checkbox, expand), the corner one for the header's checkbox. `gridBands` then answers display lists
 //! (`kition-table-display`, format v1) for the bands the page asks for, in one batch with the
-//! icons and emoji tiles they use that the page does not hold yet:
+//! resources they use that the page does not hold yet, as one resource table
+//! (`kition-table-display`'s "Resource table": icon and emoji tiles at the page's device pixel
+//! ratio, and the attachment pictures' urls and sizes):
 //!
 //! ```text
-//! header  12 B  magic "KTDB" | version u16 = 1 | 0 u16 | item count u32
+//! header  12 B  magic "KTDB" | version u16 = 2 | 0 u16 | item count u32
 //! item          kind u8 | 0 u8 | 0 u16 | length u32 | payload, padded with zeros to 4 bytes
 //!   1 band      a display list (format v1)
-//!   2 icon      id u16 | 0 u16 | UTF-8 JSON { "grid", "paths", "fills" } (Tessera path data)
-//!   3 emoji     atlas u32 | size f32 | dpr f32 | width u32 | height u32 | left i32 | top i32 | RGBA
+//!   2 resources a resource table (at most one per batch, after the bands)
 //! ```
+//!
+//! The page names what it holds by a session number: the engine remembers what it sent each of
+//! the latest sessions and sends each resource once per session. A page that drops what it holds
+//! (another device pixel ratio, a batch it could not read) asks with a new session number. The
+//! overlay's icons (the row head's controls) come with the batches too, as tiles in the overlay's
+//! colors.
+//!
+//! The bands learn each picture's size (from its header, read once) before they lay a cell out,
+//! so a thumbnail has the proportions the headless picture gives it.
+//!
+//! While the view jumps (the scroll bar dragged), the page asks for drafts: the same layout with
+//! text measured from the characters' advances and no emoji (`kition_table_grid::text::Shaper::
+//! draft`), flagged `kition_table_display::DRAFT`, several times cheaper; it asks for the exact
+//! bands once the view rests.
 //!
 //! A band is a layer (row heads, frozen columns, scrolling cells, and the header strips above
 //! them), a run of `band_rows` rows and, for the scrolling layers, a strip `BAND_WIDTH` pixels wide.
@@ -33,13 +48,14 @@
 use std::collections::{HashMap, HashSet};
 
 use kition_table_arrange::{Arrangement, Axis as Arranged, GroupHeader, Stopwatch};
-use kition_table_display::{Align, Axis, DisplayList, Header, HitKind, Key, Layer, Line, Op, Resources};
-use kition_table_file::{Field, Record, TableFile};
+use kition_table_display::{Align, Axis, DisplayList, Header, HitKind, IconStyle, Key, Layer, Line, Op, ResourceTable, Resources};
+use kition_table_file::{Field, Record, TableFile, blobs};
 use kition_table_grid::overlay::{self, Overlay};
 use kition_table_grid::text::{Kind, Shaper};
 use kition_table_grid::theme::{BODY, Mode, REGULAR, Rgba, TINY, Theme};
 use kition_table_grid::{
-    APPEND_COLUMN, APPEND_ROW, Area, Column, DEFAULT_WIDTH, GROUP_HEADER, HEADER, Out, ROW_CONTROL, cell, chip, field_icon, row_height,
+    APPEND_COLUMN, APPEND_ROW, Area, Column, DEFAULT_WIDTH, GROUP_HEADER, HEADER, Out, ROW_CONTROL, attachment_url, cell, chip, field_icon,
+    is_picture, row_height,
 };
 use serde_json::{Value, json};
 
@@ -50,7 +66,14 @@ const BAND_HEIGHT: f32 = 1280.0;
 /// The records the bands keep read (they repeat while a person scrolls back and forth).
 const RECORD_CACHE: usize = 8192;
 /// The batch format's version.
-const BATCH_VERSION: u16 = 1;
+const BATCH_VERSION: u16 = 2;
+/// A batch item's kind.
+const BAND_ITEM: u8 = 1;
+const RESOURCES_ITEM: u8 = 2;
+/// The longest side of a picture `gridRaster` decodes, as the headless picture's thumbnails.
+const THUMBNAIL: u32 = 384;
+/// How many pages' sessions the bands remember what they sent.
+const SESSIONS_KEPT: usize = 4;
 /// `gridRows`' format version.
 const ROWS_VERSION: u16 = 1;
 
@@ -80,6 +103,8 @@ struct Layout {
     /// The fields the records are grouped by, outermost first.
     group_fields: Vec<Field>,
     groups: Vec<GroupHeader>,
+    /// The overlay's icons as the page draws them (the row head's controls).
+    overlay_icons: Vec<(u16, IconStyle)>,
     rows: Vec<Row>,
     /// Each row's top (and the bottom of the last), from the header's bottom.
     tops: Vec<f32>,
@@ -96,6 +121,9 @@ struct Timings {
     count: u64,
     made: std::collections::VecDeque<f64>,
     bytes: u64,
+    /// Drafts made so far, and the time of the latest `TIMINGS_KEPT` of them.
+    drafts: u64,
+    drafted: std::collections::VecDeque<f64>,
 }
 
 /// The document the bands are read from, at its revision (the read records are of one revision).
@@ -105,16 +133,57 @@ pub(crate) struct Source<'a> {
     pub revision: u64,
 }
 
-/// The document's grid in bands: its layout, its resources and caches.
+/// An icon tile's identity: the icon, its size and stroke (as bits), whether it is solid, its color.
+type IconKey = (u16, u32, u32, bool, [u8; 4]);
+
+fn icon_key(id: u16, style: IconStyle) -> IconKey {
+    (id, style.size.to_bits(), style.stroke.to_bits(), style.solid, style.paint)
+}
+
+/// What one page session holds: the tiles at its device pixel ratio and the pictures' entries.
 #[derive(Default)]
+struct Held {
+    session: u32,
+    dpr: u64,
+    icons: HashSet<IconKey>,
+    emoji: HashSet<(u32, u32)>,
+    images: HashSet<u32>,
+}
+
+/// The document's grid in bands: its layout, its resources and caches.
 pub(crate) struct Bands {
     layout: Option<Layout>,
     resources: Resources,
     shaper: Shaper,
+    /// The shaper of the drafts (`gridBands` with `draft`).
+    drafter: Shaper,
     records: HashMap<i64, Record>,
+    /// The cached records' ids, the first read first.
+    read_order: std::collections::VecDeque<i64>,
     /// The document revision the cached records are of.
     revision: u64,
+    /// The pictures whose size was looked for (once each).
+    probed: HashSet<u32>,
+    /// What the latest page sessions hold, the latest first.
+    held: Vec<Held>,
     timings: Timings,
+}
+
+impl Default for Bands {
+    fn default() -> Self {
+        Self {
+            layout: None,
+            resources: Resources::default(),
+            shaper: Shaper::default(),
+            drafter: Shaper::draft(),
+            records: HashMap::new(),
+            read_order: std::collections::VecDeque::new(),
+            revision: 0,
+            probed: HashSet::new(),
+            held: Vec::new(),
+            timings: Timings::default(),
+        }
+    }
 }
 
 fn hex(color: Rgba) -> String {
@@ -357,7 +426,7 @@ impl Bands {
             .map(|(index, (column, left))| json!({ "x": left, "width": column.width, "frozen": index < frozen, "fieldId": column.field.id }))
             .collect();
         answer_columns.push(json!({ "x": columns_right, "width": APPEND_COLUMN, "frozen": false, "fieldId": null }));
-        let overlay = self.overlay_style(&theme);
+        let (overlay, overlay_icons) = self.overlay_style(&theme);
         // The group headers' ids (the editor keeps collapsed groups by them), in the arrangement's order.
         let groups: Vec<Value> =
             axis.groups.iter().map(|group| json!({ "id": group.id, "depth": group.depth, "collapsed": group.collapsed })).collect();
@@ -386,6 +455,7 @@ impl Bands {
             columns,
             group_fields,
             groups: axis.groups,
+            overlay_icons,
             rows,
             tops,
             band_rows,
@@ -393,23 +463,70 @@ impl Bands {
         Ok(answer)
     }
 
-    /// The records of `ids`, read once per document revision.
+    /// The records of `ids`, read once per document revision. Past `RECORD_CACHE` records the
+    /// first read goes, one for each read (dropping thousands at once stalled a band).
     fn read(&mut self, source: Source<'_>, table_id: i64, ids: &[i64]) -> Result<(), String> {
-        if source.revision != self.revision || self.records.len() > RECORD_CACHE {
+        if source.revision != self.revision {
             self.records.clear();
+            self.read_order.clear();
             self.revision = source.revision;
         }
         for id in ids {
             if !self.records.contains_key(id) {
                 let record = source.file.get_record(table_id, *id).map_err(|error| error.to_string())?;
                 self.records.insert(*id, record);
+                self.read_order.push_back(*id);
+            }
+        }
+        while self.records.len() > RECORD_CACHE
+            && let Some(first) = self.read_order.pop_front()
+        {
+            if ids.contains(&first) {
+                // The band reads it now: it goes to the end.
+                self.read_order.push_back(first);
+            } else {
+                self.records.remove(&first);
             }
         }
         Ok(())
     }
 
-    /// One band's list.
-    fn band(&mut self, source: Source<'_>, key: Key) -> Result<Option<DisplayList>, String> {
+    /// Learns the size of each picture the records `ids` attach in the shown columns (from the
+    /// header of the blob the file holds for it), once per picture, so the layout gives its
+    /// thumbnail the picture's proportions, as the headless picture does. A picture the file does
+    /// not hold keeps an unknown size (square, unless its field sets the proportions).
+    fn probe_pictures(&mut self, source: Source<'_>, ids: &[i64]) {
+        let Self { layout: Some(layout), resources, records, probed, .. } = self else { return };
+        let fields: Vec<&str> =
+            layout.columns.iter().filter(|column| column.field.field_type == "attachment").map(|column| column.field.name.as_str()).collect();
+        if fields.is_empty() {
+            return;
+        }
+        for record in ids.iter().filter_map(|id| records.get(id)) {
+            for name in &fields {
+                let items: Vec<&Value> = match record.values.get(*name) {
+                    Some(Value::Array(items)) => items.iter().collect(),
+                    Some(Value::Null) | None => Vec::new(),
+                    Some(item) => vec![item],
+                };
+                for url in items.into_iter().filter(|item| is_picture(item)).filter_map(attachment_url) {
+                    let key = resources.image(&url);
+                    if !probed.insert(key) {
+                        continue;
+                    }
+                    let Some(hash) = blobs::blob_hash_of_url(&url) else { continue };
+                    if let Ok(Some(blob)) = source.file.blob(hash)
+                        && let Some((width, height)) = kition_table_display::image::size(&blob.bytes)
+                    {
+                        resources.set_image_size(key, width, height);
+                    }
+                }
+            }
+        }
+    }
+
+    /// One band's list (a draft with the draft shaper).
+    fn band(&mut self, source: Source<'_>, key: Key, draft: bool) -> Result<Option<DisplayList>, String> {
         let layout = self.layout.as_ref().ok_or("no grid is laid out: call gridAxes first")?;
         let Some(area) = layout.area(key) else { return Ok(None) };
         let ids: Vec<i64> = match key.layer {
@@ -424,9 +541,12 @@ impl Bands {
         };
         let table_id = layout.table_id;
         self.read(source, table_id, &ids)?;
-        let Self { layout: Some(layout), resources, shaper, records, .. } = self else { return Ok(None) };
+        self.probe_pictures(source, &ids);
+        let Self { layout: Some(layout), resources, shaper, drafter, records, .. } = self else { return Ok(None) };
+        let shaper = if draft { drafter } else { shaper };
         let theme = layout.theme;
         let mut list = DisplayList::new(Header {
+            flags: if draft { kition_table_display::DRAFT } else { 0 },
             epoch: layout.epoch,
             theme: match theme.mode {
                 Mode::Light => 0,
@@ -669,63 +789,110 @@ fn layer(value: u32) -> Option<Layer> {
     })
 }
 
-/// An emoji tile's key as the page writes it (`atlas:size:dpr`, numbers as JavaScript prints them).
-fn tile_key(atlas: u32, size: f32, dpr: f64) -> String {
-    format!("{atlas}:{}:{dpr}", f64::from(size))
+/// What a batch's bands use of the resources.
+#[derive(Default)]
+struct Wanted {
+    icons: Vec<(u16, IconStyle)>,
+    emoji: Vec<(u32, f32)>,
+    images: Vec<u32>,
+}
+
+impl Wanted {
+    fn add(&mut self, list: &DisplayList) {
+        for op in &list.ops {
+            match op {
+                Op::Icon { icon, size, stroke, paint, solid, .. } => {
+                    self.icons.push((*icon, IconStyle { size: *size, stroke: *stroke, solid: *solid, paint: list.color(*paint) }));
+                }
+                Op::Emoji { atlas, size, .. } => self.emoji.push((*atlas, *size)),
+                Op::Image { key, .. } => self.images.push(*key),
+                _ => {}
+            }
+        }
+    }
 }
 
 impl Bands {
-    /// `gridBands`: the bands `keys` (layer, column band, row band triples) of arrangement
-    /// `epoch`, the icons from id `icons` on, and the emoji tiles at `dpr` they use that are not
-    /// in `tiles`, as one batch. A band outside the grid is left out.
-    pub(crate) fn bands(&mut self, source: Source<'_>, epoch: u32, keys: &[u32], dpr: f64, icons: u32, tiles: &[String]) -> Result<Vec<u8>, String> {
-        let laid_out = self.layout.as_ref().ok_or("no grid is laid out: call gridAxes first")?.epoch;
-        if laid_out != epoch {
-            return Err(format!("the grid is laid out for arrangement {laid_out}, not {epoch}"));
+    /// What page session `session` at `dpr` holds, moved to the front (a new session holds
+    /// nothing; one at another ratio has no tiles).
+    fn held(&mut self, session: u32, dpr: f64) -> &mut Held {
+        let held = match self.held.iter().position(|held| held.session == session) {
+            Some(at) => self.held.remove(at),
+            None => {
+                self.held.truncate(SESSIONS_KEPT - 1);
+                Held { session, ..Held::default() }
+            }
+        };
+        self.held.insert(0, held);
+        let held = &mut self.held[0];
+        if held.dpr != dpr.to_bits() {
+            held.dpr = dpr.to_bits();
+            held.icons.clear();
+            held.emoji.clear();
         }
+        held
+    }
+
+    /// The entries of `wanted` that session `session` at `dpr` does not hold yet, now held.
+    fn missing(&mut self, wanted: Wanted, session: u32, dpr: f64) -> ResourceTable {
+        let mut held = std::mem::take(self.held(session, dpr));
+        let resources = &self.resources;
+        let mut entries = Vec::new();
+        for (id, style) in wanted.icons {
+            if held.icons.insert(icon_key(id, style))
+                && let Some(entry) = resources.icon_entry(id, style, dpr)
+            {
+                entries.push(entry);
+            }
+        }
+        for (atlas, size) in wanted.emoji {
+            if held.emoji.insert((atlas, size.to_bits()))
+                && let Some(entry) = resources.emoji_entry(atlas, size, dpr)
+            {
+                entries.push(entry);
+            }
+        }
+        for key in wanted.images {
+            if held.images.insert(key)
+                && let Some(entry) = resources.image_entry(key)
+            {
+                entries.push(entry);
+            }
+        }
+        self.held[0] = held;
+        ResourceTable { version: self.resources.version, entries }
+    }
+
+    /// `gridBands`: the bands `keys` (layer, column band, row band triples) of arrangement
+    /// `epoch` at `dpr` (drafts when `draft`: see `kition_table_display::DRAFT`), with the
+    /// resources they and the overlay use that page session `session` does not hold yet, as one
+    /// batch. A band outside the grid is left out.
+    pub(crate) fn bands(&mut self, source: Source<'_>, epoch: u32, keys: &[u32], dpr: f64, session: u32, draft: bool) -> Result<Vec<u8>, String> {
+        let layout = self.layout.as_ref().ok_or("no grid is laid out: call gridAxes first")?;
+        if layout.epoch != epoch {
+            return Err(format!("the grid is laid out for arrangement {}, not {epoch}", layout.epoch));
+        }
+        let mut wanted = Wanted { icons: layout.overlay_icons.clone(), ..Wanted::default() };
         let mut batch = Batch::new();
-        let mut known: HashSet<String> = tiles.iter().cloned().collect();
-        let mut wanted: Vec<(u32, f32)> = Vec::new();
         for key in keys.as_chunks::<3>().0 {
             let (Some(layer), Ok(col_band)) = (layer(key[0]), u8::try_from(key[1])) else { return Err(format!("not a band key: {key:?}")) };
             let watch = Stopwatch::start();
-            let Some(list) = self.band(source, Key { layer, col_band, row_band: key[2] })? else { continue };
+            let Some(list) = self.band(source, Key { layer, col_band, row_band: key[2] }, draft)? else { continue };
             let bytes = kition_table_display::encode(&list);
-            if self.timings.made.len() == TIMINGS_KEPT {
-                self.timings.made.pop_front();
+            let (count, made) =
+                if draft { (&mut self.timings.drafts, &mut self.timings.drafted) } else { (&mut self.timings.count, &mut self.timings.made) };
+            if made.len() == TIMINGS_KEPT {
+                made.pop_front();
             }
-            self.timings.made.push_back(watch.elapsed_ms());
-            self.timings.count += 1;
+            made.push_back(watch.elapsed_ms());
+            *count += 1;
             self.timings.bytes += bytes.len() as u64;
-            for op in &list.ops {
-                if let Op::Emoji { atlas, size, .. } = op
-                    && known.insert(tile_key(*atlas, *size, dpr))
-                {
-                    wanted.push((*atlas, *size));
-                }
-            }
-            batch.item(1, &[&bytes]);
+            wanted.add(&list);
+            batch.item(BAND_ITEM, &[&bytes]);
         }
-        let mut id = icons;
-        while let Some(icon) = u16::try_from(id).ok().and_then(|id| self.resources.icon_of(id)) {
-            let data = json!({ "grid": kition_tessera_icons::GRID, "paths": icon.paths, "fills": icon.fills }).to_string();
-            batch.item(2, &[&u16::try_from(id).unwrap_or(u16::MAX).to_le_bytes(), &[0, 0], data.as_bytes()]);
-            id += 1;
-        }
-        for (atlas, size) in wanted {
-            if let Some(tile) = kition_table_display::emoji_tile(&self.resources, atlas, size, dpr) {
-                let mut head = Vec::with_capacity(28);
-                head.extend_from_slice(&atlas.to_le_bytes());
-                head.extend_from_slice(&size.to_le_bytes());
-                head.extend_from_slice(&(dpr as f32).to_le_bytes());
-                for value in [tile.width, tile.height] {
-                    head.extend_from_slice(&value.to_le_bytes());
-                }
-                for value in [tile.left, tile.top] {
-                    head.extend_from_slice(&value.to_le_bytes());
-                }
-                batch.item(3, &[&head, &tile.rgba]);
-            }
+        let table = self.missing(wanted, session, dpr);
+        if !table.entries.is_empty() {
+            batch.item(RESOURCES_ITEM, &[&kition_table_display::encode_resources(&table)]);
         }
         Ok(batch.finish())
     }
@@ -738,7 +905,18 @@ impl Bands {
             return Err(format!("the grid is laid out for arrangement {laid_out}, not {epoch}"));
         }
         let (Some(layer), Ok(col_band)) = (layer(key[0]), u8::try_from(key[1])) else { return Err(format!("not a band key: {key:?}")) };
-        let list = self.band(source, Key { layer, col_band, row_band: key[2] })?.ok_or("the band is outside the grid")?;
+        let list = self.band(source, Key { layer, col_band, row_band: key[2] }, false)?.ok_or("the band is outside the grid")?;
+        // The pictures decoded as the headless picture decodes them (the page decodes its own).
+        for op in &list.ops {
+            if let Op::Image { key, .. } = op
+                && self.resources.pixels(*key).is_none()
+                && let Some(hash) = self.resources.image_source(*key).and_then(blobs::blob_hash_of_url)
+                && let Ok(Some(blob)) = source.file.blob(hash)
+                && let Some(pixmap) = kition_table_display::image::decode(&blob.bytes, THUMBNAIL)
+            {
+                self.resources.set_image(*key, pixmap);
+            }
+        }
         let (x, y) = (f64::from(list.header.origin.0), f64::from(list.header.origin.1));
         let width = (f64::from(list.header.size.0) * dpr).round() as u32;
         let height = (f64::from(list.header.size.1) * dpr).round() as u32;
@@ -774,12 +952,23 @@ impl Bands {
     }
 
     /// The overlay's colors and sizes (`gridAxes`' `overlay`), and the row head controls' icons,
-    /// which the next `gridBands` batch brings with the icons the page does not hold yet.
-    fn overlay_style(&mut self, theme: &Theme) -> Value {
+    /// whose tiles the `gridBands` batches bring with the resources the page does not hold yet.
+    fn overlay_style(&mut self, theme: &Theme) -> (Value, Vec<(u16, IconStyle)>) {
         let style = Overlay::of(theme);
-        let mut icon = |name: &str| self.resources.icon(name).map_or(Value::Null, |id| json!(id));
-        let icons = json!({ "drag": icon(overlay::DRAG_ICON), "expand": icon(overlay::EXPAND_ICON), "check": icon(overlay::CHECK_ICON) });
-        json!({
+        let mut tiles = Vec::new();
+        let mut icon = |name: &str, size: f32, paint| match self.resources.icon(name) {
+            Some(id) => {
+                tiles.push((id, IconStyle { size, stroke: overlay::ICON_STROKE, solid: false, paint }));
+                json!(id)
+            }
+            None => Value::Null,
+        };
+        let icons = json!({
+            "drag": icon(overlay::DRAG_ICON, overlay::CONTROL, style.control),
+            "expand": icon(overlay::EXPAND_ICON, overlay::CONTROL, style.control),
+            "check": icon(overlay::CHECK_ICON, overlay::CHECK_MARK, style.check_mark),
+        });
+        let answer = json!({
             "selection": hex(style.selection),
             "border": hex(style.border),
             "hover": hex(style.hover),
@@ -795,7 +984,8 @@ impl Bands {
             "iconStroke": overlay::ICON_STROKE,
             "activeWidth": overlay::ACTIVE_WIDTH,
             "rangeWidth": overlay::RANGE_WIDTH,
-        })
+        });
+        (answer, tiles)
     }
 
     /// `gridRows`: what each linear row of the laid-out arrangement is (the page reads it in
@@ -839,11 +1029,13 @@ impl Bands {
     }
 
     /// The bands' part of `gridStats`: how many were made, the milliseconds of the latest ones
-    /// (oldest first), the bytes answered, and the row bands of the layout.
+    /// (oldest first), the same of the drafts, the bytes answered, and the row bands of the layout.
     pub(crate) fn stats(&self) -> Value {
         json!({
             "count": self.timings.count,
             "ms": self.timings.made,
+            "drafts": self.timings.drafts,
+            "draftMs": self.timings.drafted,
             "bytes": self.timings.bytes,
             "rowBands": self.layout.as_ref().map_or(0, Layout::row_bands),
         })
@@ -857,9 +1049,10 @@ impl crate::TableDocument {
         self.bands.axes(&self.file, axis, params)
     }
 
-    /// The grid's bands as one batch (`gridBands`, see the module's documentation).
-    pub fn grid_bands(&mut self, epoch: u32, keys: &[u32], dpr: f64, icons: u32, tiles: &[String]) -> Result<Vec<u8>, String> {
-        self.bands.bands(Source { file: &self.file, revision: self.revision }, epoch, keys, dpr, icons, tiles)
+    /// The grid's bands as one batch (`gridBands`, see the module's documentation), drafts when
+    /// `draft`, with the resources page session `session` does not hold yet.
+    pub fn grid_bands(&mut self, epoch: u32, keys: &[u32], dpr: f64, session: u32, draft: bool) -> Result<Vec<u8>, String> {
+        self.bands.bands(Source { file: &self.file, revision: self.revision }, epoch, keys, dpr, session, draft)
     }
 
     /// What each linear row of the laid-out grid is (`gridRows`, see `Bands::rows_bytes`).
@@ -899,12 +1092,11 @@ mod web {
         }
 
         /// The bands `keys` (layer, column band, row band triples) of arrangement `epoch` at
-        /// `dpr`, with the icons from id `icons` on and the emoji tiles not in `tiles` (a JSON
-        /// list of `atlas:size:dpr`), as one batch.
+        /// `dpr` (drafts when `draft`), with the resources page session `session` does not hold
+        /// yet, as one batch.
         #[wasm_bindgen(js_name = gridBands)]
-        pub fn grid_bands(&mut self, epoch: u32, keys: &[u32], dpr: f64, icons: u32, tiles: &str) -> Result<Vec<u8>, JsError> {
-            let tiles: Vec<String> = serde_json::from_str(tiles).map_err(|e| error(e.to_string()))?;
-            self.0.grid_bands(epoch, keys, dpr, icons, &tiles).map_err(error)
+        pub fn grid_bands(&mut self, epoch: u32, keys: &[u32], dpr: f64, session: u32, draft: bool) -> Result<Vec<u8>, JsError> {
+            self.0.grid_bands(epoch, keys, dpr, session, draft).map_err(error)
         }
 
         /// What each linear row of the laid-out grid is: a record, a group header or an add row.

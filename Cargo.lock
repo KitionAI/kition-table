@@ -1396,7 +1396,6 @@ dependencies = [
  "kition-table-grid",
  "kition-table-import",
  "kition-table-picture",
- "kition-tessera-icons",
  "png 0.17.16",
  "schemars",
  "serde",

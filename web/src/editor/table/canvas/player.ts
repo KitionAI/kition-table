@@ -6,7 +6,8 @@
  * - a snapped `RECT`, a `TOFU` box, a `CLIP`, a line's ends and a text run's baseline go to the
  *   device pixel edge `round((v - o) * dpr)` ([`snap`]); a line of `LINES` is the one device pixel row or column
  *   `floor((pos - o) * dpr)` ([`linePixel`]), one device pixel thick at every ratio;
- * - an `EMOJI` is the engine's tile, put at its snapped pen position;
+ * - an `EMOJI` and an `ICON` are the engine's tiles, put at the snapped pen position and the
+ *   snapped top left of the icon's box: the browser strokes no path;
  * - everything else is drawn at its exact position, antialiased.
  *
  * `o` is the canvas origin in document pixels. A text op is drawn with `ctx.font` naming its one
@@ -16,7 +17,7 @@
  */
 import { Align, Axis, type DisplayList, Fit, Opcode } from './displayList'
 import { FAMILIES, type GridFonts } from './gridFonts'
-import type { GridResources } from './resources'
+import { type GridResources, packedColor } from './resources'
 
 /** The device pixel edge of the document coordinate `v` on a canvas whose origin is `origin`. */
 export function snap(v: number, origin: number, dpr: number): number {
@@ -40,7 +41,7 @@ export type PlayTarget = {
   dpr: number
 }
 
-/** What a play left out: runs in faces still loading, emoji tiles not here yet. */
+/** What a play left out: runs in faces still loading, icon and emoji tiles not here yet. */
 export type PlayResult = { missingFaces: number; missingTiles: number }
 
 export function play(target: PlayTarget, list: DisplayList, resources: GridResources, fonts: GridFonts | null): PlayResult {
@@ -176,25 +177,13 @@ export function play(target: PlayTarget, list: DisplayList, resources: GridResou
         break
       }
       case Opcode.Icon: {
-        const icon = resources.icon(op.icon)
-        if (!icon) break
-        const scale = op.size / icon.grid
-        ctx.setTransform(dpr * scale, 0, 0, dpr * scale, (op.x - ox) * dpr, (op.y - oy) * dpr)
-        space = 0
-        const color = colors[op.paint]
-        setFill(color)
-        ctx.strokeStyle = color
-        ctx.lineWidth = op.stroke
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-        for (const path of icon.paths) {
-          if (op.solid) ctx.fill(path)
-          ctx.stroke(path)
+        const tile = resources.icon(op.icon, op.size, op.stroke, op.solid, packedColor(list.rgba, op.paint), dpr)
+        if (!tile) {
+          result.missingTiles += 1
+          break
         }
-        for (const path of icon.fills) {
-          ctx.fill(path)
-          ctx.stroke(path)
-        }
+        toDevice()
+        ctx.drawImage(tile.image, snap(op.x, ox, dpr) + tile.left, snap(op.y, oy, dpr) + tile.top)
         break
       }
       case Opcode.Image: {

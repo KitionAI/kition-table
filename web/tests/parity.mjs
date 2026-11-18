@@ -7,7 +7,7 @@
 // and frozen views, light and dark, a changed brand color, at device pixel ratios 1 and 2 and at two
 // scroll positions. For each band the viewport shows, `gridBands` gives the list the page plays into
 // an offscreen canvas, and `gridRaster` gives the engine's pixels of the same list. Pixels are
-// compared by region, with masks the list itself gives (TEXT boxes, curved shapes, emoji and tofu,
+// compared by region, with masks the list itself gives (TEXT boxes, curved shapes, the engine's tiles (emoji, icons) and tofu,
 // and the flat rest), at the tolerances the case table.editor.grid/parity holds (calibrated on macOS
 // in spike TG-0c; cases/table.editor.grid/parity/expected/tiers.json). Text runs that cross a
 // band's edge are not compared.
@@ -70,7 +70,9 @@ async function fixture() {
     'A long title that will not fit into its column and is cut with an ellipsis at the end',
     'Mixed 中文 English 한국어 text',
   ]
-  const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DwnwEIGBgY/jMwMAAAJ/cE/HxWbUMAAAAASUVORK5CYII=', 'base64')
+  // A whole 4 x 4 PNG of one color: both sides decode it and draw it alike (a picture the engine
+  // cannot decode stays a placeholder there, while a browser may still show part of it).
+  const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR42mMIc70CRwzEcQBM0hbx9EnJcgAAAABJRU5ErkJggg==', 'base64')
   const blob = call('attachments.put', { tableId, name: 'swatch.png', mimeType: 'image/png', data: pixel.toString('base64') })
   const attachment = blob.attachment ?? blob
   const records = []
@@ -135,7 +137,7 @@ async function compareBands({ dpr, dump }) {
       continue
     }
     const rust = raster.subarray(8)
-    // Masks: 3 emoji and tofu, 1 text, 2 curves, 0 flat.
+    // Masks: 3 emoji, icons and tofu (the engine's tiles, the same box), 1 text, 2 curves, 0 flat.
     const mask = new Uint8Array(W * H)
     const fill = (x0, y0, x1, y1, value, over) => {
       x0 = Math.max(0, Math.floor(x0))
@@ -151,10 +153,14 @@ async function compareBands({ dpr, dump }) {
     const dx = (v) => (v - h.x) * dpr
     const dy = (v) => (v - h.y) * dpr
     const runs = []
+    const { packedColor } = await import('/src/editor/table/canvas/resources.ts')
     for (const op of band.ops) {
-      if (op.op === Opcode.Emoji) {
-        // The tile's own pixels, where the page puts them (its snapped pen and offset).
-        const tile = view.resources.emoji(op.atlas, op.size, dpr)
+      if (op.op === Opcode.Emoji || op.op === Opcode.Icon) {
+        // The tile's own pixels, where the page puts them (its snapped pen or box and offset).
+        const tile =
+          op.op === Opcode.Emoji
+            ? view.resources.emoji(op.atlas, op.size, dpr)
+            : view.resources.icon(op.icon, op.size, op.stroke, op.solid, packedColor(band.rgba, op.paint), dpr)
         if (!tile) continue
         const alpha = tile.image.getContext('2d').getImageData(0, 0, tile.image.width, tile.image.height).data
         const left = Math.round(dx(op.x)) + tile.left
@@ -182,7 +188,6 @@ async function compareBands({ dpr, dump }) {
       const curve = op.op === Opcode.RRect || op.op === Opcode.RRectStroke || op.op === Opcode.Image
       // Text in a chip stays text: curves take only what no text box or tile took.
       if (curve) fill(dx(op.x) - 2, dy(op.y) - 2, dx(op.x + op.w) + 2, dy(op.y + op.h) + 2, 2, false)
-      else if (op.op === Opcode.Icon) fill(dx(op.x) - 2, dy(op.y) - 2, dx(op.x + op.size) + 2, dy(op.y + op.size) + 2, 2, false)
       else if (op.op === Opcode.Shadow) fill(dx(op.x - 3 * op.blur) - 2, dy(op.y - 3 * op.blur) - 2, dx(op.x + op.w + 3 * op.blur) + 2, dy(op.y + op.h + 3 * op.blur) + 2, 2, false)
     }
     const tiers = { flat: { n: 0, maxAbs: 0, diff0: 0, sq: 0 }, curve: { n: 0, maxAbs: 0, diff2: 0, sq: 0 }, glyphTile: { n: 0, maxAbs: 0, sq: 0 }, text: { n: 0, sq: 0 } }
@@ -219,15 +224,13 @@ async function compareBands({ dpr, dump }) {
     // The curved shape with the largest difference (for a failure's message).
     let worstCurve = null
     for (const op of band.ops) {
-      const w = op.op === Opcode.Icon ? op.size : op.w
-      const h2 = op.op === Opcode.Icon ? op.size : op.h
-      if (![Opcode.RRect, Opcode.RRectStroke, Opcode.Image, Opcode.Icon].includes(op.op)) continue
-      for (let y = Math.max(0, Math.floor(dy(op.y)) - 2); y < Math.min(H, Math.ceil(dy(op.y + h2)) + 2); y += 1)
-        for (let x = Math.max(0, Math.floor(dx(op.x)) - 2); x < Math.min(W, Math.ceil(dx(op.x + w)) + 2); x += 1) {
+      if (![Opcode.RRect, Opcode.RRectStroke, Opcode.Image].includes(op.op)) continue
+      for (let y = Math.max(0, Math.floor(dy(op.y)) - 2); y < Math.min(H, Math.ceil(dy(op.y + op.h)) + 2); y += 1)
+        for (let x = Math.max(0, Math.floor(dx(op.x)) - 2); x < Math.min(W, Math.ceil(dx(op.x + op.w)) + 2); x += 1) {
           if (mask[y * W + x] !== 2) continue
           const i = (y * W + x) * 4
           const m = Math.max(Math.abs(page[i] - rust[i]), Math.abs(page[i + 1] - rust[i + 1]), Math.abs(page[i + 2] - rust[i + 2]))
-          if (!worstCurve || m > worstCurve.m) worstCurve = { m, op: op.op, icon: op.icon, at: [x, y] }
+          if (!worstCurve || m > worstCurve.m) worstCurve = { m, op: op.op, at: [x, y] }
         }
     }
     const psnr = (sq, n) => (sq === 0 || n === 0 ? 99 : 10 * Math.log10((255 * 255) / (sq / (n * 3))))
@@ -349,6 +352,18 @@ try {
     await page.evaluate(() => window.__ktableGrid.view.allFonts())
     if (run.scroll) await page.evaluate(([x, y]) => window.__ktableGrid.view.scrollTo(x, y), run.scroll)
     await settled(page)
+    // The pictures the bands show, decoded by the page (the engine's raster decodes its own).
+    await page
+      .waitForFunction(
+        () => {
+          const { view } = window.__ktableGrid
+          return view.neededKeys().every((key) => (view.cache.peek(key)?.ops ?? []).every((op) => op.op !== 0x09 || view.resources.image(op.key)))
+        },
+        null,
+        { timeout: 10_000, polling: 50 },
+      )
+      .catch(() => console.log('INFO pictures not all decoded on the page after 10 s'))
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
     const result = await page.evaluate(compareBands, { dpr: run.dpr, dump: Boolean(process.env.PARITY_DUMP) })
     for (const band of result.bands) {
       for (const [kind, url] of Object.entries(band.images ?? {})) {
@@ -368,8 +383,8 @@ try {
     const curveShare = worst((band) => band.tiers.curve.diff2 / Math.max(1, band.tiers.curve.n))
     const curveMax = worst((band) => band.tiers.curve.maxAbs)
     const curveAt = ok.find((band) => band.tiers.curve.maxAbs === curveMax)?.worstCurve
-    step(`${label}: curves`, curveMax <= TIERS.curve.maxAbs && curveShare <= TIERS.curve.diff2Share, `max_abs ${curveMax}${curveMax > TIERS.curve.maxAbs && curveAt ? ` (op ${curveAt.op}${curveAt.icon !== undefined ? ` icon ${curveAt.icon}` : ''} at ${curveAt.at})` : ''}, > 2 ${(curveShare * 100).toFixed(2)}%`)
-    step(`${label}: emoji and tofu`, worst((band) => band.tiers.glyphTile.maxAbs) <= TIERS.glyphTile.maxAbs, `max_abs ${worst((band) => band.tiers.glyphTile.maxAbs)} over ${ok.reduce((sum, band) => sum + band.tiers.glyphTile.n, 0)} px`)
+    step(`${label}: curves`, curveMax <= TIERS.curve.maxAbs && curveShare <= TIERS.curve.diff2Share, `max_abs ${curveMax}${curveMax > TIERS.curve.maxAbs && curveAt ? ` (op ${curveAt.op} at ${curveAt.at})` : ''}, > 2 ${(curveShare * 100).toFixed(2)}%`)
+    step(`${label}: icon and emoji tiles, tofu`, worst((band) => band.tiers.glyphTile.maxAbs) <= TIERS.glyphTile.maxAbs, `max_abs ${worst((band) => band.tiers.glyphTile.maxAbs)} over ${ok.reduce((sum, band) => sum + band.tiers.glyphTile.n, 0)} px`)
     const segments = ok.flatMap((band) => band.segments)
     const edge = Math.max(0, ...segments.map((segment) => segment.edge))
     const centroid = Math.max(0, ...segments.map((segment) => segment.centroid))

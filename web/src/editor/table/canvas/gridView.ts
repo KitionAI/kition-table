@@ -9,6 +9,15 @@
  *   most `MAX_BANDS_PER_CALL` bands in it, the visible ones first, then one screen above and below
  *   and up to two ahead in the direction and speed of the scroll. A band not here yet is drawn as
  *   its skeleton (background and lines from the axes) until it arrives.
+ * - When the view jumps more than a screen a frame (the scroll bar dragged), nothing near the
+ *   viewport helps: the view asks, in one larger request (`MAX_BANDS_PER_JUMP`), for drafts of the
+ *   bands of the viewport where the scroll will be at the first frame the answer can be drawn in
+ *   (from the scroll's speed over the latest frames and how long the engine takes per band). A
+ *   draft (`DRAFT`: text measured from advances, no emoji) is several times cheaper; once the view
+ *   rests, the exact bands replace the drafts it shows.
+ * - Resources (icon and emoji tiles, pictures) come with the bands, once per session
+ *   (`GridResources.session`); the view decodes the pictures through its source (`image`), at most
+ *   at the engine's thumbnail size, and announces them to `onImages`.
  * - The real `devicePixelRatio` (not rounded up); the canvases are `round(css * dpr)` device pixels
  *   and are rebuilt when it changes, which drops the emoji tiles and every band.
  * - A scroll extent beyond what a browser lays out is mapped onto `MAX_SCROLL_PX` proportionally.
@@ -16,7 +25,7 @@
 import { type Area, Axes, type AxesInput, bandKeys, keyId } from './axes'
 import { decodeBatch, type ImageEntry } from './bandBatch'
 import { BandCache } from './bandCache'
-import { type BandKey, Layer } from './displayList'
+import { type BandKey, DRAFT, Layer } from './displayList'
 import { GridFonts } from './gridFonts'
 import type { OverlayStyle } from './overlay'
 import { play } from './player'
@@ -24,6 +33,18 @@ import { GridResources } from './resources'
 import type { GridRows } from './rows'
 
 export const MAX_BANDS_PER_CALL = 2
+/** The bands of one request when the view jumps (a predicted viewport and its margin). */
+export const MAX_BANDS_PER_JUMP = 18
+/** How many of the latest frames a jumping view's speed is fitted over. */
+const JUMP_FIT_FRAMES = 6
+/** How far a frame's time strays from an even beat (ms): a jumping view's prediction allows for it. */
+const JUMP_JITTER_MS = 0.5
+
+/**
+ * A jumping view: its speed (px per ms), its frames' interval, how long the frames its speed was
+ * fitted over span (ms), its latest frame's time, and where it will be `frames` frames on.
+ */
+type Jump = { v: number; frame: number; span: number; at: number; y: (frames: number) => number }
 /** The tallest or widest scroll extent the view lays out; larger grids map onto it. */
 export const MAX_SCROLL_PX = 15_000_000
 /** Scroll speed (CSS px per second) from which the view prefetches two screens ahead, not one. */
@@ -51,16 +72,19 @@ export type GridSource = {
   /** The axes of the arrangement now (`gridOpen`). */
   open(): Promise<GridOpened>
   /**
-   * `gridBands`: the bands `keys` of arrangement `epoch` at `dpr`, with the icons from id `icons` on
-   * and the emoji tiles not in `tiles` (`atlas:size:dpr`), as one batch (`bandBatch.ts`).
+   * `gridBands`: the bands `keys` of arrangement `epoch` at `dpr` (drafts when `draft`: text
+   * measured from advances, no emoji; flagged `DRAFT`), with the resources page session `session`
+   * does not hold yet, as one batch (`bandBatch.ts`).
    */
-  bands(epoch: number, keys: BandKey[], dpr: number, icons: number, tiles: string[]): Promise<Uint8Array>
+  bands(epoch: number, keys: BandKey[], dpr: number, session: number, draft: boolean): Promise<Uint8Array>
+  /** A picture the bands show (its url, and its size as shown or 0), decoded; null when it cannot be. */
+  image?(url: string, width: number, height: number): Promise<ImageBitmap | null>
 }
 
 /** The timings a performance test reads (`window.__ktableGridStats` on the development page). */
 export type GridStats = {
-  /** One entry per content frame: when, how long playing took, whether a band was a skeleton. */
-  frames: Array<{ at: number; playMs: number; skeleton: boolean; bytes: number }>
+  /** One entry per content frame: when, how long playing took, whether a band was a skeleton or a draft. */
+  frames: Array<{ at: number; playMs: number; skeleton: boolean; draft: boolean; bytes: number }>
   /** One entry per `gridBands` call: bands asked, round trip, bytes answered. */
   requests: Array<{ bands: number; ms: number; bytes: number }>
   /** When the first frame with every visible band's content was drawn (ms after the page's navigation started). */
@@ -95,6 +119,11 @@ export class GridView {
   private scrollY = 0
   private velocity = 0
   private lastScroll = { y: 0, at: 0 }
+  /** The latest scroll positions with their frames' times (for predicting a jumping view). */
+  private samples: Array<{ y: number; at: number }> = []
+  /** How long the engine takes per draft band, and per request beside the bands (ms; the first smoothed). */
+  private perDraft = 0.8
+  private readonly perRequest = 2
   private frame = 0
   private inFlight = false
   private received = 0
@@ -104,6 +133,8 @@ export class GridView {
   private readonly axesListeners = new Set<(opened: GridOpened) => void>()
   private readonly frameListeners = new Set<() => void>()
   private readonly imageListeners = new Set<(images: ImageEntry[]) => void>()
+  /** The pictures asked for (decoded or not), by image key. */
+  private readonly pictures = new Set<number>()
   /** What the latest `open` answered. */
   opened: GridOpened | null = null
   /** How many times the overlay canvas was drawn (the interaction tests count redraws). */
@@ -174,7 +205,24 @@ export class GridView {
     return () => this.frameListeners.delete(listener)
   }
 
-  /** Calls `listener` with the attachment pictures each batch of bands shows (to load them into `resources`); answers how to stop. */
+  /** Decodes the pictures the bands show (once each) and draws again as each one comes. */
+  private loadImages(entries: ImageEntry[]) {
+    const decode = this.source.image?.bind(this.source)
+    if (!decode) return
+    for (const entry of entries) {
+      if (this.pictures.has(entry.key) || this.resources.image(entry.key)) continue
+      this.pictures.add(entry.key)
+      decode(entry.url, entry.width, entry.height)
+        .then((image) => {
+          if (!image || this.destroyed) return
+          this.resources.setImage(entry.key, image)
+          this.invalidate()
+        })
+        .catch(() => undefined)
+    }
+  }
+
+  /** Calls `listener` with the attachment pictures each batch of bands shows; answers how to stop. */
   onImages(listener: (images: ImageEntry[]) => void): () => void {
     this.imageListeners.add(listener)
     return () => this.imageListeners.delete(listener)
@@ -212,9 +260,15 @@ export class GridView {
     this.onScroll()
   }
 
-  /** Whether every band the viewport shows is here (no skeleton). */
+  /** Whether every band the viewport shows is here, exact (no skeleton, no draft). */
   complete(): boolean {
-    return this.needed().every((key) => this.cache.has(key))
+    return this.needed().every((key) => this.exact(key))
+  }
+
+  /** Whether the exact band of `key` is here (not missing, not a draft). */
+  private exact(key: BandKey): boolean {
+    const list = this.cache.peek(key)
+    return !!list && (list.header.flags & DRAFT) === 0
   }
 
   /** Whether a `gridBands` request is on its way (the view fetches bands one request at a time). */
@@ -298,6 +352,13 @@ export class GridView {
     const quantize = (v: number) => Math.round(v * this.dpr) / this.dpr
     const y = quantize(this.scroller.scrollTop * map.y)
     const now = performance.now()
+    // The frame's time (scroll events run in a frame's rendering steps), else now.
+    const timeline = document.timeline?.currentTime
+    const frameAt = typeof timeline === 'number' ? timeline : now
+    const last = this.samples[this.samples.length - 1]
+    if (last && last.at === frameAt) last.y = y
+    else if (!last || last.y !== y) this.samples.push({ y, at: frameAt })
+    while (this.samples.length > 24 || (this.samples.length > 1 && frameAt - this.samples[0].at > 200)) this.samples.shift()
     const dt = now - this.lastScroll.at
     if (dt > 0 && dt < 250) this.velocity = ((y - this.lastScroll.y) / dt) * 1000
     else if (dt >= 250) this.velocity = 0
@@ -363,36 +424,167 @@ export class GridView {
     for (const keys of order)
       for (const key of keys) {
         const id = keyId(key)
-        if (seen.has(id) || this.cache.has(key)) continue
+        if (seen.has(id) || this.exact(key)) continue
         seen.add(id)
         out.push(key)
       }
     return out
   }
 
+  /**
+   * How a jumping view moves, when it moves more than a screen a frame (null otherwise). The
+   * position a frame shows was set in the frame before it, so the latest positions are fitted
+   * against the time of the frame before (speed and offset); the frames' beat is the mean of the
+   * latest 200 ms of frame intervals (a longer beat evens out each frame's uneven time). Without
+   * a steady fit (too few frames, a leap after another motion, frames out of step) the speed
+   * between the latest two frames stands in.
+   */
+  private jump(axes: Axes): Jump | null {
+    const samples = this.samples
+    const latest = samples[samples.length - 1]
+    const previous = samples[samples.length - 2]
+    if (!latest || !previous) return null
+    const gaps = samples.slice(1).map((sample, index) => sample.at - samples[index].at)
+    const middle = [...gaps].sort((a, b) => a - b)[gaps.length >> 1]
+    const even = gaps.filter((gap) => gap < 1.5 * middle)
+    const frame = even.reduce((sum, gap) => sum + gap, 0) / Math.max(1, even.length)
+    // A frame went by without a scroll: the view rests.
+    if (!(frame > 0) || performance.now() - latest.at > 1.5 * frame) return null
+    const screen = this.height - axes.headerHeight
+    // (time of the frame before, position) for the latest frames: the frame before is the sample
+    // before when the two are a beat apart, else a beat back (a frame that did not scroll).
+    const pairs: Array<[number, number]> = []
+    for (let i = samples.length - 1; i >= 0 && pairs.length < JUMP_FIT_FRAMES; i -= 1) {
+      const before = samples[i - 1]
+      const follows = before !== undefined && samples[i].at - before.at < 1.5 * frame
+      pairs.push([follows ? before.at : samples[i].at - frame, samples[i].y])
+      if (!follows) break
+    }
+    if (pairs.length >= 2) {
+      const meanAt = pairs.reduce((sum, [at]) => sum + at, 0) / pairs.length
+      const meanY = pairs.reduce((sum, [, y]) => sum + y, 0) / pairs.length
+      let covariance = 0
+      let variance = 0
+      for (const [at, y] of pairs) {
+        covariance += (at - meanAt) * (y - meanY)
+        variance += (at - meanAt) ** 2
+      }
+      const v = covariance / variance
+      const steady = pairs.every(([at, y]) => Math.abs(meanY + v * (at - meanAt) - y) <= (Math.abs(v) * frame) / 4)
+      if (Number.isFinite(v) && steady) {
+        if (Math.abs(v) * frame <= screen) return null
+        const span = pairs[0][0] - pairs[pairs.length - 1][0]
+        return { v, frame, span, at: latest.at, y: (frames) => meanY + v * (latest.at + (frames - 1) * frame - meanAt) }
+      }
+    }
+    const v = (latest.y - previous.y) / (latest.at - previous.at)
+    if (!Number.isFinite(v) || Math.abs(v) * frame <= screen) return null
+    return { v, frame, span: latest.at - previous.at, at: latest.at, y: (frames) => latest.y + v * frames * frame }
+  }
+
+  /**
+   * The missing bands of the viewport where a jumping view will be at the first frame after an
+   * answer can arrive, with a margin for the frames' uneven timing (a scroll position follows its
+   * frame's time).
+   */
+  private predicted(axes: Axes, jump: Jump): BandKey[] {
+    const maxY = Math.max(0, axes.height - this.height)
+    const left = this.scrollX + axes.bodyLeft
+    const right = this.scrollX + this.width
+    // The margin: a frame's uneven time, and the speed's own error carried `frames` frames on
+    // (larger when the speed was fitted over few frames).
+    const margin = (frames: number) => Math.abs(jump.v) * JUMP_JITTER_MS * (1 + (frames * jump.frame) / Math.max(jump.span, jump.frame))
+    // The missing bands around the viewport `frames` frames on, the nearest its middle first (a
+    // request too long leaves out the margin's far ends).
+    const keysAt = (frames: number) => {
+      const y = Math.min(maxY, Math.max(0, jump.y(frames)))
+      const around = margin(frames)
+      const middle = y + (axes.headerHeight + this.height) / 2
+      const distance = (key: BandKey) => {
+        const area = axes.bandArea(key)
+        return Math.abs(area.y + area.height / 2 - middle)
+      }
+      return this.keysFor(axes, y + axes.headerHeight - around, y + this.height + around, left, right)
+        .filter((key) => key.layer !== Layer.Header && key.layer !== Layer.HeaderFrozen)
+        .filter((key) => !this.cache.has(key))
+        .sort((a, b) => distance(a) - distance(b))
+    }
+    // The frame the answer can be drawn in depends on how many bands it holds: settle it twice.
+    let frames = 1
+    let keys = keysAt(frames)
+    for (let pass = 0; pass < 2; pass += 1) {
+      // When it arrives, with room for a slower answer than the latest ones (a late answer misses its frame).
+      const takes = this.perRequest + Math.min(keys.length, MAX_BANDS_PER_JUMP) * this.perDraft
+      const arrives = performance.now() + takes * 1.15 + 1
+      frames = Math.max(1, Math.ceil((arrives - jump.at) / jump.frame))
+      keys = keysAt(frames)
+    }
+    return keys.slice(0, MAX_BANDS_PER_JUMP)
+  }
+
+  /** Whether the view moved more than a screen in its latest frame, just now (a jump whose speed is not known yet). */
+  private leaping(axes: Axes): boolean {
+    const [before, latest] = this.samples.slice(-2)
+    if (!before || !latest) return false
+    const beat = latest.at - before.at
+    return performance.now() - latest.at < 1.5 * Math.min(beat, 17) && Math.abs(latest.y - before.y) > this.height - axes.headerHeight
+  }
+
   private request() {
     const axes = this.axes
     if (!axes || this.inFlight || this.destroyed) return
-    const keys = this.wanted().slice(0, MAX_BANDS_PER_CALL)
+    const jump = this.jump(axes)
+    // A leap with no speed yet: drafts of where it is now, cheap if it moves on, and shown at
+    // once if it rests (the exact bands follow).
+    const leap = !jump && this.leaping(axes)
+    const keys = jump
+      ? this.predicted(axes, jump)
+      : leap
+        ? this.needed()
+            .filter((key) => !this.cache.has(key))
+            .slice(0, MAX_BANDS_PER_JUMP)
+        : this.wanted().slice(0, MAX_BANDS_PER_CALL)
     if (!keys.length) return
+    const draft = jump !== null || leap
     this.inFlight = true
     const dpr = this.dpr
     const epoch = axes.epoch
     const started = performance.now()
-    const tiles = this.resources.emojiKeys()
+    const session = this.resources.session
     this.source
-      .bands(epoch, keys, dpr, this.resources.iconCount, tiles)
+      .bands(epoch, keys, dpr, session, draft)
       .then((bytes) => {
+        const ms = performance.now() - started
         const batch = decodeBatch(bytes)
-        this.stats?.requests.push({ bands: keys.length, ms: performance.now() - started, bytes: batch.bytes })
+        this.stats?.requests.push({ bands: keys.length, ms, bytes: batch.bytes })
+        if (draft) this.perDraft = 0.7 * this.perDraft + 0.3 * Math.max(0.1, (ms - this.perRequest) / keys.length)
         this.received += batch.bytes
-        for (const icon of batch.icons) this.resources.addIcon(icon.id, icon.data)
-        // Tiles are keyed by the ratio the page asked for (the batch holds it as an f32).
-        if (dpr === this.dpr) for (const tile of batch.emoji) this.resources.addEmoji({ ...tile, dpr })
+        const resources = batch.resources
+        if (resources) {
+          // Tiles are keyed by the ratio the page asked for (the table holds it as an f32). A
+          // ratio changed meanwhile, or a session renewed, gets them again in its own session.
+          if (dpr === this.dpr && session === this.resources.session) {
+            for (const tile of resources.icons) this.resources.addIcon(tile, dpr)
+            for (const tile of resources.emoji) this.resources.addEmoji(tile, dpr)
+          }
+          if (resources.images.length) {
+            this.loadImages(resources.images)
+            for (const listener of this.imageListeners) listener(resources.images)
+          }
+        }
         const keep = new Set(this.needed().map(keyId))
-        for (const list of batch.bands) if (this.axes && list.header.epoch === this.axes.epoch) this.cache.put(list, keep)
+        for (const list of batch.bands) {
+          if (!this.axes || list.header.epoch !== this.axes.epoch) continue
+          // A draft never takes an exact band's place.
+          if ((list.header.flags & DRAFT) !== 0 && this.exact(list.header.key)) continue
+          this.cache.put(list, keep)
+        }
       })
-      .catch((error: unknown) => console.error('grid: gridBands failed', error))
+      .catch((error: unknown) => {
+        // What the engine sent may not be here: ask for everything again.
+        this.resources.renewSession()
+        console.error('grid: gridBands failed', error)
+      })
       .finally(() => {
         this.inFlight = false
         this.invalidate()
@@ -411,6 +603,7 @@ export class GridView {
     ctx.fillStyle = this.skeleton.background
     ctx.fillRect(0, 0, this.content.width, this.content.height)
     let skeleton = false
+    let draft = false
     const needed = this.needed()
     for (const region of this.regions(axes)) {
       const clip = region.clip
@@ -424,8 +617,10 @@ export class GridView {
       for (const key of needed) {
         if (regionOf(key.layer) !== region.layer) continue
         const list = this.cache.get(key)
-        if (list) play({ ctx, x: region.ox, y: region.oy, dpr }, list, this.resources, this.fonts)
-        else {
+        if (list) {
+          if ((list.header.flags & DRAFT) !== 0) draft = true
+          play({ ctx, x: region.ox, y: region.oy, dpr }, list, this.resources, this.fonts)
+        } else {
           skeleton = true
           this.drawSkeleton(ctx, axes, key, region.ox, region.oy)
         }
@@ -434,8 +629,8 @@ export class GridView {
     }
     const playMs = performance.now() - started
     if (this.stats) {
-      this.stats.frames.push({ at, playMs, skeleton, bytes: this.received })
-      if (!skeleton && this.stats.firstContent === null) this.stats.firstContent = performance.now()
+      this.stats.frames.push({ at, playMs, skeleton, draft, bytes: this.received })
+      if (!skeleton && !draft && this.stats.firstContent === null) this.stats.firstContent = performance.now()
     }
     this.received = 0
     this.request()

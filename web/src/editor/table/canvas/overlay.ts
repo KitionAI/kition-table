@@ -36,12 +36,24 @@ export type OverlayStyle = {
   rangeWidth: number
 }
 
+/** A color as the engine writes the overlay's (`#rrggbb`, `rgba(r,g,b,a)`) in straight RGBA bytes. */
+export function cssRgba(color: string): [number, number, number, number] {
+  const hex = /^#([0-9a-f]{6})$/i.exec(color)
+  if (hex) {
+    const value = Number.parseInt(hex[1], 16)
+    return [(value >> 16) & 255, (value >> 8) & 255, value & 255, 255]
+  }
+  const parts = /^rgba?\(([^)]*)\)$/.exec(color)?.[1].split(',').map((part) => Number(part.trim()))
+  if (parts && parts.length >= 3 && parts.every(Number.isFinite)) return [parts[0], parts[1], parts[2], parts.length > 3 ? Math.round(parts[3] * 255) : 255]
+  return [0, 0, 0, 255]
+}
+
 /** A display list of `ops` over `colors`, to play on the overlay. */
 export function overlayList(colors: string[], ops: Op[]): DisplayList {
   return {
     header: { flags: 0, epoch: 0, theme: 0, resources: 0, key: { layer: Layer.View, colBand: 0, rowBand: 0 }, x: 0, y: 0, width: 0, height: 0 },
     colors,
-    rgba: new Uint8Array(0),
+    rgba: new Uint8Array(colors.flatMap(cssRgba)),
     ops,
     hits: [],
     bytes: 0,

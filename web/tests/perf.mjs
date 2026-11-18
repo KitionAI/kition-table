@@ -145,6 +145,8 @@ function summarize(name, run) {
     interval: { p50: quantile(gaps, 0.5), p95: quantile(gaps, 0.95), p99: quantile(gaps, 0.99), max: Math.max(0, ...gaps) },
     play: { p50: quantile(plays, 0.5), p95: quantile(plays, 0.95), max: Math.max(0, ...plays) },
     skeletonFrames: run.frames.filter((frame) => frame.skeleton).length,
+    // Frames that drew a draft band (no skeleton): shown, not a line.
+    draftFrames: run.frames.filter((frame) => frame.draft && !frame.skeleton).length,
     longestSkeleton: longestSkeleton(run.frames),
     frameBytesMax: Math.max(0, ...run.frames.map((frame) => frame.bytes)),
     bytesPerSecond: bytes / Math.max(0.001, run.seconds),
@@ -156,7 +158,7 @@ function summarize(name, run) {
   const f = (v) => v.toFixed(1)
   console.log(
     `${name}: interval p50 ${f(summary.interval.p50)} p95 ${f(summary.interval.p95)} p99 ${f(summary.interval.p99)} max ${f(summary.interval.max)} ms; play p95 ${f(summary.play.p95)} ms; ` +
-      `skeleton ${summary.skeletonFrames}/${run.frames.length} (longest ${summary.longestSkeleton}); frame bytes max ${summary.frameBytesMax}; ${f(summary.bytesPerSecond / 1024)} KB/s; ` +
+      `skeleton ${summary.skeletonFrames}/${run.frames.length} (longest ${summary.longestSkeleton}), draft ${summary.draftFrames}; frame bytes max ${summary.frameBytesMax}; ${f(summary.bytesPerSecond / 1024)} KB/s; ` +
       `${summary.requests} requests, rtt p95 ${f(summary.roundTrip.p95)} ms; band ${f(run.worker.p95)} ms p95 (${run.worker.count} made)`,
   )
   return summary
@@ -201,7 +203,8 @@ try {
       const p95 = (values) => [...values].sort((x, y) => x - y)[Math.round((values.length - 1) * 0.95)]
       const run = async () => {
         const before = JSON.parse(await engine.invoke('gridStats')).bands.count
-        for (const key of keys) await engine.invoke('gridBands', axes.epoch, new Uint32Array(key), 2, 1 << 30, '[]')
+        // Session 0 is not the page's (its own is random): the page's resources are left as they are.
+        for (const key of keys) await engine.invoke('gridBands', axes.epoch, new Uint32Array(key), 2, 0, false)
         const after = JSON.parse(await engine.invoke('gridStats')).bands
         const made = after.ms.slice(after.ms.length - (after.count - before))
         return { count: made.length, p95: p95(made) }

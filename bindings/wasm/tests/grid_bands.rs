@@ -1,14 +1,15 @@
 //! The editor's grid in bands (cases table.editor.grid/bands and table.editor.grid/band-raster):
 //! the axes `gridAxes` lays out from the arrangement `gridOpen` answers, and the bands
 //! `gridBands` answers for them, each a display list of its own area, clipped to it, with the
-//! icons and emoji tiles it uses; `gridRaster` draws a band at the device size.
+//! resources it uses (icon and emoji tiles, the pictures' urls and sizes) in one resource table,
+//! each once per page session; `gridRaster` draws a band at the device size.
 
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
 use std::path::PathBuf;
 
 use kition_kit::KitDocument;
-use kition_table_display::{DisplayList, Layer, Op, decode};
+use kition_table_display::{DisplayList, Entry, IconStyle, Layer, Op, decode, decode_resources};
 use kition_table_kit::TableDocument;
 use serde_json::{Value, json};
 
@@ -81,7 +82,7 @@ fn axes(doc: &mut TableDocument, table_id: i64, view: i64, theme: &str) -> Value
 /// A batch's items: (kind, payload).
 fn items(bytes: &[u8]) -> Vec<(u8, Vec<u8>)> {
     assert_eq!(&bytes[..4], b"KTDB");
-    assert_eq!(u16::from_le_bytes([bytes[4], bytes[5]]), 1);
+    assert_eq!(u16::from_le_bytes([bytes[4], bytes[5]]), 2);
     let count = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
     let mut at = 12;
     let mut out = Vec::new();
@@ -96,6 +97,14 @@ fn items(bytes: &[u8]) -> Vec<(u8, Vec<u8>)> {
 
 fn lists(batch: &[(u8, Vec<u8>)]) -> Vec<DisplayList> {
     batch.iter().filter(|(kind, _)| *kind == 1).map(|(_, bytes)| decode(bytes).unwrap()).collect()
+}
+
+/// The entries of a batch's resource table (at most one, after the bands).
+fn entries(batch: &[(u8, Vec<u8>)]) -> Vec<Entry> {
+    let tables: Vec<&Vec<u8>> = batch.iter().filter(|(kind, _)| *kind == 2).map(|(_, bytes)| bytes).collect();
+    assert!(tables.len() <= 1, "one resource table");
+    assert!(batch.iter().skip_while(|(kind, _)| *kind == 1).all(|(kind, _)| *kind == 2), "the table after the bands");
+    tables.first().map(|bytes| decode_resources(bytes).unwrap().entries).unwrap_or_default()
 }
 
 #[test]
@@ -128,7 +137,7 @@ fn every_band_draws_its_own_area_clipped_with_the_resources_it_uses() {
     let answer = axes(&mut doc, table_id, grid, "light");
     let epoch = answer["epoch"].as_u64().unwrap() as u32;
     let keys = [0, 0, 0, 1, 0, 0, 4, 0, 0, 2, 0, 0, 3, 0, 0, 0, 0, 1, 0, 0, 9];
-    let batch = items(&doc.grid_bands(epoch, &keys, 2.0, 0, &[]).unwrap());
+    let batch = items(&doc.grid_bands(epoch, &keys, 2.0, 7, false).unwrap());
     let bands = lists(&batch);
     // Row band 9 is past the 71 rows: left out.
     assert_eq!(bands.len(), 6);
@@ -164,23 +173,131 @@ fn every_band_draws_its_own_area_clipped_with_the_resources_it_uses() {
     assert!(frozen.ops.iter().any(|op| matches!(op, Op::Tofu { .. })));
     let emoji: Vec<u32> = frozen.ops.iter().filter_map(|op| if let Op::Emoji { atlas, .. } = op { Some(*atlas) } else { None }).collect();
     assert!(!emoji.is_empty());
-    let tiles: Vec<&Vec<u8>> = batch.iter().filter(|(kind, _)| *kind == 3).map(|(_, bytes)| bytes).collect();
+    let sent = entries(&batch);
+    let tiles: Vec<&Entry> = sent.iter().filter(|entry| matches!(entry, Entry::Emoji { .. })).collect();
     assert_eq!(tiles.len(), 1, "one tile for the one emoji at one size");
-    let (width, height) = (u32::from_le_bytes(tiles[0][12..16].try_into().unwrap()), u32::from_le_bytes(tiles[0][16..20].try_into().unwrap()));
-    assert_eq!(tiles[0].len(), 28 + (width * height * 4) as usize);
-    // Every icon a band names is in the batch, from id 0 on.
-    let icons: Vec<u16> = batch.iter().filter(|(kind, _)| *kind == 2).map(|(_, bytes)| u16::from_le_bytes([bytes[0], bytes[1]])).collect();
-    let used: Vec<u16> =
-        bands.iter().flat_map(|list| list.ops.iter().filter_map(|op| if let Op::Icon { icon, .. } = op { Some(*icon) } else { None })).collect();
-    assert!(!used.is_empty() && used.iter().all(|id| icons.contains(id)));
-    let data: Value = serde_json::from_slice(&batch.iter().find(|(kind, _)| *kind == 2).unwrap().1[4..]).unwrap();
-    assert_eq!(data["grid"], json!(24.0));
-    assert!(data["paths"].is_array() && data["fills"].is_array());
+    let Entry::Emoji { atlas, size, dpr, tile } = tiles[0] else { unreachable!() };
+    assert_eq!((*atlas, *size, *dpr), (emoji[0], 13.0, 2.0));
+    assert_eq!(tile.rgba.len(), (tile.width * tile.height * 4) as usize);
+    // Every icon a band names is in the batch as its tile, in the band's style and color.
+    let used: Vec<(u16, IconStyle)> = bands
+        .iter()
+        .flat_map(|list| {
+            list.ops.iter().filter_map(|op| match op {
+                Op::Icon { icon, size, stroke, paint, solid, .. } => {
+                    Some((*icon, IconStyle { size: *size, stroke: *stroke, solid: *solid, paint: list.color(*paint) }))
+                }
+                _ => None,
+            })
+        })
+        .collect();
+    assert!(!used.is_empty());
+    for (id, style) in &used {
+        assert!(
+            sent.iter().any(|entry| matches!(entry, Entry::Icon { id: sent, style: was, dpr: 2.0, .. } if sent == id && was == style)),
+            "icon {id} {style:?} is sent"
+        );
+    }
+    for entry in &sent {
+        if let Entry::Icon { id, style, tile, .. } = entry {
+            assert_eq!(tile.rgba.len(), (tile.width * tile.height * 4) as usize);
+            assert!(tile.rgba.as_chunks::<4>().0.iter().any(|px| px[3] > 0), "icon {id} {style:?} has its pixels");
+        }
+    }
 
-    // Asked again with what the page holds: no icon and no tile again.
-    let known = vec![format!("{}:13:2", emoji[0])];
-    let again = items(&doc.grid_bands(epoch, &keys[3..6], 2.0, u32::try_from(icons.len()).unwrap(), &known).unwrap());
+    // Asked again in the same session: no icon and no tile again; a new session gets them again.
+    let again = items(&doc.grid_bands(epoch, &keys[3..6], 2.0, 7, false).unwrap());
     assert!(again.iter().all(|(kind, _)| *kind == 1), "{:?}", again.iter().map(|(kind, _)| kind).collect::<Vec<_>>());
+    let other = items(&doc.grid_bands(epoch, &keys[3..6], 2.0, 8, false).unwrap());
+    assert!(entries(&other).iter().any(|entry| matches!(entry, Entry::Icon { .. })), "a new session holds nothing");
+    // At another ratio the same session gets the tiles at that ratio.
+    let denser = items(&doc.grid_bands(epoch, &keys[3..6], 1.5, 8, false).unwrap());
+    let denser = entries(&denser);
+    assert!(!denser.is_empty() && denser.iter().all(|entry| matches!(entry, Entry::Icon { dpr: 1.5, .. } | Entry::Emoji { dpr: 1.5, .. })));
+}
+
+/// A PNG of `width` x `height` pixels of one color.
+fn png(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, width, height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().unwrap();
+    writer.write_image_data(&rgba.repeat((width * height) as usize)).unwrap();
+    writer.finish().unwrap();
+    bytes
+}
+
+#[test]
+fn pictures_have_their_proportions_and_the_page_gets_their_urls_and_sizes() {
+    use base64::Engine as _;
+    let (mut doc, table_id, grid, _) = document();
+    let files = call(&mut doc, "fields.create", json!({ "tableId": table_id, "title": "Files", "type": "attachment" }));
+    let files = if files["field"].is_object() { files["field"].clone() } else { files };
+    let data = base64::engine::general_purpose::STANDARD.encode(png(40, 20, [200, 30, 30, 255]));
+    let put = call(&mut doc, "attachments.put", json!({ "tableId": table_id, "name": "wide.png", "mimeType": "image/png", "data": data }));
+    let attachment = if put["attachment"].is_object() { put["attachment"].clone() } else { put };
+    let first = call(&mut doc, "records.list", json!({ "tableId": table_id, "limit": 1 }))["items"][0]["id"].clone();
+    call(
+        &mut doc,
+        "records.update",
+        json!({ "tableId": table_id, "recordId": first, "values": { files["name"].as_str().unwrap(): [attachment.clone()] } }),
+    );
+    let answer = axes(&mut doc, table_id, grid, "light");
+    let epoch = answer["epoch"].as_u64().unwrap() as u32;
+    let strips = answer["columns"].as_array().unwrap().iter().filter(|column| column["frozen"] == false).count();
+    let keys: Vec<u32> = (0..u32::try_from(strips).unwrap()).flat_map(|strip| [0, strip.min(1), 0]).take(6).collect();
+    let batch = items(&doc.grid_bands(epoch, &keys, 2.0, 1, false).unwrap());
+    let image = lists(&batch)
+        .iter()
+        .flat_map(|list| list.ops.iter().filter_map(|op| if let Op::Image { key, w, h, .. } = op { Some((*key, *w, *h)) } else { None }))
+        .next()
+        .expect("the picture's thumbnail");
+    // A 2:1 picture is a 2:1 thumbnail, as tall as the row allows.
+    assert_eq!(image.1, image.2 * 2.0, "{image:?}");
+    let url = attachment["url"].as_str().map(str::to_owned).unwrap_or_else(|| format!("kition-blob:{}", attachment["sha256"].as_str().unwrap()));
+    assert!(
+        entries(&batch).contains(&Entry::Image { key: image.0, width: 40, height: 20, source: url }),
+        "the page gets the picture's url and size: {:?}",
+        entries(&batch).iter().filter(|entry| matches!(entry, Entry::Image { .. })).collect::<Vec<_>>()
+    );
+    // The engine's raster of that band shows the picture, decoded as the headless picture does.
+    let band = lists(&batch).into_iter().find(|list| list.ops.iter().any(|op| matches!(op, Op::Image { .. }))).unwrap();
+    let key = band.header.key;
+    let raster = doc.grid_raster(epoch, [key.layer as u32, u32::from(key.col_band), key.row_band], 1.0).unwrap();
+    let width = u32::from_le_bytes(raster[0..4].try_into().unwrap()) as usize;
+    let Some(Op::Image { x, y, w, h, .. }) = band.ops.iter().find(|op| matches!(op, Op::Image { .. })) else { unreachable!() };
+    let (cx, cy) = ((x + w / 2.0 - band.header.origin.0) as usize, (y + h / 2.0 - band.header.origin.1) as usize);
+    assert_eq!(&raster[8 + 4 * (cy * width + cx)..][..4], &[200, 30, 30, 255]);
+}
+
+#[test]
+fn a_draft_is_the_band_measured_from_advances_and_counted_apart() {
+    let (mut doc, table_id, grid, _) = document();
+    let answer = axes(&mut doc, table_id, grid, "light");
+    let epoch = answer["epoch"].as_u64().unwrap() as u32;
+    let keys = [0, 0, 0, 1, 0, 0, 4, 0, 0];
+    let exact = lists(&items(&doc.grid_bands(epoch, &keys, 2.0, 1, false).unwrap()));
+    let before = doc.grid_stats()["bands"].clone();
+    let draft = lists(&items(&doc.grid_bands(epoch, &keys, 2.0, 1, true).unwrap()));
+    assert_eq!(exact.len(), draft.len());
+    for (exact, draft) in exact.iter().zip(&draft) {
+        assert_eq!((exact.header.flags, draft.header.flags), (0, kition_table_display::DRAFT));
+        assert_eq!((draft.header.key, draft.header.origin, draft.header.size), (exact.header.key, exact.header.origin, exact.header.size));
+        let kinds = |list: &DisplayList| list.hits.iter().map(|hit| (hit.kind, hit.col, hit.row)).collect::<Vec<_>>();
+        assert_eq!(kinds(draft), kinds(exact), "{:?}: the same parts", draft.header.key);
+        assert_eq!(
+            draft.ops.iter().filter(|op| matches!(op, Op::Text { .. })).count() > 0,
+            exact.ops.iter().filter(|op| matches!(op, Op::Text { .. })).count() > 0,
+            "{:?}: text drawn",
+            draft.header.key
+        );
+        assert!(draft.ops.iter().all(|op| !matches!(op, Op::Emoji { .. })), "{:?}: no emoji in a draft", draft.header.key);
+    }
+    // Drafts are timed apart from the exact bands.
+    let after = doc.grid_stats()["bands"].clone();
+    assert_eq!(after["count"], before["count"]);
+    assert_eq!(after["drafts"].as_u64().unwrap(), before["drafts"].as_u64().unwrap() + 3);
 }
 
 #[test]
@@ -188,8 +305,8 @@ fn a_band_of_another_arrangement_is_refused() {
     let (mut doc, table_id, grid, _) = document();
     let answer = axes(&mut doc, table_id, grid, "light");
     let epoch = answer["epoch"].as_u64().unwrap() as u32;
-    assert!(doc.grid_bands(epoch + 1, &[0, 0, 0], 1.0, 0, &[]).unwrap_err().contains("not"));
-    assert!(doc.grid_bands(epoch, &[7, 0, 0], 1.0, 0, &[]).unwrap_err().contains("band key"));
+    assert!(doc.grid_bands(epoch + 1, &[0, 0, 0], 1.0, 0, false).unwrap_err().contains("not"));
+    assert!(doc.grid_bands(epoch, &[7, 0, 0], 1.0, 0, false).unwrap_err().contains("band key"));
 }
 
 #[test]

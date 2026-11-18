@@ -1,8 +1,9 @@
 /**
  * The grid's `GridSource` over the kit's engine (`KitEngine.invoke`, a Worker): the arrangement
  * (`gridOpen`, `kition-table-arrange`), handed back to the engine to lay out its rows and columns
- * (`gridAxes`, with the overlay's style and the group headers' ids), what each linear row is (`gridRows`), and the bands
- * (`gridBands`). Typed arrays come back transferred, without a copy.
+ * (`gridAxes`, with the overlay's style and the group headers' ids), what each linear row is (`gridRows`), the bands
+ * (`gridBands`), and the pictures the bands show (`attachments.read` for a blob the document holds, or a `data:` url;
+ * the kit loads nothing from the network). Typed arrays come back transferred, without a copy.
  */
 import type { KitEngine } from '@kition/kit-editor'
 import type { AxesInput } from './axes'
@@ -10,6 +11,11 @@ import type { BandKey } from './displayList'
 import type { GridGroup, GridOpened, GridSource, Skeleton } from './gridView'
 import type { OverlayStyle } from './overlay'
 import { GridRows } from './rows'
+
+/** An attachment url naming a blob the document holds. */
+const BLOB_URL = /^kition-blob:([0-9a-f]{64})$/
+/** The longest side of a picture's thumbnail, as the engine decodes it (`THUMBNAIL` in bindings/wasm/src/bands.rs). */
+const THUMBNAIL = 384
 
 /** What the editor arranges and how it draws it. */
 export type GridTarget = {
@@ -46,10 +52,23 @@ export function engineSource(engine: KitEngine, initial: GridTarget): EngineSour
       const { skeleton, overlay, groups, ...axes } = answer
       return { axes, skeleton, overlay, rows, groups }
     },
-    bands(epoch: number, keys: BandKey[], dpr: number, icons: number, tiles: string[]): Promise<Uint8Array> {
+    async image(url: string, width: number, height: number): Promise<ImageBitmap | null> {
+      const hash = BLOB_URL.exec(url.trim())?.[1]
+      let blob: Blob | null = null
+      if (hash) {
+        const answer = JSON.parse(await engine.invoke<string>('call', 'attachments.read', JSON.stringify({ hash }))) as { result?: { data: string; mimeType: string } }
+        if (answer.result) blob = new Blob([Uint8Array.from(atob(answer.result.data), (c) => c.charCodeAt(0))], { type: answer.result.mimeType })
+      } else if (url.startsWith('data:')) blob = await (await fetch(url)).blob()
+      if (!blob) return null
+      // At most the engine's thumbnail size (its longest side THUMBNAIL), as the headless picture decodes it.
+      const scale = Math.min(1, THUMBNAIL / Math.max(width, height, 1))
+      const resize = width > 0 && height > 0 && scale < 1 ? { resizeWidth: Math.max(1, Math.round(width * scale)), resizeHeight: Math.max(1, Math.round(height * scale)), resizeQuality: 'high' as const } : {}
+      return createImageBitmap(blob, resize)
+    },
+    bands(epoch: number, keys: BandKey[], dpr: number, session: number, draft: boolean): Promise<Uint8Array> {
       const flat = new Uint32Array(keys.length * 3)
       keys.forEach((key, index) => flat.set([key.layer, key.colBand, key.rowBand], index * 3))
-      return engine.invoke<Uint8Array>('gridBands', epoch, flat, dpr, icons, JSON.stringify(tiles))
+      return engine.invoke<Uint8Array>('gridBands', epoch, flat, dpr, session, draft)
     },
   }
 }

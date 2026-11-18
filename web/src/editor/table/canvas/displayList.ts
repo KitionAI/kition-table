@@ -10,6 +10,8 @@
 
 export const MAGIC = 'KTDL'
 export const VERSION = 1
+/** A header flag: the list is a draft, made while the view jumps (text measured from advances, no emoji). */
+export const DRAFT = 1
 export const HEADER_BYTES = 56
 export const HIT_BYTES = 28
 

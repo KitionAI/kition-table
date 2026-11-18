@@ -7,8 +7,9 @@ intent: >-
   device pixels by the rules the engine's rasterizer uses; it finds rows by y over runs of heights
   and splits rows and scrolling columns into the engine's bands; its band cache drops the least
   recently used bands past its count or byte budget but never one the current frame needs, and
-  drops the bands of an old arrangement; and it reads gridBands batches of bands, icons and emoji
-  tiles.
+  drops the bands of an old arrangement; and it reads gridBands batches of bands and one resource
+  table (icon and emoji tiles, pictures' urls and sizes), refusing another version, a tile that is
+  not its size and a second table.
 layer: gate
 source:
   kind: synthetic
