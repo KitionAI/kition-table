@@ -154,7 +154,7 @@ impl Arrangement {
         let mut kept: Vec<(Row, Record)> = records
             .into_iter()
             .filter(|record| filter.as_ref().is_none_or(|filter| filter.keeps(&record.values)))
-            .map(|record| (order.row(&record, &[], Vec::new()), record))
+            .map(|record| (order.row(&record, &[]), record))
             .collect();
         kept.sort_by(|(a, _), (b, _)| order.cmp(a, b));
         kept.into_iter().map(|(_, record)| record).collect()

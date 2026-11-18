@@ -7,7 +7,7 @@ import type {
   DataDocumentsTransactUndoRedoResponse,
 } from '../../generated/data-documents-transact'
 import type { TableChangedParams } from '../../generated/table-changed'
-import type { GridAxis } from '../lib/gridAxis'
+import type { GridAxis, GridHitsParams } from '../lib/gridAxis'
 import type {
   BulkCopyRecordsPayload,
   BulkCopyRecordsResult,
@@ -145,12 +145,15 @@ export interface TableDataSource {
    * The engine's arrangement of the view the editor shows: the only place a view's filter, sorts,
    * groups and the search are applied (kition-table-arrange). `open` arranges a view and answers
    * its axis; `sync` brings the arrangement to the document's current state and answers the new
-   * axis, or null when it is the same; `subscribe` calls back after every change to the document
-   * (the editor's own writes too), when a `sync` may answer a new axis.
+   * axis, or null when it is the same; `hits` answers which cells of a run of the axis's rows
+   * hold the search (`[index into the axis's ids, field id]`), and fails for an axis that is no
+   * longer the latest; `subscribe` calls back after every change to the document (the editor's own
+   * writes too), when a `sync` may answer a new axis.
    */
   grid: {
     open(params: GridOpenParams): Promise<GridAxis>
     sync(): Promise<GridAxis | null>
+    hits(params: GridHitsParams): Promise<Array<[number, number]>>
     subscribe(listener: () => void): () => void
   }
 }

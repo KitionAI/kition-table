@@ -144,8 +144,8 @@ features:
     dimension: [function, performance]
     priority: P0
     status: has
-    paths: [crates/engine/arrange/**, bindings/wasm/src/grid.rs, bindings/wasm/src/grid_tests.rs, bindings/wasm/examples/grid_arrange.rs, web/src/editor/table/hooks/useTableArrangement.ts, web/src/editor/table/hooks/useTableEditorDerivedState.ts, web/src/editor/table/lib/gridAxis.ts, web/src/editor/table/filter/tree.ts]
-    cases: [table.views.arrangement/filter-operators, table.views.arrangement/groups-search-relocation, table.views.arrangement/engine-axis, table.views.arrangement/page-axis]
+    paths: [crates/engine/arrange/**, bindings/wasm/src/grid.rs, bindings/wasm/src/grid_tests.rs, bindings/wasm/examples/grid_arrange.rs, web/src/editor/table/hooks/useTableArrangement.ts, web/src/editor/table/hooks/useSearchHits.ts, web/src/editor/table/hooks/useTableEditorDerivedState.ts, web/src/editor/table/lib/gridAxis.ts, web/src/editor/table/filter/tree.ts]
+    cases: [table.views.arrangement/filter-operators, table.views.arrangement/groups-search-relocation, table.views.arrangement/engine-axis, table.views.arrangement/page-axis, table.views.arrangement/search-hits]
     since: "2026-11-18"
   - id: table.links
     title: "Links between records"

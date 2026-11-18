@@ -2,7 +2,7 @@
 //! follows the editor's settings, every kind of change to the document, and the agent's `read`.
 
 use kition_kit::KitDocument;
-use kition_table_arrange::Axis;
+use kition_table_arrange::{Axis, Hits};
 use serde_json::{Value, json};
 
 use crate::TableDocument;
@@ -51,6 +51,14 @@ impl Table {
         Axis::decode(&self.doc.grid_open(&params).unwrap()).unwrap()
     }
 
+    /// The hits of `count` rows of `axis` from `from`, in the title and the score.
+    fn hits(&mut self, axis: &Axis, from: u32, count: u32) -> Hits {
+        let fields = self.doc.call("documents.get", &Value::Null).unwrap()["result"]["tables"][0]["fields"].clone();
+        let id = |name: &str| fields.as_array().unwrap().iter().find(|field| field["name"] == json!(name)).unwrap()["id"].clone();
+        let params = json!({ "epoch": axis.epoch, "from": from, "count": count, "fieldIds": [id(&self.title), id(&self.score)] });
+        Hits::decode(&self.doc.grid_hits(&params).unwrap()).unwrap()
+    }
+
     fn sync(&mut self) -> Option<Axis> {
         let bytes = self.doc.grid_sync().unwrap();
         (!bytes.is_empty()).then(|| Axis::decode(&bytes).unwrap())
@@ -86,7 +94,37 @@ fn the_axis_follows_the_editor_s_settings_before_they_are_saved() {
     assert_eq!(t.titles(&filtered), ["b", "a"]);
     let searched = t.open(json!({ "query": "A" }));
     assert_eq!(t.titles(&searched), ["a"]);
-    assert_eq!(searched.hits.len(), 1);
+    // The one cell holding it, asked for apart (`gridHits`): the title of the one record.
+    let hits = t.hits(&searched, 0, 10);
+    assert_eq!((hits.count, hits.holds(0, 0), hits.holds(0, 1)), (1, true, false));
+}
+
+#[test]
+fn grid_hits_answer_the_cells_holding_the_search_in_a_run_of_rows_as_they_are_now() {
+    let mut t = table();
+    // "2" is only b's score.
+    let axis = t.open(json!({ "query": "2" }));
+    assert_eq!(t.titles(&axis), ["b"]);
+    let hits = t.hits(&axis, 0, 10);
+    assert_eq!((hits.epoch, hits.from, hits.count, hits.fields), (axis.epoch, 0, 1, 2));
+    assert_eq!((hits.holds(0, 0), hits.holds(0, 1)), (false, true));
+    // An edit that keeps the record where it is leaves the axis; its hits follow the edit.
+    let b = t.record_id("b");
+    t.doc.call("records.update", &json!({ "tableId": t.table, "recordId": b, "values": { t.title.clone(): "b2" } })).unwrap();
+    assert_eq!(t.sync(), None);
+    let hits = t.hits(&axis, 0, 10);
+    assert_eq!((hits.holds(0, 0), hits.holds(0, 1)), (true, true));
+    // Rows past the last: none.
+    assert_eq!(t.hits(&axis, 5, 10).count, 0);
+    // Without a search no cell holds it.
+    let plain = t.open(json!({}));
+    let hits = t.hits(&plain, 0, 10);
+    assert_eq!(hits.count, 3);
+    assert!((0..3).all(|row| !hits.holds(row, 0) && !hits.holds(row, 1)));
+    // An axis that is not the latest is refused.
+    let error = t.doc.grid_hits(&json!({ "epoch": axis.epoch, "from": 0, "count": 1, "fieldIds": [] })).unwrap_err();
+    assert!(error.contains("stale"), "{error}");
+    assert!(t.doc.grid_hits(&json!({ "epoch": plain.epoch, "from": 0, "count": 1 })).is_err());
 }
 
 #[test]

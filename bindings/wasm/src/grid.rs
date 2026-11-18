@@ -1,9 +1,9 @@
 //! The editor's arrangement (`kition-table-arrange`) over the open document: the extras
-//! `gridOpen`, `gridSync` and `gridStats`.
+//! `gridOpen`, `gridSync`, `gridHits` and `gridStats`.
 //!
 //! `gridOpen` arranges a view of a table for the editor (its settings as the editor holds them,
 //! its search, its collapsed groups) and answers the axis (`kition_table_arrange::axis`, format
-//! v1). The document then notes what every request and every imported change touches; `gridSync`
+//! v2). `gridHits` answers which cells of a run of its rows hold the search. The document then notes what every request and every imported change touches; `gridSync`
 //! brings the arrangement to the document's current state, moving only the records the changes
 //! touched, and answers the new axis, or no bytes when the axis is the same. A change to the
 //! table's fields, its records' positions, or the view's settings arranges it again; so does any
@@ -147,6 +147,28 @@ impl Grid {
             return Ok(self.emit());
         }
         Ok(Vec::new())
+    }
+
+    /// `gridHits`: `{epoch, from, count, fieldIds}`; which of the fields `fieldIds` hold the search
+    /// in the `count` rows of the axis `epoch` from the `from`th (hits format v1). An error when
+    /// `epoch` is not the latest axis: its rows are not this arrangement's.
+    pub(crate) fn hits(&mut self, file: &TableFile, params: &Value) -> Result<Vec<u8>, String> {
+        let number = |key: &str| params.get(key).and_then(Value::as_u64).ok_or_else(|| format!("invalid params: {key} is a whole number"));
+        let epoch = u32::try_from(number("epoch")?).map_err(|_| "invalid params: epoch is an axis's epoch".to_owned())?;
+        let (from, count) = (usize::try_from(number("from")?).unwrap_or(usize::MAX), usize::try_from(number("count")?).unwrap_or(usize::MAX));
+        let field_ids: Vec<i64> = params
+            .get("fieldIds")
+            .and_then(Value::as_array)
+            .and_then(|items| items.iter().map(Value::as_i64).collect())
+            .ok_or("invalid params: fieldIds lists field ids")?;
+        let session = self.session.as_ref().ok_or("no grid is open: call gridOpen first")?;
+        if epoch != self.epoch {
+            return Err(format!("stale: the axis {epoch} is not the latest ({})", self.epoch));
+        }
+        let watch = Stopwatch::start();
+        let hits = session.arranged.hits(file, epoch, from, count, &field_ids)?;
+        self.stats.hits.record(watch.elapsed_ms(), hits.count as usize);
+        Ok(hits.encode())
     }
 
     /// `gridStats`: how long arranging took.

@@ -69,7 +69,14 @@
         "paramsJson"
       ],
       "returns": "Uint8Array",
-      "description": "Arranges a view for the editor ({tableId, viewId?, config?, query?, collapsed?}): the axis (kition-table-arrange format v1: record ids in order, group headers with counts, search hits)."
+      "description": "Arranges a view for the editor ({tableId, viewId?, config?, query?, collapsed?}): the axis (kition-table-arrange format v2: record ids in order, group headers with counts)."
+    },
+    "gridHits": {
+      "params": [
+        "paramsJson"
+      ],
+      "returns": "Uint8Array",
+      "description": "Which cells of a run of the arrangement's rows hold the search ({epoch, from, count, fieldIds}): kition-table-arrange hits format v1, a bitmask over the fields per row; an error for an epoch that is not the latest."
     },
     "gridSync": {
       "params": [],

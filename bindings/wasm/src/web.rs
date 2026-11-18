@@ -48,7 +48,7 @@ impl WebDocument {
     }
 
     /// Arranges a view for the editor: `params` is JSON `{tableId, viewId?, config?, query?,
-    /// collapsed?}`; answers the axis (`kition-table-arrange`, format v1) as bytes.
+    /// collapsed?}`; answers the axis (`kition-table-arrange`, format v2) as bytes.
     #[wasm_bindgen(js_name = gridOpen)]
     pub fn grid_open(&mut self, params: &str) -> Result<Vec<u8>, JsError> {
         let params = kition_kit::parse_params(params).map_err(error)?;
@@ -60,6 +60,14 @@ impl WebDocument {
     #[wasm_bindgen(js_name = gridSync)]
     pub fn grid_sync(&mut self) -> Result<Vec<u8>, JsError> {
         self.0.grid_sync().map_err(error)
+    }
+
+    /// Which cells of a run of the arrangement's rows hold the search: `params` is JSON `{epoch,
+    /// from, count, fieldIds}`; answers the hits (`kition-table-arrange`, hits format v1) as bytes.
+    #[wasm_bindgen(js_name = gridHits)]
+    pub fn grid_hits(&mut self, params: &str) -> Result<Vec<u8>, JsError> {
+        let params = kition_kit::parse_params(params).map_err(error)?;
+        self.0.grid_hits(&params).map_err(error)
     }
 
     /// How long arranging took, as JSON (for performance tests).

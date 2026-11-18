@@ -2,7 +2,9 @@
 //! table, then moved record by record as edits change them.
 //!
 //! A whole arrangement reads only the cells it needs (the filter's, the groups' and the sorts'
-//! fields; every field while a search is on). After an edit only the records it touched are
+//! fields); a search reads each record's values as the JSON text the file holds, and parses the
+//! cells of the records it keeps only ([`Search`]). The cells holding the search are found for the
+//! rows the editor shows when it asks ([`Arranged::hits`]). After an edit only the records it touched are
 //! taken out and put back where the order places them (a binary search: the order is total, so
 //! this is where sorting everything again would put them). A change to the view, the fields or
 //! the records' positions, or more touched records than [`RELOCATE_LIMIT`], arranges again.
@@ -12,11 +14,12 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use kition_table_file::{Field, Record, TableFile};
 use serde_json::Value;
 
-use crate::axis::{Axis, GroupHeader};
+use crate::axis::{Axis, GroupHeader, Hits};
 use crate::filter::Filter;
 use crate::rows::{Order, Row};
+use crate::search::Search;
 use crate::settings::Arrangement;
-use crate::value::{display, js_json, same_value};
+use crate::value::{js_json, same_value};
 
 /// More touched records than this arrange the view again instead of moving them one by one.
 pub const RELOCATE_LIMIT: usize = 512;
@@ -35,16 +38,15 @@ pub fn group_id(values: &[Value]) -> String {
 #[derive(Clone, Debug)]
 pub struct Arranged {
     table_id: i64,
-    /// Every field, `(id, name)`: the search reads them all.
+    /// Every field, `(id, name)`: a record shows for the search when any of them holds it.
     fields: Vec<(i64, String)>,
     filter: Option<Filter>,
     order: Order,
     /// The names of the fields the view groups by, outermost first.
     groups: Vec<String>,
-    /// The search, lower-cased; empty for none.
-    needle: String,
-    /// The fields a whole arrangement reads (all of them while searching).
-    reads: Option<Vec<String>>,
+    search: Option<Search>,
+    /// The fields whose values a whole arrangement reads: the order's and the filter's.
+    reads: Vec<String>,
     rows: Vec<Row>,
     /// The row key of each shown record, by its id, and back.
     keys: HashMap<String, i64>,
@@ -58,26 +60,23 @@ impl Arranged {
         let filter = arrangement.compiled_filter(fields);
         let order = arrangement.order();
         let groups: Vec<String> = arrangement.groups.iter().map(|(field, _)| field.name.clone()).collect();
-        let needle = query.trim().to_lowercase();
-        let reads = needle.is_empty().then(|| {
-            let mut names: Vec<String> = Vec::new();
-            for name in order.names() {
-                if !names.iter().any(|known| known == name) {
-                    names.push(name.to_owned());
-                }
+        let search = Search::new(query, fields.iter().map(|field| field.name.clone()));
+        let mut reads: Vec<String> = Vec::new();
+        for name in order.names() {
+            if !reads.iter().any(|known| known == name) {
+                reads.push(name.to_owned());
             }
-            if let Some(filter) = &filter {
-                filter.fields(&mut names);
-            }
-            names
-        });
+        }
+        if let Some(filter) = &filter {
+            filter.fields(&mut reads);
+        }
         let mut arranged = Self {
             table_id,
             fields: fields.iter().map(|field| (field.id, field.name.clone())).collect(),
             filter,
             order,
             groups,
-            needle,
+            search,
             reads,
             rows: Vec::new(),
             keys: HashMap::new(),
@@ -89,15 +88,29 @@ impl Arranged {
 
     /// Arranges every record again.
     pub fn rebuild(&mut self, file: &TableFile) -> Result<(), String> {
-        let records = match &self.reads {
-            Some(names) => file.list_record_values(self.table_id, names).map_err(failed)?,
-            None => file.list_records(self.table_id).map_err(failed)?,
+        let records = match &self.search {
+            Some(search) => {
+                let mut total = 0;
+                let records = file
+                    .list_record_values_where(self.table_id, &self.reads, &mut |json| {
+                        total += 1;
+                        search.matches_json(json)
+                    })
+                    .map_err(failed)?;
+                self.total = total;
+                records
+            }
+            None => {
+                let records = file.list_record_values(self.table_id, &self.reads).map_err(failed)?;
+                self.total = records.len();
+                records
+            }
         };
-        self.total = records.len();
         self.keys.clear();
         let mut rows = Vec::with_capacity(records.len());
         for record in &records {
-            if let Some(row) = self.row(record) {
+            // The search kept these records already; they hold only the cells read.
+            if let Some(row) = self.row(record, false) {
                 self.keys.insert(record.row_key.clone(), record.id);
                 rows.push(row);
             }
@@ -107,26 +120,16 @@ impl Arranged {
         Ok(())
     }
 
-    /// `record` as a row, when the view and the search show it.
-    fn row(&self, record: &Record) -> Option<Row> {
+    /// `record` as a row, when the view shows it and, with `search`, the search does (`record`
+    /// whole then).
+    fn row(&self, record: &Record, search: bool) -> Option<Row> {
         if self.filter.as_ref().is_some_and(|filter| !filter.keeps(&record.values)) {
             return None;
         }
-        let hits: Vec<i64> = if self.needle.is_empty() {
-            Vec::new()
-        } else {
-            let hits: Vec<i64> = self
-                .fields
-                .iter()
-                .filter(|(_, name)| display(record.values.get(name)).to_lowercase().contains(&self.needle))
-                .map(|(id, _)| *id)
-                .collect();
-            if hits.is_empty() {
-                return None;
-            }
-            hits
-        };
-        Some(self.order.row(record, &self.groups, hits))
+        if search && self.search.as_ref().is_some_and(|found| !found.matches(&record.values)) {
+            return None;
+        }
+        Some(self.order.row(record, &self.groups))
     }
 
     /// Moves the records with `row_keys` (created, changed or deleted since the arrangement) to
@@ -152,7 +155,7 @@ impl Arranged {
         }
         let mut placed: Vec<i64> = Vec::new();
         for record in &records {
-            if let Some(row) = self.row(record) {
+            if let Some(row) = self.row(record, true) {
                 let at = self.rows.partition_point(|other| self.order.cmp(other, &row).is_lt());
                 self.rows.insert(at, row);
                 self.keys.insert(record.row_key.clone(), record.id);
@@ -163,8 +166,8 @@ impl Arranged {
         if before.len() != placed.len() || self.total != total {
             return Ok(true);
         }
-        // The same records are shown: the axis changed when one moved, or its group values or
-        // search hits did.
+        // The same records are shown: the axis changed when one moved, or its group values did.
+        // (Which of their cells hold the search is asked for apart: `hits`.)
         Ok(before.iter().any(|(at, old)| self.rows.get(*at) != Some(old)))
     }
 
@@ -218,7 +221,29 @@ impl Arranged {
                 group.count = u32_of(self.rows.len()) - group.at;
             }
         }
-        let hits = self.rows.iter().enumerate().flat_map(|(at, row)| row.hits.iter().map(move |field| (u32_of(at), *field))).collect();
-        Axis { epoch, total: u32_of(self.total), ids: self.ids().collect(), hits, groups }
+        Axis { epoch, total: u32_of(self.total), ids: self.ids().collect(), groups }
+    }
+
+    /// Which of the fields `field_ids` hold the search in the `count` shown records from the
+    /// `from`th (fewer past the last), read from the file as they are now; none without a search.
+    /// `epoch` names the axis the rows are of.
+    pub fn hits(&self, file: &TableFile, epoch: u32, from: usize, count: usize, field_ids: &[i64]) -> Result<Hits, String> {
+        let u32_of = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+        let rows = self.rows.get(from..).unwrap_or_default();
+        let rows = rows.get(..count.min(rows.len())).unwrap_or_default();
+        let mut hits = Hits::new(epoch, u32_of(from), u32_of(rows.len()), u32_of(field_ids.len()));
+        let Some(search) = &self.search else { return Ok(hits) };
+        let names: Vec<Option<&String>> =
+            field_ids.iter().map(|id| self.fields.iter().find(|(field, _)| field == id).map(|(_, name)| name)).collect();
+        for (at, row) in rows.iter().enumerate() {
+            // A record deleted since the arrangement holds nothing.
+            let Ok(record) = file.get_record(self.table_id, row.id) else { continue };
+            for (column, name) in names.iter().enumerate() {
+                if name.is_some_and(|name| search.holds(record.values.get(name))) {
+                    hits.set(at, column);
+                }
+            }
+        }
+        Ok(hits)
     }
 }

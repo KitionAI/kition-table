@@ -1303,6 +1303,7 @@ dependencies = [
  "chrono",
  "js-sys",
  "kition-table-file",
+ "serde",
  "serde_json",
 ]
 

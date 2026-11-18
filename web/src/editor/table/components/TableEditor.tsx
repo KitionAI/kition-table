@@ -283,7 +283,7 @@ function TableEditorBody({
     numericSummaries,
     primaryField,
     renderedGridRecords,
-    searchHits,
+    searchAxis,
     sortedAndFilteredRecords,
     visibleFields,
   } = useTableEditorDerivedState({
@@ -703,7 +703,7 @@ function TableEditorBody({
           resetScrollKey={`${document.id}:${activeTable.id}:${viewMode}`}
           rowHeight={resolveGridRowHeight(rowHeightKey)}
           freezeColumnCount={frozenColumnCount}
-          searchHits={searchHits}
+          searchAxis={searchAxis}
           onColumnFreeze={viewOnly(setFrozenColumnCount)}
           draggingRecordId={kanbanDraggingRecordId}
           dragOverRecordId={kanbanDragOverRecordId}

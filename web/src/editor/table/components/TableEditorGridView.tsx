@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useMemo, useRef } from 'react'
+import { forwardRef, useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type {
   ClipboardEvent as ReactClipboardEvent,
@@ -28,9 +28,12 @@ import {
   type IGroupPoint,
   type IPosition,
   type IRange,
+  type IRectangle,
   type IRowControlItem,
 } from '../grid'
 import { useGridAdapter } from '../grid/useGridAdapter'
+import { useSearchHits, type ShownRows } from '../hooks/useSearchHits'
+import type { GridAxis } from '../lib/gridAxis'
 import { useTableColumnWidths } from '../hooks/useTableColumnWidths'
 import { buildCellKey } from '../store/aiCellGenerationStore'
 import { serializeTableSelection } from '../lib/tableClipboard'
@@ -66,8 +69,8 @@ type GridViewProps = {
   resetScrollKey: string
   rowHeight?: number
   freezeColumnCount?: number
-  /** The cells holding the search, from the engine's arrangement. */
-  searchHits: Array<{ recordId: number; fieldId: number }>
+  /** The engine's arrangement while a search is on (asked for the cells holding the search), else null. */
+  searchAxis: GridAxis | null
   onColumnFreeze?: (count: number) => void
   onLoadWindow: (window: DataRecordWindow) => void
   onToggleAllSelected: () => void
@@ -105,7 +108,7 @@ export const GridView = forwardRef<IGridRef, GridViewProps>(function GridView(pr
     canReorderRows,
     rowHeight,
     freezeColumnCount,
-    searchHits: arrangedSearchHits,
+    searchAxis,
     onColumnFreeze,
     onToggleRecordSelected,
     onSelectCell,
@@ -415,12 +418,12 @@ export const GridView = forwardRef<IGridRef, GridViewProps>(function GridView(pr
     return controls
   }, [canReorderRows])
 
-  const searchHits = useMemo(() => {
-    const shown = new Set(visibleFields.map((field) => field.id))
-    return arrangedSearchHits
-      .filter((hit) => shown.has(hit.fieldId))
-      .map((hit) => ({ fieldId: String(hit.fieldId), recordId: String(hit.recordId) }))
-  }, [arrangedSearchHits, visibleFields])
+  const [shownRows, setShownRows] = useState<ShownRows | null>(null)
+  const handleVisibleRegionChanged = useCallback((region: IRectangle) => {
+    setShownRows((previous) => (previous?.from === region.y && previous.to === region.y + region.height ? previous : { from: region.y, to: region.y + region.height }))
+  }, [])
+  const visibleFieldIds = useMemo(() => visibleFields.map((field) => field.id), [visibleFields])
+  const searchHits = useSearchHits(searchAxis, shownRows, visibleFieldIds, sortedAndFilteredRecords)
 
   // Pick the canvas theme based on the current `<html>.dark` state. Memoised
   // so the prop identity stays stable across renders and only flips when the
@@ -440,6 +443,7 @@ export const GridView = forwardRef<IGridRef, GridViewProps>(function GridView(pr
         rowHeight={rowHeight}
         freezeColumnCount={freezeColumnCount}
         searchHitIndex={searchHits}
+        onVisibleRegionChanged={handleVisibleRegionChanged}
         aiOverlayCells={aiOverlayCells}
         groupPoints={groupPoints ?? undefined}
         groupCollection={groupCollection ?? undefined}

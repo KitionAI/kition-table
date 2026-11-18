@@ -19,6 +19,7 @@ import {
 } from '../lib/tableEditorShared'
 
 import type { IGridRef } from '../grid'
+import type { GridAxis } from '../lib/gridAxis'
 import { GridView } from './TableEditorGridView'
 import {
   CalendarView,
@@ -67,8 +68,8 @@ type TableEditorContentProps = {
   resetScrollKey: string
   rowHeight?: number
   freezeColumnCount?: number
-  /** The cells holding the search, from the engine's arrangement. */
-  searchHits: Array<{ recordId: number; fieldId: number }>
+  /** The engine's arrangement while a search is on (the grid asks it for the cells holding the search), else null. */
+  searchAxis: GridAxis | null
   onColumnFreeze?: (count: number) => void
   draggingRecordId: number | null
   dragOverRecordId: number | null
@@ -165,7 +166,7 @@ export const TableEditorContent = forwardRef<TableEditorHandle, TableEditorConte
       resetScrollKey,
       rowHeight,
       freezeColumnCount,
-      searchHits,
+      searchAxis,
       onColumnFreeze,
       draggingRecordId,
       dragOverRecordId,
@@ -318,7 +319,7 @@ export const TableEditorContent = forwardRef<TableEditorHandle, TableEditorConte
         resetScrollKey={resetScrollKey}
         rowHeight={rowHeight}
         freezeColumnCount={freezeColumnCount}
-        searchHits={searchHits}
+        searchAxis={searchAxis}
         onColumnFreeze={onColumnFreeze}
         onLoadWindow={onLoadWindow}
         onToggleAllSelected={onToggleAllSelected}

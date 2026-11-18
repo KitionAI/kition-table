@@ -553,9 +553,16 @@ impl TableDocument {
     /// Arranges a view for the editor (`gridOpen`): `{tableId, viewId?, config?, query?,
     /// collapsed?}`, where `config` is the view's config as the editor holds it, `query` its
     /// search and `collapsed` its collapsed group ids. Answers the axis
-    /// (`kition_table_arrange::axis`, format v1).
+    /// (`kition_table_arrange::axis`, format v2).
     pub fn grid_open(&mut self, params: &Value) -> Result<Vec<u8>, String> {
         self.grid.open(&self.file, params)
+    }
+
+    /// Which cells of a run of the editor's arrangement's rows hold its search (`gridHits`):
+    /// `{epoch, from, count, fieldIds}`; answers the hits (`kition_table_arrange::axis`, hits
+    /// format v1). An error for an epoch that is not the latest axis.
+    pub fn grid_hits(&mut self, params: &Value) -> Result<Vec<u8>, String> {
+        self.grid.hits(&self.file, params)
     }
 
     /// Brings the editor's arrangement to the document's current state (`gridSync`): the new axis,
@@ -564,7 +571,7 @@ impl TableDocument {
         self.grid.sync(&self.file)
     }
 
-    /// How long arranging took (`gridStats`): whole arrangements and relocations, each with its
+    /// How long arranging took (`gridStats`): whole arrangements, relocations and search hits, each with its
     /// count, total, last and longest milliseconds and the records of the last; the last axis's
     /// bytes; the current epoch and shown records; and the grid's bands (`bands`: how many were
     /// made, the latest ones' milliseconds, their bytes).

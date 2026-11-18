@@ -188,7 +188,7 @@ let bytes = document.save(None)?;
 | `crates/engine/file` | `kition-table-file`: the `.ktable` file, SQLite holding the document's KDM replica and its relational projection (derived values, history, blobs, dashboards) |
 | `crates/engine/api` | `kition-table-api`: the request layer, `handle(file, method, params)` |
 | `crates/engine/time` | `kition-time`: millisecond timestamps that build for wasm32 |
-| `crates/engine/arrange` | `kition-table-arrange`: the view model, which records a view shows and in what order (filter, sorts, groups, search), kept up to date edit by edit: the editor's views (extras `gridOpen`, `gridSync`, `gridStats`) and the agent's `read` |
+| `crates/engine/arrange` | `kition-table-arrange`: the view model, which records a view shows and in what order (filter, sorts, groups, search), kept up to date edit by edit: the editor's views (extras `gridOpen`, `gridSync`, `gridHits`, `gridStats`), the agent's `read` and the picture |
 | `crates/engine/ai-field` | `kition-table-ai`: AI fields' prompts and results; the host runs the model (`host/generate`) |
 | `crates/formats/import` | `kition-table-import`: CSV, TSV and XLSX import with type inference |
 | `crates/view/*` | The picture and the grid: fonts (`fonts`), the grid's layout (`grid`), its display list and rasterizer (`display`), the whole picture (`picture`) |

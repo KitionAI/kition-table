@@ -115,10 +115,8 @@ export function useTableEditorDerivedState({
     }
     return arranged
   }, [axis, recordsById])
-  const searchHits = useMemo(() => {
-    if (!axis) return []
-    return axis.hits.map(([row, fieldId]) => ({ recordId: axis.ids[row], fieldId }))
-  }, [axis])
+  // The arrangement the grid asks for the cells holding the search, while there is one.
+  const searchAxis = query.trim() ? axis : null
   const groupedRecords = useMemo(() => {
     const groups = new Map<string, DataRecord[]>()
     if (groupField?.type === 'single_select') {
@@ -207,7 +205,7 @@ export function useTableEditorDerivedState({
     numericSummaries,
     primaryField,
     renderedGridRecords,
-    searchHits,
+    searchAxis,
     sortedAndFilteredRecords,
     visibleFields,
   }

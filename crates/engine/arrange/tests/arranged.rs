@@ -148,9 +148,10 @@ fn search_keeps_records_with_any_field_holding_it_case_ignored() {
     assert_eq!(shown("apollo"), 1);
     assert_eq!(shown("URGENT"), 1);
     assert_eq!(shown("zeta"), 0);
-    // The hits name the cells that hold it.
-    let hits = axis(&file, id, &fields, &Arrangement::default(), "urgent", &[]).hits;
-    assert_eq!(hits, vec![(0, field(&fields, "tags").id)]);
+    // The hits name the cells that hold it (asked for a run of rows, in some fields).
+    let arranged = Arranged::new(&file, id, &fields, &Arrangement::default(), "urgent").unwrap();
+    let hits = arranged.hits(&file, 1, 0, 10, &[field(&fields, "name").id, field(&fields, "tags").id]).unwrap();
+    assert_eq!((hits.count, hits.holds(0, 0), hits.holds(0, 1)), (1, false, true));
 }
 
 #[test]
@@ -265,8 +266,11 @@ fn relocating_edited_records_matches_arranging_again() {
             let before = arranged.axis(1, &BTreeSet::new());
             let changed = arranged.relocate(&file, &touched).unwrap();
             let moved = arranged.axis(1, &BTreeSet::new());
-            let again = Arranged::new(&file, id, &fields, &arrangement, query).unwrap().axis(1, &BTreeSet::new());
+            let fresh = Arranged::new(&file, id, &fields, &arrangement, query).unwrap();
+            let again = fresh.axis(1, &BTreeSet::new());
             assert_eq!(moved, again, "case {case}");
+            let every: Vec<i64> = fields.iter().map(|field| field.id).collect();
+            assert_eq!(arranged.hits(&file, 1, 0, usize::MAX, &every).unwrap(), fresh.hits(&file, 1, 0, usize::MAX, &every).unwrap(), "case {case}");
             assert!(changed || moved == before, "case {case}: the axis changed unreported");
         }
     }

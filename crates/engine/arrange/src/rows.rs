@@ -18,8 +18,6 @@ pub struct Row {
     keys: Vec<Box<str>>,
     /// Its values of the fields the view groups by, outermost first.
     pub groups: Vec<Value>,
-    /// The fields whose text holds the search, by id.
-    pub hits: Vec<i64>,
 }
 
 /// The fields records are ordered by (groups first, then sorts), each with whether it runs
@@ -40,14 +38,13 @@ impl Order {
         self.fields.iter().map(|(name, _)| name.as_str())
     }
 
-    /// `record` as a row: its keys, its values of `groups`, and its search `hits`.
-    pub fn row(&self, record: &Record, groups: &[String], hits: Vec<i64>) -> Row {
+    /// `record` as a row: its keys and its values of `groups`.
+    pub fn row(&self, record: &Record, groups: &[String]) -> Row {
         Row {
             id: record.id,
             position: record.order,
             keys: self.fields.iter().map(|(name, _)| sort_key(&display(record.values.get(name)))).collect(),
             groups: groups.iter().map(|name| record.values.get(name).cloned().unwrap_or(Value::Null)).collect(),
-            hits,
         }
     }
 

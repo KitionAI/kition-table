@@ -68,17 +68,20 @@ impl Timing {
 }
 
 /// The arrangement's timings: whole arrangements (`gridOpen`, and a `gridSync` that had to start
-/// over) and relocations (a `gridSync` that moved only the records an edit changed).
+/// over), relocations (a `gridSync` that moved only the records an edit changed) and the search
+/// hits of runs of rows (`gridHits`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Stats {
     pub arrange: Timing,
     pub relocate: Timing,
+    /// The search hits asked for a run of rows (`gridHits`); `last_records` is the rows.
+    pub hits: Timing,
     /// Bytes of the last axis answered.
     pub axis_bytes: u64,
 }
 
 impl Stats {
     pub fn json(&self) -> Value {
-        json!({ "arrange": self.arrange.json(), "relocate": self.relocate.json(), "axisBytes": self.axis_bytes })
+        json!({ "arrange": self.arrange.json(), "relocate": self.relocate.json(), "hits": self.hits.json(), "axisBytes": self.axis_bytes })
     }
 }

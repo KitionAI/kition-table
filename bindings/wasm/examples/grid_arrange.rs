@@ -1,6 +1,7 @@
-//! Times the editor's arrangement (`gridOpen`, `gridSync`) of a large table natively and prints
-//! `gridStats` with the time of each arrangement: the table's order, a sort by text, the view
-//! `Grouped` as stored, a filter, a search, and an edit moved into a sorted view.
+//! Times the editor's arrangement (`gridOpen`, `gridSync`, `gridHits`) of a large table natively
+//! and prints `gridStats` with the time of each arrangement: the table's order, a sort by text,
+//! the view `Grouped` as stored, a filter, a search (and its hits in one band of rows), and an edit
+//! moved into a sorted view.
 //!
 //! `cargo run --release -p kition-table-kit --example grid_arrange -- <table.ktable>`, with the
 //! grid's performance fixture (`examples/perf_fixture.rs`, 100,000 records in 50 fields).
@@ -46,6 +47,14 @@ fn main() -> Result<(), String> {
         let bytes = doc.grid_open(params)?;
         let stats = doc.grid_stats();
         println!("{label}: {:.1} ms, {} shown, axis {} bytes", stats["arrange"]["lastMs"].as_f64().unwrap_or_default(), stats["shown"], bytes.len());
+        if params.get("query").is_some() {
+            // The cells holding the search in one band of rows (32), in every field.
+            let field_ids: Vec<i64> = fields.iter().filter_map(|field| field["id"].as_i64()).collect();
+            let epoch = stats["epoch"].clone();
+            let hits = doc.grid_hits(&json!({ "epoch": epoch, "from": 0, "count": 32, "fieldIds": field_ids }))?;
+            let stats = doc.grid_stats();
+            println!("  hits of 32 rows: {:.2} ms, {} bytes", stats["hits"]["lastMs"].as_f64().unwrap_or_default(), hits.len());
+        }
     }
     let first = doc.call("records.list", &json!({ "tableId": table_id, "limit": 1 }))?["result"]["items"][0]["id"].clone();
     for value in ["zzz moved last", "aaa moved first", "middle"] {

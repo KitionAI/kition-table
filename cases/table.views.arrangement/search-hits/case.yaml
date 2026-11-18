@@ -1,0 +1,28 @@
+format: 1
+id: table.views.arrangement/search-hits
+feature: table.views.arrangement
+intent: >-
+  A search keeps the records any of whose fields' text holds it, case ignored, whether the engine
+  reads a record's values as the JSON text the file stores (a whole arrangement: numbers as the
+  editor writes them, lists joined, a person's or a link's label, escapes, text that lower-cases
+  otherwise) or parsed (an edit's relocation). The axis carries no search hits: the editor asks
+  gridHits for the cells holding the search in a run of rows and the fields it shows, a bitmask per
+  row, read as the records are now (an edit that leaves the axis changes them), and an axis that is
+  not the latest is refused. The page reads hits format v1 and refuses another version.
+layer: gate
+source:
+  kind: synthetic
+  from: crates/engine/arrange/src/search.rs, bindings/wasm/src/grid_tests.rs, web/src/editor/table/lib/gridAxis.spec.ts
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: { package: kition-table-arrange, filter: "search::" }
+  - cargo-test: { package: kition-table-arrange, test: arranged }
+  - cargo-test: { package: kition-table-kit, filter: "grid_hits_answer" }
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/lib/gridAxis.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

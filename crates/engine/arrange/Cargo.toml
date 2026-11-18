@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 kition-table-file = { workspace = true }
 chrono = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 
 # Browsers have no monotonic clock through std: the arrangement's timings come from `performance.now()`.

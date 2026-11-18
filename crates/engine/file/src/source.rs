@@ -459,15 +459,36 @@ impl TableFile {
     /// (the cells an arrangement reads), for the fields with a value. Reads a table of 100,000
     /// records without parsing every cell of it. A name holding `"` is read from the whole value.
     pub fn list_record_values(&self, table_id: i64, names: &[String]) -> Result<Vec<Record>> {
+        self.record_values(table_id, names, None)
+    }
+
+    /// [`TableFile::list_record_values`] of the records `keep` takes: it is handed each live
+    /// record's values as the JSON text the file holds (an object of the fields' values by name),
+    /// in order, and the records it refuses are never parsed.
+    pub fn list_record_values_where(&self, table_id: i64, names: &[String], keep: &mut dyn FnMut(&str) -> bool) -> Result<Vec<Record>> {
+        self.record_values(table_id, names, Some(keep))
+    }
+
+    fn record_values(&self, table_id: i64, names: &[String], mut keep: Option<&mut dyn FnMut(&str) -> bool>) -> Result<Vec<Record>> {
         let paths: Vec<String> = names.iter().filter(|name| !name.contains('"')).map(|name| format!("$.\"{name}\"")).collect();
         if paths.len() != names.len() {
             let mut records = self.list_records(table_id)?;
+            if let Some(keep) = keep.as_mut() {
+                records.retain(|record| keep(&Value::Object(record.values.clone()).to_string()));
+            }
             for record in &mut records {
                 record.values.retain(|name, _| names.contains(name));
             }
             return Ok(records);
         }
+        // The whole value only when `keep` reads it: the cells come from SQLite's JSON paths.
         let mut columns = String::from("id, document_id, table_id, row_key, position, created_at, updated_at");
+        let first = if keep.is_some() {
+            columns.push_str(", values_json");
+            8
+        } else {
+            7
+        };
         for index in 0..paths.len() {
             columns.push_str(&format!(", values_json -> ?{}", index + 2));
         }
@@ -476,14 +497,25 @@ impl TableFile {
             .prepare(&format!("SELECT {columns} FROM kition_records WHERE table_id = ?1 AND deleted_at IS NULL ORDER BY position ASC, id ASC"))?;
         let mut binds: Vec<&dyn rusqlite::ToSql> = vec![&table_id];
         binds.extend(paths.iter().map(|path| path as &dyn rusqlite::ToSql));
-        let rows = statement.query_map(binds.as_slice(), |row| {
+        let mut rows = statement.query(binds.as_slice())?;
+        let mut records = Vec::new();
+        while let Some(row) = rows.next()? {
+            if let Some(keep) = keep.as_mut() {
+                let whole = match row.get_ref(7)? {
+                    rusqlite::types::ValueRef::Text(text) => std::str::from_utf8(text).unwrap_or_default(),
+                    _ => "",
+                };
+                if !keep(whole) {
+                    continue;
+                }
+            }
             let mut values = Map::new();
             for (index, name) in names.iter().enumerate() {
-                if let Some(text) = row.get::<_, Option<String>>(index + 7)? {
+                if let Some(text) = row.get::<_, Option<String>>(index + first)? {
                     values.insert(name.clone(), serde_json::from_str(&text).unwrap_or(Value::Null));
                 }
             }
-            Ok(Record {
+            records.push(Record {
                 id: row.get(0)?,
                 document_id: row.get(1)?,
                 table_id: row.get(2)?,
@@ -492,9 +524,9 @@ impl TableFile {
                 values,
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
-            })
-        })?;
-        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+            });
+        }
+        Ok(records)
     }
 
     /// The live records of a table among `row_keys`, whole, in order; a key of no live record of

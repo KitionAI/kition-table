@@ -7,7 +7,7 @@ import {
   type DataTable,
   type TableDataSource,
 } from './editor'
-import { decodeGridAxis } from './editor/table/lib/gridAxis'
+import { decodeGridAxis, decodeGridHits } from './editor/table/lib/gridAxis'
 
 /** What a data-document request answers from the engine: the route's answer, and what it changed. */
 type Answer<T> = { result: T; change: unknown }
@@ -231,6 +231,7 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
         const bytes = await engine.invoke<Uint8Array>('gridSync')
         return bytes.byteLength ? decodeGridAxis(bytes) : null
       },
+      hits: async (params) => decodeGridHits(await engine.invoke<Uint8Array>('gridHits', JSON.stringify(params)), params.fieldIds),
       subscribe(listener) {
         gridListeners.add(listener)
         return () => {
