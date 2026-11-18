@@ -1,0 +1,21 @@
+format: 1
+id: regressions/issue-svg-local-files
+feature: table.editor.grid
+intent: >-
+  An SVG attachment draws only what its own bytes hold: an image element naming a path on the
+  machine (or a web address) draws nothing. usvg's default resolver reads such a path from the
+  disk and draws it when it is a picture or an SVG, so the headless picture would have drawn a
+  local file into a render of a table.
+layer: gate
+source:
+  kind: probe
+  from: a review of the SVG thumbnails (card table-polish)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-display, filter: "image_tests::an_svg_reads_no_local_file" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

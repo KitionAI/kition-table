@@ -237,6 +237,22 @@ fn an_svg_is_drawn_at_the_thumbnail_size() {
     assert_eq!(at(&shown, 4, 4), [0, 0, 0, 0]);
 }
 
+/// An SVG reads nothing from the disk: an image naming a local file (an SVG the default resolver
+/// would read and draw) draws nothing (case regressions/issue-svg-local-files).
+#[test]
+fn an_svg_reads_no_local_file() {
+    let path = std::env::temp_dir().join(format!("kition-table-svg-{}.svg", std::process::id()));
+    std::fs::write(&path, "<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8' fill='rgb(30,30,220)'/></svg>")
+        .expect("a file");
+    let linked = format!(
+        "<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='8' height='8'><image width='8' height='8' xlink:href='{}'/></svg>",
+        path.display()
+    );
+    let shown = decode(linked.as_bytes(), 8);
+    std::fs::remove_file(&path).ok();
+    assert_eq!(at(&shown.expect("draws"), 4, 4), [0, 0, 0, 0], "the local file is not drawn");
+}
+
 /// A HEIC is decoded by heic-rs (a pure-Rust decoder).
 #[test]
 fn a_heic_decodes() {

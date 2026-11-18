@@ -89,9 +89,16 @@ fn guarded<T>(decoder: impl FnOnce() -> Option<T>) -> Option<T> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(decoder)).ok().flatten()
 }
 
-/// An SVG's tree: no fonts (its text is not drawn) and nothing loaded from outside it.
+/// An SVG's tree: no fonts (its text is not drawn) and nothing loaded from outside it. An image
+/// it names by a path or an address is left out (usvg's default reads a path from the disk); one
+/// it holds as a `data:` url stays.
 fn svg_tree(bytes: &[u8]) -> Option<resvg::usvg::Tree> {
-    resvg::usvg::Tree::from_data(bytes, &resvg::usvg::Options::default()).ok()
+    use resvg::usvg::{ImageHrefResolver, Options};
+    let options = Options {
+        image_href_resolver: ImageHrefResolver { resolve_data: ImageHrefResolver::default_data_resolver(), resolve_string: Box::new(|_, _| None) },
+        ..Options::default()
+    };
+    resvg::usvg::Tree::from_data(bytes, &options).ok()
 }
 
 /// The HEIF decoder's options: straight RGBA8, the container's transforms applied, at most
