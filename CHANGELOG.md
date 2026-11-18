@@ -3,6 +3,11 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
+## 0.5.3
+
+- Undo and redo of a write to a whole column of a large table no longer run out of memory in the editor: the model now undoes a write of cell values by writing back the values it replaced, instead of rewinding the document's history (kition-sdk 4b81569). Later edits by other people and by the agent still survive an undo, as before.
+- Large writes from the editor read each table's fields once per request instead of once per record, and `gridRecords` reads many records in one pass.
+
 ## 0.5.2
 
 - A grid view whose scroll bar is dragged to the end of a table in slow frames shows its exact bands once it rests; it used to keep its drafts until the next scroll.
