@@ -58,6 +58,46 @@ function viewsFixture() {
   return { tables: [first.id, second.id], dashboard: 'overview', bytes }
 }
 const VIEWS = viewsFixture()
+// A table shown as a gallery, its cards' covers an SVG, a GIF (a green first frame, a magenta
+// second) and a HEIC (the engine's tests' 32 x 16 picture, its left half red, its right half blue).
+function coversFixture() {
+  const doc = sdk.TableDocument.create('Covers.ktable', 0, 0)
+  const call = (method, params = {}) => {
+    const answer = JSON.parse(doc.call(method, JSON.stringify(params)))
+    if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
+    return answer.result
+  }
+  const table = call('documents.get').tables[0]
+  call('views.update', { tableId: table.id, viewId: table.views[0].id, title: 'Covers', type: 'gallery' })
+  const files = call('fields.create', { tableId: table.id, title: 'Files', type: 'attachment' })
+  const name = (files.field ?? files).name
+  const held = (fileName, mimeType, bytes) => call('attachments.put', { tableId: table.id, name: fileName, mimeType, data: Buffer.from(bytes).toString('base64') })
+  const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><rect width='40' height='20' fill='rgb(40,170,60)'/></svg>"
+  // An 8 x 4 GIF of two frames over a 4-color table; its LZW data sends a clear code (4) before
+  // every pixel, so the codes stay 3 bits wide.
+  const frame = (index) => {
+    const codes = Array.from({ length: 32 }, () => [4, index]).flat().concat(5)
+    const bytes = []
+    let bits = 0
+    let filled = 0
+    for (const code of codes) {
+      bits |= code << filled
+      filled += 3
+      for (; filled >= 8; filled -= 8, bits >>= 8) bytes.push(bits & 255)
+    }
+    if (filled) bytes.push(bits & 255)
+    return [0x21, 0xf9, 4, 0, 10, 0, 0, 0, 0x2c, 0, 0, 0, 0, 8, 0, 4, 0, 0, 2, bytes.length, ...bytes, 0]
+  }
+  const gif = [...Buffer.from('GIF89a'), 8, 0, 4, 0, 0xf1, 0, 0, 40, 170, 60, 200, 20, 200, 0, 0, 0, 0, 0, 0, ...frame(0), ...frame(1), 0x3b]
+  const heic = fs.readFileSync(new URL('../../crates/view/display/testdata/split.heic', import.meta.url))
+  const covers = [held('drawn.svg', 'image/svg+xml', Buffer.from(svg)), held('moving.gif', 'image/gif', gif), held('photo.heic', 'image/heic', heic)]
+  for (const [index, cover] of covers.entries()) call('records.create', { tableId: table.id, values: { title: `Cover ${index + 1}`, [name]: [cover] } })
+  doc.markSaved()
+  const bytes = Buffer.from(doc.save()).toString('base64')
+  doc.free()
+  return bytes
+}
+const COVERS = coversFixture()
 const LARGE = fixture('Messages.ktable', 1137)
 
 const server = await createServer({ configFile: new URL('../vite.config.ts', import.meta.url).pathname, server: { port: 0, host: '127.0.0.1' }, logLevel: 'error' })
@@ -680,6 +720,35 @@ try {
     await until(async () => JSON.stringify((colors = await read())) === JSON.stringify(expected), 30)
     step('keeps active controls readable in dark mode', /is-active/.test(await freeze.getAttribute('class')) && JSON.stringify(colors) === JSON.stringify(expected), JSON.stringify(colors))
     await page.evaluate(() => window.devHost.setScheme('light'))
+  })
+
+  // Gallery covers are decoded as the grid's thumbnails are: a GIF shows its first frame, an SVG
+  // (which no browser's createImageBitmap reads) is drawn by the engine, and a HEIC shows in every
+  // browser (WebKit decodes it, the engine where the browser cannot).
+  await test("a gallery card's cover is decoded as the grid's thumbnails", async () => {
+    await page.evaluate(async (bytes) => {
+      const binary = atob(bytes)
+      const data = new Uint8Array(binary.length)
+      for (let index = 0; index < binary.length; index += 1) data[index] = binary.charCodeAt(index)
+      await window.devHost.open('Covers.ktable', data.buffer, {})
+    }, COVERS)
+    await page.waitForFunction(() => document.getElementById('status')?.textContent?.startsWith('Covers.ktable open in '), null, { timeout: 60000 })
+    const covers = kit.locator('.data-inline-gallery canvas[data-ktable-gallery-cover]')
+    const drawn = await until(async () => (await kit.locator('.data-inline-gallery canvas[data-ktable-gallery-cover="drawn"]').count()) === 3, 100)
+    /** The cover's pixel at (`fx`, `fy`) of its picture. */
+    const pixel = (index, fx, fy) => covers.nth(index).evaluate((canvas, [fx, fy]) => [...canvas.getContext('2d').getImageData(Math.floor(canvas.width * fx), Math.floor(canvas.height * fy), 1, 1).data], [fx, fy])
+    const near = (a, b) => a.length === 4 && b.every((value, i) => Math.abs(a[i] - value) <= 24)
+    const svg = await pixel(0, 0.5, 0.5)
+    const gif = await pixel(1, 0.5, 0.5)
+    await page.waitForTimeout(300)
+    const gifLater = await pixel(1, 0.5, 0.5)
+    const heic = [await pixel(2, 0.25, 0.5), await pixel(2, 0.75, 0.5)]
+    const sizes = await covers.evaluateAll((canvases) => canvases.map((canvas) => [canvas.width, canvas.height]))
+    step(
+      "a gallery card's cover is decoded as the grid's thumbnails",
+      drawn && near(svg, [40, 170, 60, 255]) && near(gif, [40, 170, 60, 255]) && near(gifLater, [40, 170, 60, 255]) && near(heic[0], [220, 30, 30, 255]) && near(heic[1], [30, 30, 220, 255]),
+      JSON.stringify({ drawn, svg, gif, gifLater, heic, sizes }),
+    )
   })
 
   // Display modes: the editor draws its own footer, so the frame draws no status bar under it, and

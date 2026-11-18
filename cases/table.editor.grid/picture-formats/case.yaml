@@ -1,0 +1,29 @@
+format: 1
+id: table.editor.grid/picture-formats
+feature: table.editor.grid
+intent: >-
+  The grid on the page draws every picture format the headless picture reads, in Chromium and
+  WebKit: a GIF held in the document shows its first frame and stays on it, an SVG is drawn (no
+  browser's createImageBitmap reads SVG, so the engine draws it with `gridPicture`, as the picture
+  does), and a HEIC is drawn (WebKit decodes it; Chromium cannot, so the engine does). The engine's
+  `gridPicture` answers width, height and straight RGBA8 at the thumbnail's size, and no bytes for a
+  format it does not read.
+layer: gate
+source:
+  kind: synthetic
+  from: web/tests/gridEditing.mjs and bindings/wasm/tests/thumbnails.rs (card table-polish)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: thumbnails, filter: "grid_picture_decodes_for_the_page", features: [headless] }
+  - exec:
+      cmd: [node, web/tests/gridEditing.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/gridEditing.mjs, webkit]
+expected:
+  - actual: out:exit
+    compare: exit
+requires: [chromium, webkit]
+tags: [browser]
+timeout_s: 240
+since: "2026-11-18"

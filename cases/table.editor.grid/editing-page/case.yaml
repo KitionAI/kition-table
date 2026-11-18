@@ -21,7 +21,8 @@ intent: >-
   only its record's band (the header strip keeps its list); a column header that is not selected
   drags its column in one fields.move; the active attachment cell's add button opens the file
   picker and the picked file is uploaded and added in one records.update, files pasted on an
-  attachment cell are added the same way, and a picture at a web address is drawn.
+  attachment cell are added the same way, and a picture at a web address is drawn. A GIF held in
+  the document draws its first frame, and an SVG and a HEIC held in it are drawn.
 layer: gate
 source:
   kind: synthetic

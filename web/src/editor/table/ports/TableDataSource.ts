@@ -176,8 +176,10 @@ export interface TableDataSource {
    * `layout` lays an axis out (`gridAxes`, then what each linear row is, `gridRows`), `bands`
    * answers a batch of bands of the layout (`gridBands`), `records` reads just the records a
    * write or a menu acts on (`gridRecords`), `clear` empties cells of many records in one
-   * transaction the engine builds (`gridClear`), and `summary` sums number fields over the
-   * arrangement's records (`gridSummary`, the footer's).
+   * transaction the engine builds (`gridClear`), `summary` sums number fields over the
+   * arrangement's records (`gridSummary`, the footer's), and `picture` decodes a picture the
+   * browser does not (`gridPicture`: width and height as u32, then straight RGBA8; no bytes when
+   * the engine does not read it either).
    */
   grid: {
     open(params: GridOpenParams): Promise<GridAxis>
@@ -189,6 +191,7 @@ export interface TableDataSource {
     records(params: { tableId: number; ids: number[]; fields?: string[] }): Promise<GridRecordRead[]>
     clear(params: { tableId: number; ids: number[]; values: Record<string, DataRecordValue> }): Promise<void>
     summary(params: { fields: string[] }): Promise<GridFieldSummary[]>
+    picture(bytes: Uint8Array, maxSide: number): Promise<Uint8Array>
   }
 }
 

@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { GalleryHorizontalEndIcon as GalleryHorizontalEnd, GripVerticalIcon as GripVertical, PlusIcon as Plus } from '@kition/tessera-icons/react'
 import type { DataAttachment, DataField, DataRecord, DataRecordValue } from '../../types/dataDocument'
 import { coerceValue, displayValue, findImageLikeString, normalizeAttachmentValue } from '../lib/tableEditorShared'
-import { resolveTableFileURL, useTableHost } from '../ports/TableHost'
 import { cn } from '../../../lib/cn'
 
 import { DataCellDisplay, DataInlineCell } from './TableEditorCells'
+import { GalleryCover } from './GalleryCover'
 import { Badge, Button } from '@kition/kit-editor'
 
 export function KanbanView({
@@ -237,6 +237,7 @@ export function CalendarView({
 }
 
 export function GalleryView({
+  documentId,
   records,
   fields,
   primaryField,
@@ -247,6 +248,8 @@ export function GalleryView({
   tableId,
   onRegenerate,
 }: {
+  /** The document whose blobs the covers read. */
+  documentId: number | null
   records: DataRecord[]
   fields: DataField[]
   primaryField: DataField | null
@@ -258,7 +261,6 @@ export function GalleryView({
   onRegenerate?: (record: DataRecord, field: DataField) => void
 }) {
   const { t } = useTranslation('table')
-  const host = useTableHost()
   const previewFields = fields.filter((field) => field.id !== primaryField?.id && field.id !== coverField?.id).slice(0, 4)
   return (
     <div className="data-inline-gallery">
@@ -295,7 +297,7 @@ export function GalleryView({
                     }
                   }}
                 >
-                  <img src={resolveTableFileURL(host, coverSrc)} alt={primaryField ? displayValue(record.values?.[primaryField.name] ?? null) || t('views.galleryCover') : t('views.galleryCover')} loading="lazy" />
+                  <GalleryCover url={coverSrc} documentId={documentId} label={primaryField ? displayValue(record.values?.[primaryField.name] ?? null) || t('views.galleryCover') : t('views.galleryCover')} />
                 </button>
               ) : <GalleryHorizontalEnd className="size-5" />}
             </div>

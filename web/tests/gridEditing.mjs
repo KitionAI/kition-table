@@ -30,9 +30,15 @@
 // (RenderLayer.spec); the frozen edge's handle shows after 200 ms, a neutral guide with a brand
 // grip (useColumnFreeze.spec, layoutRenderer.spec); a click in an AI cell's middle asks for
 // nothing (aiActionLayer.spec).
+//
+// Card table-polish: a GIF held in the document draws its first frame, an SVG is drawn (by the
+// engine, `gridPicture`: no browser's createImageBitmap reads SVG) and a HEIC is drawn (by
+// WebKit, or by the engine where the browser cannot read it).
 // Prints PASS or FAIL per step; exits 1 on any FAIL.
+import fs from 'node:fs'
+import path from 'node:path'
 import zlib from 'node:zlib'
-import { checkPackage, launch, nodeEngine, openGrid, settled, startServer } from './gridPage.mjs'
+import { checkPackage, launch, nodeEngine, openGrid, REPO, settled, startServer } from './gridPage.mjs'
 
 const which = process.argv[2] ?? 'chromium'
 checkPackage()
@@ -56,12 +62,57 @@ function png(width, height, [r, g, b]) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))])
 }
 
+/**
+ * A `width` x `height` GIF of one frame per color, each covering the screen. Its LZW data sends a
+ * clear code before every pixel, so the codes stay 3 bits wide and need no table.
+ */
+function gif(width, height, colors) {
+  const out = [...Buffer.from('GIF89a'), width & 255, width >> 8, height & 255, height >> 8, 0xf1, 0, 0]
+  // A global table of 4 colors (the frames' and black).
+  for (let i = 0; i < 4; i += 1) out.push(...(colors[i] ?? [0, 0, 0]))
+  // Loop forever (NETSCAPE2.0), so the GIF moves.
+  out.push(0x21, 0xff, 11, ...Buffer.from('NETSCAPE2.0'), 3, 1, 0, 0, 0)
+  colors.forEach((_, index) => {
+    out.push(0x21, 0xf9, 4, 0, 10, 0, 0, 0)
+    out.push(0x2c, 0, 0, 0, 0, width & 255, width >> 8, height & 255, height >> 8, 0, 2)
+    const codes = []
+    for (let i = 0; i < width * height; i += 1) codes.push(4, index)
+    codes.push(5)
+    const bytes = []
+    let bits = 0
+    let filled = 0
+    for (const code of codes) {
+      bits |= code << filled
+      filled += 3
+      while (filled >= 8) {
+        bytes.push(bits & 255)
+        bits >>= 8
+        filled -= 8
+      }
+    }
+    if (filled) bytes.push(bits & 255)
+    for (let at = 0; at < bytes.length; at += 255) out.push(Math.min(255, bytes.length - at), ...bytes.slice(at, at + 255))
+    out.push(0)
+  })
+  out.push(0x3b)
+  return Buffer.from(out)
+}
+
 const BLUE = [30, 60, 220]
+const GREEN = [40, 170, 60]
+const MAGENTA = [200, 20, 200]
+/** The engine's tests' HEIC: 32 x 16, its left half red (220, 30, 30) and its right half blue. */
+const HEIC = fs.readFileSync(path.join(REPO, 'crates', 'view', 'display', 'testdata', 'split.heic'))
+/** An SVG of one color, 40 x 20. */
+const svg = ([r, g, b]) => Buffer.from(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><rect width='40' height='20' fill='rgb(${r},${g},${b})'/></svg>`)
 const { server, origin } = await startServer()
 /** The fixture's picture at a web address (the development server's origin; the test's page serves it). */
 const WEB_PICTURE = `${origin}/__grid/blue.png`
 
-/** 12 records over one field of each kind the editors cover; one record holds a red picture, another a blue one at a web address. */
+/**
+ * 12 records over one field of each kind the editors cover; one record holds a red picture, another a blue one at a
+ * web address, and the last three an SVG, a GIF and a HEIC.
+ */
 async function fixture() {
   const sdk = await nodeEngine()
   const doc = sdk.TableDocument.create('Editing.ktable', 0, 0)
@@ -89,6 +140,10 @@ async function fixture() {
   const files = field('Files', 'attachment')
   const summary = field('Summary', 'ai', { ai_config: { type: 'summarize', source_field_id: notes.id, enabled: true } })
   const picture = call('attachments.put', { tableId, name: 'red.png', mimeType: 'image/png', data: png(8, 4, [220, 20, 30]).toString('base64') })
+  const held = (name, mimeType, bytes) => call('attachments.put', { tableId, name, mimeType, data: bytes.toString('base64') })
+  const drawn = held('drawn.svg', 'image/svg+xml', svg(GREEN))
+  const moving = held('moving.gif', 'image/gif', gif(8, 4, [GREEN, MAGENTA]))
+  const photo = held('photo.heic', 'image/heic', HEIC)
   const records = Array.from({ length: 12 }, (_, i) => ({
     [primary.name]: `Record ${i + 1}`,
     [amount.name]: (i + 1) * 10,
@@ -98,7 +153,7 @@ async function fixture() {
     [done.name]: false,
     [score.name]: 1,
     [due.name]: '2026-07-23T04:14:47Z',
-    [files.name]: i === 0 ? [picture] : i === 3 ? [{ name: 'blue.png', url: WEB_PICTURE, mime_type: 'image/png' }] : [],
+    [files.name]: i === 0 ? [picture] : i === 3 ? [{ name: 'blue.png', url: WEB_PICTURE, mime_type: 'image/png' }] : i === 9 ? [drawn] : i === 10 ? [moving] : i === 11 ? [photo] : [],
     [summary.name]: `Summary ${i + 1}`,
   }))
   call('transact', { ops: [{ op: 'records.create', tableId, at: null, records }] })
@@ -712,6 +767,34 @@ try {
       pixel = await contentPixel(page, thumb.x, thumb.y)
     }
     step('a picture at a web address is drawn', near(pixel, [...BLUE, 255]), JSON.stringify({ pixel, thumb }))
+  })
+
+  await test('a GIF draws its first frame, an SVG and a HEIC are drawn', async () => {
+    const files = await filesCol()
+    /** The content pixel at a fraction of the thumbnail's width, once it is `color` (or after 5 s). */
+    const drawnPixel = async (name, fraction, color) => {
+      const row = (await shown(page)).findIndex((record) => (record.values[N.files] ?? []).some((item) => item.name === name))
+      await cell(page, row, files)
+      await idle(page)
+      const thumb = await cellPart(page, 2, row, files, 0)
+      if (!thumb) return { thumb }
+      const x = thumb.x - thumb.w / 2 + thumb.w * fraction
+      let pixel = []
+      for (let i = 0; i < 50 && !near(pixel, [...color, 255], 24); i += 1) {
+        await page.waitForTimeout(100)
+        pixel = await contentPixel(page, x, thumb.y)
+      }
+      return { pixel, thumb }
+    }
+    const svgShown = await drawnPixel('drawn.svg', 0.5, GREEN)
+    step('an SVG held in the document is drawn', near(svgShown.pixel ?? [], [...GREEN, 255], 24), JSON.stringify(svgShown))
+    const gifShown = await drawnPixel('moving.gif', 0.5, GREEN)
+    await page.waitForTimeout(300)
+    const later = gifShown.thumb ? await contentPixel(page, gifShown.thumb.x, gifShown.thumb.y) : []
+    step('a GIF draws its first frame, and stays on it', near(gifShown.pixel ?? [], [...GREEN, 255], 24) && near(later, [...GREEN, 255], 24), JSON.stringify({ ...gifShown, later }))
+    const heicShown = await drawnPixel('photo.heic', 0.25, [220, 30, 30])
+    const right = heicShown.thumb ? await contentPixel(page, heicShown.thumb.x + heicShown.thumb.w / 4, heicShown.thumb.y) : []
+    step('a HEIC held in the document is drawn', near(heicShown.pixel ?? [], [220, 30, 30, 255], 24) && near(right, [30, 30, 220, 255], 24), JSON.stringify({ ...heicShown, right }))
   })
 
   await test("the active attachment cell's add button picks files and adds them in one records.update", async () => {

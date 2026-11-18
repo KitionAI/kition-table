@@ -4,7 +4,7 @@
  * then `gridSync` after every change), so the grid opens nothing: it lays out the axis the editor
  * holds (`TableDataSource.grid.layout`: `gridAxes` with the view's config as the editor holds it,
  * then `gridRows`), and asks for its bands and the pictures they show through the same data
- * source. The records never come to the page.
+ * source (`grid.picture` decodes those the browser does not). The records never come to the page.
  */
 import type { GridLayoutParams, TableDataSource } from '../ports/TableDataSource'
 import type { BandKey } from './displayList'
@@ -44,7 +44,7 @@ export function arrangedSource(dataSource: Pick<TableDataSource, 'grid' | 'attac
         const held = await dataSource.attachments.read({ documentId, hash })
         blob = new Blob([held.data as BlobPart], { type: held.mimeType })
       } else if (url.startsWith('data:')) blob = await (await fetch(url)).blob()
-      return blob ? thumbnail(blob, width, height) : null
+      return blob ? thumbnail(blob, width, height, dataSource.grid.picture) : null
     },
   }
 }

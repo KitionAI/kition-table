@@ -127,6 +127,7 @@ export function TableEditorContent({
   if (viewMode === 'gallery') {
     return (
       <GalleryView
+        documentId={grid.documentId}
         records={sortedAndFilteredRecords}
         fields={visibleFields}
         primaryField={primaryField}

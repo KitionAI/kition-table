@@ -44,6 +44,7 @@
   .dark img.media,
   .dark [data-media],
   .dark .data-inline-gallery-cover img,
+  .dark .data-inline-gallery-cover canvas,
   .dark .data-inline-attachment-thumb-button img {
     outline: 1px solid hsl(0 0% 100% / 0.08);
     outline-offset: -1px;
@@ -974,7 +975,8 @@
     @apply bg-muted dark:bg-muted;
   }
 
-  .data-inline-gallery-cover img {
+  .data-inline-gallery-cover img,
+  .data-inline-gallery-cover canvas {
     @apply h-full w-full object-cover;
   }
 

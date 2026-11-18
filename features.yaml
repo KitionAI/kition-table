@@ -190,7 +190,8 @@ features:
     priority: P1
     status: has
     commands: [table.attachments.put, table.attachments.read]
-    cases: [table.attachments/save-reopen]
+    paths: [web/src/editor/table/components/GalleryCover.tsx]
+    cases: [table.attachments/save-reopen, table.attachments/gallery-covers]
     since: "2026-11-16"
   - id: table.ai-fields
     title: "AI fields: prepare a request and apply its answer to cells"
@@ -224,5 +225,5 @@ features:
     priority: P1
     status: has
     paths: [crates/view/display/**, crates/view/grid/**, bindings/wasm/src/bands.rs, web/src/editor/table/canvas/**, web/src/editor/table/components/TableEditorGridView.tsx, web/src/editor/table/hooks/useGridSummary.ts, web/dev/grid.html, web/fonts.lock.json, web/scripts/fonts.mjs, web/tests/gridPage.mjs, web/tests/parity.mjs, web/tests/perf.mjs, web/tests/widths.mjs, web/tests/gridInteraction.mjs, bindings/wasm/tests/grid_interaction.rs, web/tests/gridEditing.mjs, bindings/wasm/src/grid_edit.rs, bindings/wasm/tests/grid_records.rs, bindings/wasm/tests/grid_clear.rs, web/tests/perfEdit.mjs]
-    cases: [table.editor.grid/display-format, table.editor.grid/display-raster, table.editor.grid/layout-cells, table.editor.grid/shaping-as-canvas, table.editor.grid/resource-table, table.editor.grid/attachment-thumbnails, table.editor.grid/picture-decode, table.editor.grid/bands, table.editor.grid/page-player, table.editor.grid/widths, table.editor.grid/parity, table.editor.grid/scroll-perf, table.editor.grid/interaction, table.editor.grid/interaction-engine, table.editor.grid/interaction-page, table.editor.grid/editing, table.editor.grid/editing-engine, table.editor.grid/editing-page, table.editor.grid/clear-engine, table.editor.grid/sync, table.editor.grid/edit-perf, table.editor.grid/editor, table.editor.grid/lazy-fonts-engine, regressions/issue-rating-thumbs, regressions/issue-select-without-choices]
+    cases: [table.editor.grid/display-format, table.editor.grid/display-raster, table.editor.grid/layout-cells, table.editor.grid/shaping-as-canvas, table.editor.grid/resource-table, table.editor.grid/attachment-thumbnails, table.editor.grid/picture-decode, table.editor.grid/bands, table.editor.grid/page-player, table.editor.grid/widths, table.editor.grid/parity, table.editor.grid/scroll-perf, table.editor.grid/interaction, table.editor.grid/interaction-engine, table.editor.grid/interaction-page, table.editor.grid/editing, table.editor.grid/editing-engine, table.editor.grid/editing-page, table.editor.grid/clear-engine, table.editor.grid/sync, table.editor.grid/edit-perf, table.editor.grid/editor, table.editor.grid/lazy-fonts-engine, regressions/issue-rating-thumbs, regressions/issue-select-without-choices, table.editor.grid/picture-formats]
     since: "2026-11-17"

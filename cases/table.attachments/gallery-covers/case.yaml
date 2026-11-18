@@ -1,0 +1,20 @@
+format: 1
+id: table.attachments/gallery-covers
+feature: table.attachments
+intent: >-
+  A gallery card's cover held in the document is decoded as the grid's thumbnails are, in Chromium
+  and WebKit: a GIF shows its first frame and stays on it (an image element would play it), an SVG
+  is drawn by the engine, and a HEIC shows in both browsers (an image element shows nothing in
+  Chromium). The card draws the decoded picture into a canvas the stylesheet fits to the cover.
+layer: gate
+source:
+  kind: synthetic
+  from: web/tests/flow.mjs (card table-polish)
+  license: owned
+input: []
+steps:
+  - flow: { spec: web/tests/flow.mjs, scenario: "a gallery card's cover is decoded as the grid's thumbnails", browsers: [chromium, webkit] }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-18"
