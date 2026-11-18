@@ -1,0 +1,29 @@
+[package]
+name = "kition-table"
+description = "The Table kit served headless over the Kit Protocol: the engine the in-page editor runs (kition-table-kit), with the object model, for agents, scripts, and the conformance suite."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+kition-table-kit = { path = "../../bindings/wasm", features = ["headless"] }
+kition-headless = { workspace = true }
+kition-table-fonts = { workspace = true, features = ["embed"] }
+
+[dev-dependencies]
+kition-kit-server = { workspace = true }
+kition-kit = { workspace = true }
+base64 = { workspace = true }
+png = { workspace = true }
+serde_json = { workspace = true }
+# The agent's tools end to end (tests/premise.rs): kition-kits runs this executable.
+kition-kits = { workspace = true }
+kition-env = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tempfile = { workspace = true }

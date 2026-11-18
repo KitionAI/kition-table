@@ -1,0 +1,5 @@
+[env]
+# SQLite's `sqlite_dbpage` table, compiled into the bundled SQLite (libsqlite3-sys reads this when it
+# builds it): `TableFile::to_bytes` reads the database into the saved bytes a page at a time, one
+# copy of the document where `sqlite3_serialize` made two.
+LIBSQLITE3_FLAGS = "SQLITE_ENABLE_DBPAGE_VTAB"

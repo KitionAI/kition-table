@@ -1,0 +1,17 @@
+format: 1
+id: table.attachments/save-reopen
+feature: table.attachments
+intent: >-
+  An attachment put with table.attachments.put travels in the .ktable: after a save and reopen, and a second save, table.attachments.read answers the same bytes.
+layer: gate
+source:
+  kind: synthetic
+  from: bindings/wasm/src/round_trip_tests.rs (attachments_survive_save_and_reopen)
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "round_trip_tests::attachments_survive_save_and_reopen" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

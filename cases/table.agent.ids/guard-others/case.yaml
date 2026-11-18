@@ -1,0 +1,22 @@
+format: 1
+id: table.agent.ids/guard-others
+feature: table.agent.ids
+intent: >-
+  With basis, another agent's edit of another record does not refuse my write: it applies, and others names that record and the other agent.
+layer: gate
+source:
+  kind: synthetic
+  from: apps/kition-table/tests/premise.rs
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table
+      test: premise
+      filter: another_agents_edit_of_another_record_is_reported_and_my_write_applies
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+tags: [headless]
+since: "2026-11-16"

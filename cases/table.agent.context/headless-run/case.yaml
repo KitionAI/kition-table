@@ -1,0 +1,21 @@
+format: 1
+id: table.agent.context/headless-run
+feature: table.agent.context
+intent: >-
+  A run's steps set their part ({table: id} or {view: id}) through context.set, act on the records their parameters name, and context.restore puts the person's picture back.
+layer: gate
+source:
+  kind: synthetic
+  from: apps/kition-table/tests/context.rs
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table
+      test: context
+      filter: a_run_sets_each_steps_part_and_puts_the_editor_back
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+since: "2026-11-16"

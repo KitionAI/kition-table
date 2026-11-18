@@ -1,0 +1,14 @@
+format: 1
+id: regressions/issue-c8-table-pin-raw-cell
+feature: table.agent.premises
+intent: A raw cell write's value is read through its field's type and options, so a colleague's change of either refuses the write as changed; a rename of the field and a change of another field apply.
+layer: gate
+dimension: collab
+source: {kind: synthetic, from: the raw cell contract on the public kition-sdk pin, license: Apache-2.0}
+input: []
+steps:
+  - cargo-test: {package: kition-table, test: outside, filter: a_raw_cell_rests_on_its_fields_type_and_options}
+  - cargo-test: {package: kition-table, test: outside, filter: raw_cell_address_matrix}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

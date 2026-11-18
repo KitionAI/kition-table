@@ -1,0 +1,84 @@
+[workspace]
+resolver = "3"
+members = ["crates/*/*", "bindings/*", "apps/*"]
+
+[workspace.package]
+version = "0.4.0"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/KitionAI/kition-table"
+publish = false
+
+[workspace.dependencies]
+# internal
+kition-time = { path = "crates/engine/time" }
+kition-table-file = { path = "crates/engine/file" }
+kition-table-api = { path = "crates/engine/api" }
+kition-table-ai = { path = "crates/engine/ai-field" }
+kition-table-import = { path = "crates/formats/import" }
+kition-table-fonts = { path = "crates/view/fonts" }
+kition-table-picture = { path = "crates/view/picture" }
+
+# kition-sdk, pinned by commit (one revision for every crate of it): the kit contract, the headless
+# host, and the Kit Data Model.
+kition-kit = { git = "https://github.com/KitionAI/kition-sdk", rev = "5955eec3a609adfad9c1064aaf05e634a971f248" }
+kition-headless = { git = "https://github.com/KitionAI/kition-sdk", rev = "5955eec3a609adfad9c1064aaf05e634a971f248" }
+kition-kdm = { git = "https://github.com/KitionAI/kition-sdk", rev = "5955eec3a609adfad9c1064aaf05e634a971f248" }
+# The Kit Protocol server types the headless tests drive (tests only).
+kition-kit-server = { git = "https://github.com/KitionAI/kition-sdk", rev = "5955eec3a609adfad9c1064aaf05e634a971f248" }
+# The Kition platform convergence suite (L6), on the same kition-sdk revision (tests only).
+kition-convergence = { git = "https://github.com/KitionAI/kition-sdk", rev = "5955eec3a609adfad9c1064aaf05e634a971f248" }
+# The kits' MCP tools (`kition-kits-mcp`'s library), for the end-to-end agent tests (tests only).
+kition-kits = { git = "https://github.com/KitionAI/kition-sdk", rev = "5955eec3a609adfad9c1064aaf05e634a971f248" }
+kition-env = { git = "https://github.com/KitionAI/kition-sdk", rev = "5955eec3a609adfad9c1064aaf05e634a971f248" }
+
+# Tessera's icons (the editor's own), as SVG path data the picture strokes; pinned by commit.
+kition-tessera-icons = { git = "https://github.com/KitionAI/kition-tessera", rev = "832f61a5e4b4ac1a5083620bfdeeb92a86560694" }
+
+# foundation
+base64 = "0.22"
+calamine = { version = "0.30", features = ["dates"] }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+csv = "1"
+# The preview's PNG (`table.file.render`), the version kition-headless already brings.
+png = "0.17"
+js-sys = "0.3"
+regex = "1"
+rusqlite = { version = "0.38", features = ["backup", "blob", "bundled", "hooks", "serde_json", "serialize"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+# The picture: shaping, outlines, paths and the CPU renderer, as kition-note draws.
+skrifa = "0.47"
+harfrust = "0.13"
+kurbo = "0.13"
+vello_cpu = { version = "0.2", default-features = false, features = ["std", "u8_pipeline"] }
+tempfile = "3"
+thiserror = "2"
+tracing = "0.1"
+url = "2"
+uuid = { version = "1", features = ["v4", "v7"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = 0
+
+# The engine's property and projection suites are slow unoptimized.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev]
+opt-level = 1

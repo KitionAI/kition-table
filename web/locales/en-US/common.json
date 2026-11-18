@@ -1,0 +1,13 @@
+{
+  "actions": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "save": "Save",
+    "hidePassword": "Hide password",
+    "showPassword": "Show password"
+  },
+  "dialogs": {
+    "rightSheet": "Right sheet"
+  }
+}

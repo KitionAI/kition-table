@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-unknown-params
+feature: table.agent.recover
+intent: >-
+  A command with a parameter schema refuses a key the schema does not name and says which, with
+  the parameter it resembles and the ones the command takes (platform rule E7a), instead of
+  running without it; every key a command reads is in its schema, so a valid call still runs.
+  Before, every one of the 54 schema'd commands ran with an unknown key or refused it without
+  naming it, table.undo and table.redo read a `scope` their schema left out, and the editor sent
+  keys the engine ignored (ai.prepare's scope and force, dashboards.upsert's id).
+layer: gate
+source:
+  kind: probe
+  from: "unknown-parameter sweep of the kits"
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: unknown_params }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

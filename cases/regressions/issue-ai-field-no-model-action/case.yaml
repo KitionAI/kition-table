@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-ai-field-no-model-action
+feature: table.ai-fields
+intent: >-
+  When the host refuses an AI field's model call as `unavailable` (no model set up, or not signed
+  in), the editor shows one notice with the host's reason and, when the host serves
+  `action:settings.open`, a "Set up AI" button that asks the host to open where the person sets up
+  AI (`settings.open`, `section: ai`). Before, the run only failed with the host's message and no
+  next step.
+layer: gate
+source:
+  kind: probe
+  from: error-state review of the kits
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/tableHost.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

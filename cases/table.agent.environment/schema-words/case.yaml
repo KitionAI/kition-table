@@ -1,0 +1,16 @@
+format: 1
+id: table.agent.environment/schema-words
+feature: table.agent.environment
+intent: Training tasks use human labels, valid type vocabularies, timestamp metadata and the same numeric bounds as commands.
+layer: gate
+dimension: ai
+source:
+  kind: synthetic
+  from: outside-writer tests of the agent tools
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: {package: kition-table-kit, test: schema_words}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

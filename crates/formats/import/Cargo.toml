@@ -1,0 +1,26 @@
+[package]
+name = "kition-table-import"
+description = "Importing CSV, TSV, and XLSX files into a .ktable document: parsing with type inference, and batched writes under the import origin (builds for wasm32)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kition-kdm = { workspace = true }
+kition-table-api = { workspace = true }
+kition-table-file = { workspace = true }
+
+base64 = { workspace = true }
+calamine = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+url = { workspace = true }

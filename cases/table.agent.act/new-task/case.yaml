@@ -1,0 +1,49 @@
+format: 1
+id: table.agent.act/new-task
+feature: table.agent.act
+intent: >-
+  The agent adds a record with every value landing in its field. Values are keyed by the field's
+  name (status, notes), not its title (Status, Notes); a title key is silently ignored, so this is
+  the pitfall the guide warns about.
+layer: eval
+source:
+  kind: synthetic
+  from: repo:conformance/basic.ktable
+  license: Apache-2.0
+  note: A copy of the conformance fixture the table engine writes.
+input: [input/tasks.ktable]
+steps:
+  - task:
+      prompt: >-
+        In tasks.ktable, add a task titled "Book the venue" with status In progress and the note
+        "Call on Monday".
+      max_turns: 20
+  - query: { path: tasks.ktable, args: { follow: tables.0.records }, as: after }
+  - check: { path: tasks.ktable, as: diagnostics }
+expected:
+  - actual: out:after
+    compare: values
+    value:
+      total: 3
+      objects:
+        any: { fields.cells.01a169aa-ff23-7691-b372-5f1eec0dcd5e: Book the venue, fields.cells.01a169aa-ff23-7691-b372-5f1f53a79ace: In progress, fields.cells.01a169aa-ff23-7691-b372-5f20579c9f54: Call on Monday }
+  - actual: out:after
+    compare: values
+    collateral: true
+    value:
+      objects.0.fields.cells.01a169aa-ff23-7691-b372-5f1eec0dcd5e: Write the plan
+      objects.0.fields.cells.01a169aa-ff23-7691-b372-5f1f53a79ace: To do
+      objects.1.fields.cells.01a169aa-ff23-7691-b372-5f1eec0dcd5e: Review the plan
+      objects.1.fields.cells.01a169aa-ff23-7691-b372-5f1f53a79ace: Done
+      objects.1.fields.cells.01a169aa-ff23-7691-b372-5f20579c9f54: Looks good
+  - actual: out:diagnostics
+    compare: diagnostics
+    value: { max_errors: 0 }
+solution:
+  - tool: table_run
+    args:
+      path: tasks.ktable
+      steps:
+        - { command: table.records.create, params: { tableId: 1, values: { title: Book the venue, status: In progress, notes: Call on Monday } } }
+since: "2026-11-16"
+timeout_s: 600

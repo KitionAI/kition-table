@@ -1,0 +1,56 @@
+[
+  {
+    "code": "table.broken-link",
+    "severity": "error",
+    "summary": "A link field points at a table that does not exist, so its cells link to nothing.",
+    "fixture": "check-broken-link.ktable"
+  },
+  {
+    "code": "table.broken-lookup",
+    "severity": "error",
+    "summary": "A lookup or rollup field reads through a link field, or from a field, that does not exist, so it shows nothing.",
+    "fixture": "check-broken-lookup.ktable"
+  },
+  {
+    "code": "table.dashboard-missing-table",
+    "severity": "error",
+    "summary": "A dashboard reads a table that does not exist, so its widgets show nothing.",
+    "fixture": "check-dashboard-missing-table.ktable"
+  },
+  {
+    "code": "table.formula-error",
+    "severity": "error",
+    "summary": "A formula fails to evaluate on a record and shows an error instead of a value.",
+    "fixture": "check-formula-error.ktable"
+  },
+  {
+    "code": "table.formula-unknown-field",
+    "severity": "error",
+    "summary": "A formula names a field its table does not have, which it reads as empty.",
+    "fixture": "check-formula-unknown-field.ktable"
+  },
+  {
+    "code": "table.field-type-mismatch",
+    "severity": "error",
+    "summary": "A cell holds a value its field's type cannot show, such as text in a number field.",
+    "fixture": "check-field-type-mismatch.ktable"
+  },
+  {
+    "code": "table.select-option-missing",
+    "severity": "warning",
+    "summary": "A select cell holds a value that is not one of its field's options.",
+    "fixture": "check-select-option-missing.ktable"
+  },
+  {
+    "code": "table.required-empty",
+    "severity": "warning",
+    "summary": "A record leaves a required field empty.",
+    "fixture": "check-required-empty.ktable"
+  },
+  {
+    "code": "table.duplicate-primary",
+    "severity": "warning",
+    "summary": "Two records of a table have the same primary value, so links and lookups cannot tell them apart.",
+    "fixture": "check-duplicate-primary.ktable"
+  }
+]

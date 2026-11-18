@@ -1,0 +1,28 @@
+format: 1
+id: regressions/issue-export-through-host
+feature: table.import-export
+intent: >-
+  The table editor's Export as CSV and Export as Markdown write a new file beside the document
+  through the host (Kit UI protocol `host/write` mode `export`): the engine answers the bytes
+  (`table.file.export`), the editor says it exported only when the host answers and names the file
+  the host wrote, and shows the host's error when it refuses. Before, the CSV download asked for a
+  save dialog the kit's host does not offer, and no file was written in the desktop app.
+layer: gate
+source:
+  kind: issue
+  from: Kition desktop app, the table editor's CSV download saved no file
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/exportFile.spec.ts]
+  - exec:
+      cmd: [pnpm, --dir, web, exec, node, tests/export.mjs, chromium]
+  - exec:
+      cmd: [pnpm, --dir, web, exec, node, tests/export.mjs, webkit]
+expected:
+  - actual: out:exit
+    compare: exit
+requires: [chromium, webkit]
+timeout_s: 60
+since: "2026-11-16"

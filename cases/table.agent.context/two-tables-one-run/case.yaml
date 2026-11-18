@@ -1,0 +1,47 @@
+format: 1
+id: table.agent.context/two-tables-one-run
+feature: table.agent.context
+intent: >-
+  The file holds two tables, Notes and Packing. In one table_run the agent marks two Packing
+  records packed and sets one Notes record's status, naming each record by the id table_inspect
+  lists (`on`) and each step's table (the run's target, a step's at.part, and tableId); each edit
+  lands on its own record and nothing else changes.
+layer: eval
+source:
+  kind: synthetic
+  from: 'a two-table file the table engine wrote'
+  license: owned
+input: [input/trip.ktable]
+steps:
+  - task:
+      prompt: >-
+        In trip.ktable, mark Passport and Charger as packed in the Packing table, and set the
+        status of the note "Find a sitter" to Done, in one table_run call. Change nothing else.
+      max_turns: 20
+  - inspect: { path: trip.ktable, as: after }
+expected:
+  - actual: out:after
+    compare: values
+    value:
+      details.tables.1.records.rows.0.cells.1: true
+      details.tables.1.records.rows.1.cells.1: true
+      details.tables.0.records.rows.1.cells.1: Done
+  - actual: out:after
+    compare: values
+    collateral: true
+    value:
+      details.tables.1.records.total: 3
+      details.tables.1.records.rows.2.cells.0: Boots
+      details.tables.0.records.total: 2
+      details.tables.0.records.rows.0.cells.0: Ask about visas
+solution:
+  - tool: table_run
+    args:
+      path: trip.ktable
+      target: { table: 2 }
+      steps:
+        - { command: table.records.update, on: [3], params: { tableId: 2, values: { packed: true } } }
+        - { command: table.records.update, on: [4], params: { tableId: 2, values: { packed: true } } }
+        - { command: table.records.update, at: { part: { table: 1 } }, on: [2], params: { tableId: 1, values: { status: Done } } }
+since: "2026-11-16"
+timeout_s: 600

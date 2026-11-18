@@ -1,0 +1,17 @@
+format: 1
+id: table.import-export/save-reopen
+feature: table.import-export
+intent: >-
+  Rows imported with table.csv.import (a quoted comma, CJK) and table.import.run, and the CSV table.csv.export answers, survive a .ktable save and reopen, and a second save.
+layer: gate
+source:
+  kind: synthetic
+  from: bindings/wasm/src/round_trip_tests.rs (csv_imports_survive_save_and_reopen)
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "round_trip_tests::csv_imports_survive_save_and_reopen" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

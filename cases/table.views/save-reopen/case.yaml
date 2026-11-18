@@ -1,0 +1,17 @@
+format: 1
+id: table.views/save-reopen
+feature: table.views
+intent: >-
+  A view with a filter, a sort, a grouping, row height, a frozen column and a hidden, resized column keeps them all through a .ktable save and reopen, and a second save.
+layer: gate
+source:
+  kind: synthetic
+  from: bindings/wasm/src/round_trip_tests.rs (views_with_filters_sorts_groups_and_columns_survive_save_and_reopen)
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "round_trip_tests::views_with_filters_sorts_groups_and_columns_survive_save_and_reopen" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

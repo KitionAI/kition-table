@@ -1,0 +1,20 @@
+format: 1
+id: regressions/issue-command-titles
+feature: table.agent.act
+intent: >-
+  Every command the headless kit lists has a title a person reads ("Update a table", "Read a
+  view's filter"), not its route name ("tables.update", "views.getFilterTree"), so command search
+  by words (KHP A5c) finds it by its title as well as its description. The ids stay as they are.
+layer: gate
+source:
+  kind: probe
+  from: agent-readiness review of the table kit's command titles
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table, test: command_catalogue, filter: every_listed_command_has_a_human_title }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-16"

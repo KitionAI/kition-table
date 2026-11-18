@@ -1,0 +1,212 @@
+format: 1
+kit: table
+updated: "2026-11-16"
+gate_budget_s: 600
+protected: []
+features:
+  - id: table.agent.observe
+    title: An agent reads the records and answers in the file
+    dimension: [ai]
+    priority: P0
+    status: has
+    requirements: [AX13]
+    commands: [table.read]
+    paths: [bindings/wasm/src/inspect.rs, apps/kition-table/tests/inspect.rs]
+    cases: [regressions/issue-inspect-content, table.agent.observe/done-follows]
+    since: "2026-11-16"
+  - id: table.agent.act
+    title: An agent adds records by field name
+    dimension: [ai]
+    priority: P0
+    status: has
+    requirements: [AX13]
+    cases: [table.agent.act/new-task, regressions/issue-agent-undo-scope, regressions/issue-3, regressions/issue-command-titles]
+    since: "2026-11-16"
+  - id: table.agent.recover
+    title: An agent fixes what the check reports
+    dimension: [ai]
+    priority: P0
+    status: has
+    requirements: [AX13]
+    paths: [bindings/wasm/src/model.rs, apps/kition-table/tests/replica.rs]
+    cases: [regressions/issue-draft-replica-open, table.agent.recover/number-as-word, regressions/issue-unknown-params]
+    since: "2026-11-16"
+  - id: table.agent.context
+    title: No agent call depends on or leaves behind what the picture shows; previews draw a named table or view
+    dimension: [ai]
+    priority: P0
+    status: has
+    commands: [table.file.render, table.preview.show]
+    paths: [bindings/wasm/src/context.rs, bindings/wasm/src/acts.rs, bindings/wasm/src/preview.rs, bindings/wasm/src/lib.rs, apps/kition-table/src/main.rs, kit.json]
+    requirements: [AX13]
+    cases: [table.agent.context/check-context, table.agent.context/editor-state-hidden, table.agent.context/explicit-targets, table.agent.context/failed-run, table.agent.context/headless-run, table.agent.context/named-preview, table.agent.context/on-and-part, table.agent.context/published-commands, table.agent.context/reads-declared, table.agent.context/refused-contexts, table.agent.context/render-explicit-view, table.agent.context/render-named-view, table.agent.context/tool-refusals, table.agent.context/two-tables-one-run]
+    since: "2026-11-16"
+  - id: table.agent.ids
+    title: One id space for tables, fields, views and records that survives reopening; receipts name them
+    dimension: [ai, conversion]
+    priority: P0
+    status: partial
+    paths: [model/schema.json, crates/engine/file/src/kdm/project.rs, bindings/wasm/src/params.rs, bindings/wasm/tests/object_params.rs, apps/kition-table/tests/premise.rs]
+    requirements: [AX13]
+    gap: "Reads retain local integer addresses and expose stable tool_id UUIDs."
+    cases: [table.agent.ids/field-rename-receipt, table.agent.ids/guard-others, table.agent.ids/new-server, regressions/issue-c8-land-13-params, regressions/issue-c8-table-review-ids, regressions/issue-c8-table-review-read-ids]
+    since: "2026-11-16"
+  - id: table.agent.premises
+    title: Writes hold their addressed cells, properties, settings and insertion gaps
+    dimension: [ai, collab, data-safety]
+    priority: P0
+    status: partial
+    paths: [bindings/wasm/src/place.rs, bindings/wasm/tests/places.rs, apps/kition-table/tests/outside.rs]
+    gap: "Large derived-map preimages can conservatively refuse unrelated same-server structural edits. Whole-object source fallbacks remain for destructive operations."
+    cases: [regressions/issue-c8-table-pin, regressions/issue-c8-land-13-outside, regressions/issue-c8-land-13-premises, regressions/issue-c8-land-13-saved, regressions/issue-c8-table-review-dependencies, regressions/issue-c8-table-review-families, regressions/issue-c8-table-review-cascades, regressions/issue-c8-table-review-precision, regressions/issue-c8-table-review-sdk, regressions/issue-c8-table-3-address, regressions/issue-c8-table-3-derived, regressions/issue-c8-table-3-families, regressions/issue-c8-table-3-import, regressions/issue-c8-table-3-seeds, regressions/issue-c8-table-read, regressions/issue-c8-table-read-import-primary]
+    since: "2026-11-16"
+  - id: table.agent.receipts
+    title: Receipts state identical shifts and assignments once and count what they leave out
+    dimension: [ai, data-safety]
+    priority: P0
+    status: has
+    paths: [apps/kition-table/tests/outside/review_receipts.rs, model/schema.json]
+    cases: [regressions/issue-c8-table-review-receipts, regressions/issue-c8-table-3-receipts]
+    since: "2026-11-16"
+  - id: table.agent.conversation
+    title: An agent builds and refines a view over a conversation
+    dimension: [ai]
+    priority: P1
+    status: has
+    requirements: [AX13]
+    cases: [table.agent.conversation/open-work-view]
+    since: "2026-11-16"
+  - id: table.agent.environment
+    title: Offline editing tasks use the table model's words and value domains
+    dimension: [ai]
+    priority: P1
+    status: partial
+    paths: [model/schema.json, crates/engine/file/src/kdm/kit-table.schema.json, bindings/wasm/tests/schema_words.rs, apps/kition-table/tests/environment.rs]
+    gap: "A hand-made raw Record create needs its read-only createdAt, and replaying a creation receipt by hand mints fresh UUIDs and drops required empty strings; untyped cell values limit generation."
+    cases: [table.agent.environment/schema-words, regressions/issue-c8-table-review-environment, regressions/issue-c8-table-review-env-generation]
+    since: "2026-11-16"
+  - id: table.collab.replica
+    title: A shared table opens from its replica (engine contract 2)
+    dimension: [collab, function]
+    priority: P1
+    status: has
+    requirements: [E2]
+    paths: [bindings/wasm/src/web.rs, bindings/wasm/src/lib.rs, crates/engine/file/src/file.rs, kit.json]
+    cases: [table.collab.replica/open-from-snapshot, regressions/issue-room-snapshot-ignored]
+    since: "2026-11-16"
+  - id: table.collab.live
+    title: Two or more people edit one table at the same time, live
+    dimension: [collab, function]
+    priority: P1
+    status: has
+    requirements: [E2]
+    paths: [web/src/capabilities.ts, web/src/main.tsx, web/src/dataSource.ts, bindings/wasm/src/lib.rs, bindings/wasm/tests/convergence.rs]
+    cases: [table.collab.live/two-editors]
+    since: "2026-11-16"
+  - id: table.editor.toolbar
+    title: The grid toolbar (add record, fields, filter, sort, group, row height, freeze, search)
+    dimension: [function]
+    priority: P1
+    status: has
+    paths: [web/src/editor/table/components/TableEditorToolbarPropertyBar.tsx, web/src/editor/table/components/TableEditorOverlays.tsx, web/src/styles/editor.css]
+    cases: [regressions/issue-property-bar-narrow]
+    since: "2026-11-16"
+  - id: table.records
+    title: "Records: list, create, update, delete, copy in bulk, and their history"
+    dimension: [function, data-safety]
+    priority: P0
+    status: has
+    commands: [table.records.list, table.records.create, table.records.update, table.records.delete, table.records.history, table.records.bulkDelete, table.records.bulkCopy]
+    paths: [bindings/wasm/src/model.rs, bindings/wasm/src/check.rs, bindings/wasm/examples/checks.rs, crates/engine/file/src/ids.rs, crates/engine/time/src/lib.rs, crates/engine/api/src/values.rs, crates/engine/file/src/kdm/store.rs, crates/engine/file/tests/storage_scale.rs]
+    cases: [table.records/save-reopen, regressions/issue-7, regressions/issue-8, regressions/issue-grid-typing-and-drag, regressions/issue-rating-draws-stars, regressions/issue-table-100k-rows]
+    since: "2026-11-16"
+  - id: table.schema
+    title: "Tables and fields: create, update, delete, duplicate, link candidates"
+    dimension: [function]
+    priority: P0
+    status: has
+    commands: [table.documents.get, table.tables.list, table.tables.create, table.tables.update, table.tables.delete, table.fields.list, table.fields.create, table.fields.update, table.fields.delete, table.fields.duplicate, table.fields.linkCandidates]
+    paths: [bindings/wasm/examples/checks.rs, bindings/wasm/src/check.rs]
+    gap: "table.tables.delete and table.fields.linkCandidates are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
+    cases: [table.schema/save-reopen, regressions/issue-2, regressions/issue-9]
+    since: "2026-11-16"
+  - id: table.views
+    title: "Views: filters, sorts, groups, field visibility and widths"
+    dimension: [function]
+    priority: P0
+    status: has
+    commands: [table.views.list, table.views.create, table.views.update, table.views.delete, table.views.getFilterTree, table.views.putFilterTree, table.views.getSorts, table.views.putSorts, table.views.getGroups, table.views.putGroups, table.views.patchConfig, table.views.listFields, table.views.patchField]
+    gap: "table.views.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
+    cases: [table.views/save-reopen]
+    since: "2026-11-16"
+  - id: table.links
+    title: "Links between records"
+    dimension: [function]
+    priority: P0
+    status: has
+    commands: [table.links.list, table.links.replace, table.links.delete]
+    gap: "table.links.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
+    cases: [table.links/save-reopen, regressions/issue-5]
+    since: "2026-11-16"
+  - id: table.import-export
+    title: "Import CSV and spreadsheets; export CSV and Markdown"
+    dimension: [conversion, function]
+    priority: P1
+    status: has
+    commands: [table.csv.import, table.csv.export, table.markdown.export, table.file.export, table.import.preview, table.import.run]
+    paths: [apps/kition-table/src/main.rs, bindings/wasm/src/export.rs, web/src/exportFile.ts]
+    gap: "table.markdown.export and table.import.preview are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
+    cases: [table.import-export/save-reopen, regressions/issue-6, regressions/issue-export-bytes, regressions/issue-export-through-host]
+    since: "2026-11-16"
+  - id: table.dashboards
+    title: "Dashboards and record previews"
+    dimension: [function]
+    priority: P1
+    status: has
+    commands: [table.dashboards.list, table.dashboards.upsert, table.dashboards.delete]
+    paths: [bindings/wasm/src/check.rs, bindings/wasm/examples/checks.rs]
+    cases: [table.dashboards/save-reopen]
+    since: "2026-11-16"
+  - id: table.picture
+    title: "The document's picture: what the editor shows (tables, views, typed cells, dashboards), for renders, thumbnails and previews"
+    dimension: [fidelity, ai]
+    priority: P1
+    status: has
+    commands: [table.file.render, table.preview.show]
+    paths: [crates/view/fonts/**, crates/view/picture/**, bindings/wasm/src/preview.rs, bindings/wasm/tests/picture.rs, bindings/wasm/tests/preview.rs, apps/kition-table/src/main.rs, apps/kition-table/tests/render.rs, conformance/golden/**]
+    cases: [regressions/issue-4, regressions/issue-render-command]
+    since: "2026-11-16"
+  - id: table.attachments
+    title: "Attachments stored in the file"
+    dimension: [function, data-safety]
+    priority: P1
+    status: has
+    commands: [table.attachments.put, table.attachments.read]
+    cases: [table.attachments/save-reopen]
+    since: "2026-11-16"
+  - id: table.ai-fields
+    title: "AI fields: prepare a request and apply its answer to cells"
+    dimension: [ai, function]
+    priority: P1
+    status: partial
+    commands: [table.ai.prepare, table.ai.apply]
+    gap: "The engine has these commands; no case yet shows the area working end to end in the editor and surviving save and reopen."
+    cases: [regressions/issue-ai-field-no-model-action]
+    since: "2026-11-16"
+  - id: table.history
+    title: "Undo, redo, transactions and the change feed"
+    dimension: [function, collab]
+    priority: P1
+    status: partial
+    commands: [edit.undo, edit.redo, table.transact, table.undo, table.redo, table.historyState, table.changes.since]
+    paths: [bindings/wasm/src/lib.rs, bindings/wasm/src/agent.rs]
+    gap: "The engine has these commands; no case yet shows the area working end to end in the editor and surviving save and reopen."
+    since: "2026-11-16"
+  - id: table.editor.display-modes
+    title: The editor in Focus (an editor without frame tabs offers only Focus); Focus shows the records alone
+    dimension: [function]
+    priority: P1
+    status: has
+    paths: [web/src/App.tsx, web/src/editor/table/components/TableEditor.tsx, web/src/editor/table/components/TableEditorFooter.tsx, web/src/editor/dashboard/components/DashboardEditor.tsx, web/src/editor/table/components/TableColumnHeaderMenu.tsx, web/src/editor/table/components/TableEditorOverlays.tsx, web/src/editor/table/components/AttachmentPreviewModal.tsx, web/tests/modes.mjs, web/tests/flow.mjs]
+    cases: [regressions/issue-focus-shows-bars]
+    since: "2026-11-16"

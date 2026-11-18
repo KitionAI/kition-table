@@ -1,0 +1,21 @@
+format: 1
+id: table.agent.context/explicit-targets
+feature: table.agent.context
+intent: >-
+  An agent's command leaves the person's picture as it was, also when it fails; only table.preview.show keeps its effect.
+layer: gate
+source:
+  kind: synthetic
+  from: apps/kition-table/tests/context.rs
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table
+      test: context
+      filter: an_agents_command_moves_nothing_but_preview_show
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+since: "2026-11-16"

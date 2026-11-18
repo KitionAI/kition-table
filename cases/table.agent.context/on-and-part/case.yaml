@@ -1,0 +1,22 @@
+format: 1
+id: table.agent.context/on-and-part
+feature: table.agent.context
+intent: >-
+  Through the agent's tools, a step with on and at.part updates exactly the record on names in the part's table; the request's change and the receipt name that record alone, with its cells before and after.
+layer: gate
+source:
+  kind: synthetic
+  from: apps/kition-table/tests/premise.rs
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table
+      test: premise
+      filter: a_step_with_on_and_at_part_updates_exactly_that_record_and_the_receipt_names_it_with_before_and_after
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+tags: [headless]
+since: "2026-11-16"

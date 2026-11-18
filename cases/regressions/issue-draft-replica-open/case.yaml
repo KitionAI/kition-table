@@ -1,0 +1,24 @@
+format: 1
+id: regressions/issue-draft-replica-open
+feature: table.agent.recover
+intent: >-
+  kition-table opens a document from its replica (model.open, which kit.json lists): what
+  model.export answers for an open table file, its changes and the attachments (blobs) they name,
+  opens again as the same document with no file, takes edits of its own apart from the file, and a
+  snapshot that is no replica is refused rather than opened as an empty document. An agent's
+  headless draft is such a replica (KHP A12); the kit's ReplicaPort lacked model_open_replica and
+  the blob methods, so kition-kits-mcp silently fell back to file-mode drafts (copies of the file,
+  without the object difference a person reviews).
+layer: gate
+source:
+  kind: probe
+  from: agent-readiness review of the table kit's drafts
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table, test: replica }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-16"

@@ -1,0 +1,16 @@
+format: 1
+id: regressions/issue-c8-land-13-premises
+feature: table.agent.premises
+intent: Property, cell, effective view-setting and insertion writes hold their actual inputs, and repeated transaction operations union their premises.
+layer: gate
+dimension: ai
+source:
+  kind: synthetic
+  from: outside-writer tests of the agent tools
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: {package: kition-table-kit, test: places}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-16"

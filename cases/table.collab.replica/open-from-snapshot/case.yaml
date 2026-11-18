@@ -1,0 +1,22 @@
+format: 1
+id: table.collab.replica/open-from-snapshot
+feature: table.collab.replica
+intent: >-
+  Under engine contract 2 a co-editor with no file yet opens a shared table from a peer's
+  snapshot (`openWithReplica` with empty bytes) as the same KDM document and exchanges changes
+  with it; file bytes open with the replica the `.ktable` holds; `undo` and `redo` answer
+  `{done, damage}` for the person's steps.
+layer: gate
+source:
+  kind: synthetic
+  from: engine contract 2
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "tests::a_snapshot_opens_as_the_same_document_without_a_file" }
+  - cargo-test: { package: kition-table-kit, filter: "tests::file_bytes_open_with_their_own_replica" }
+  - cargo-test: { package: kition-table-kit, filter: "tests::undo_and_redo_answer_done_and_damage" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

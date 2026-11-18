@@ -1,0 +1,31 @@
+format: 1
+id: regressions/issue-table-100k-rows
+feature: table.records
+intent: >-
+  A table's storage grows in proportion to its records, so a 100,000-record table can be built,
+  saved and opened again. While it is written, the change log may grow to a quarter of the replica
+  snapshot before a compaction writes the snapshot again (a fixed 1 MiB made every bulk write
+  rewrite it); a document held in memory compacts a log past 1 MiB before it is saved, so an open
+  loads the snapshot instead of replaying the log. A compaction writes the new snapshot into the
+  old one's pages instead of leaving them free, new
+  record rows are written at their full size instead of growing from {} and splitting their pages,
+  a document opened from bytes is held page by page instead of in one block that doubles as it
+  grows and stops at 1 GiB, and the saved bytes, read a page at a time, are the database's. The
+  replica's own undo notes are kition-sdk's cases
+  regressions/issue-kition-table-100k-rows and regressions/issue-kition-table-100k-rows-open.
+  Before, a table ran out of WebAssembly memory while it was built and crashed while it was saved
+  long before 100,000 records.
+layer: gate
+source:
+  kind: issue
+  from: Kition Table grid spike TG-0b (card table-storage)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-file, test: storage_scale }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+timeout_s: 120
+since: "2026-11-17"

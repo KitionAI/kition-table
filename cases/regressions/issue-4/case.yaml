@@ -1,0 +1,26 @@
+format: 1
+id: regressions/issue-4
+feature: table.picture
+intent: >-
+  The document's picture (render, render_area, table.file.render) is what the editor shows: the tab
+  bar of tables and dashboards, the shown table's view bar, and the view with every field and record
+  it shows (filtered, sorted and grouped as the view says, column widths from the view): field type
+  icons and titles and the values drawn as text by type in the faces the host registers, or a kanban
+  board, a gallery, a calendar list, or a dashboard's widgets from their records. It shows the first
+  table's first view, as the editor opens, until preview.show picks a table, view or dashboard.
+  Before, render drew coloured bars without text, of the first table only, at most 8 columns by 20
+  rows, so every thumbnail looked alike.
+layer: gate
+source:
+  kind: issue
+  from: Kition Table regression suite
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: picture }
+  - cargo-test: { package: kition-table-kit, test: preview }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"
+tags: [cjk]

@@ -1,0 +1,52 @@
+/* The shell around Kition's table editor: the editor fills the body between the bar and the status bar. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.table-kit-title {
+  font-size: 13px;
+}
+
+/* The document's tables and dashboards, under the frame's top bar. */
+.table-kit-tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: 36px;
+  border-bottom: 1px solid var(--kit-border, #e5e5e5);
+}
+
+.table-kit-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.table-kit-body > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Tessera's controls inside the editor. Its stylesheet comes after the editor's, so the editor's
+   adjustments to them live here, after both. */
+.data-inline-view-tab-menu {
+  width: 12rem;
+  padding: 4px;
+}
+
+/* A choice cell's drop-down reads as the cell until hovered. */
+.data-inline-grid .kui-select select {
+  min-width: 150px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.data-inline-grid .kui-select select:hover:not(:disabled) {
+  background: hsl(var(--muted));
+}

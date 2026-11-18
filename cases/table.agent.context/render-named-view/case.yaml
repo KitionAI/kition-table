@@ -1,0 +1,20 @@
+format: 1
+id: table.agent.context/render-named-view
+feature: table.agent.context
+intent: >-
+  table.file.render draws a table ({table: id}) or a view ({view: id}) by id, scale and maxSize set its size, and a table or view the file lacks, or a view of another table, is refused naming it.
+layer: gate
+source:
+  kind: synthetic
+  from: bindings/wasm/tests/render_view.rs
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table-kit
+      test: render_view
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+since: "2026-11-16"

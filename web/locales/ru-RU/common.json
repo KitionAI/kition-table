@@ -1,0 +1,13 @@
+{
+  "actions": {
+    "cancel": "Отмена",
+    "close": "Закрыть",
+    "confirm": "Подтвердить",
+    "save": "Сохранить",
+    "hidePassword": "Скрыть пароль",
+    "showPassword": "Показать пароль"
+  },
+  "dialogs": {
+    "rightSheet": "Правый лист"
+  }
+}

@@ -1,0 +1,48 @@
+[package]
+name = "kition-table-kit"
+description = "The Table engine for Kition's in-page editor: open, edit, and save Kition table documents (.ktable) from JavaScript (WebAssembly), on the Kition SDK."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# 34dff06's unconditional BatchSettler alias requires its session-gated kdm module.
+kition-kit = { workspace = true, features = ["session"] }
+kition-table-file = { workspace = true }
+kition-table-api = { workspace = true }
+kition-table-ai = { workspace = true }
+kition-table-import = { workspace = true }
+kition-table-picture = { workspace = true }
+kition-table-fonts = { workspace = true }
+kition-kdm = { workspace = true }
+base64 = { workspace = true }
+png = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+# The object model's `ReplicaPort` for the headless executable (`apps/kition-table`). Off in the
+# WebAssembly build: it brings kition-sdk's session (the KDM session) into the module.
+headless = ["kition-kit/session"]
+
+# SQLite is compiled into the module; wasm-opt then shrinks it (`-Oz` keeps opt-level 3 speed in
+# the code and drops what is unused).
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int", "--enable-sign-ext", "--enable-mutable-globals"]
+
+[dev-dependencies]
+# The showcase sample builder (examples/showcase.rs) saves its thumbnails.
+image = { version = "0.25", default-features = false, features = ["png"] }
+# Two to five replicas driven through the engine's commands (tests/convergence.rs).
+kition-convergence = { workspace = true }
+jsonschema = { version = "0.58", default-features = false }

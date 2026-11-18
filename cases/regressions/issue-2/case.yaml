@@ -1,0 +1,28 @@
+format: 1
+id: regressions/issue-2
+feature: table.schema
+intent: >-
+  A host builds a table's schema from the published material alone. In the parameter schemas of
+  table.tables.create, table.fields.create and table.fields.update, a field's `type` is an enum of
+  the engine's identifiers with a one-line description of each, beside the options the types read
+  (select choices, link and lookup ids, rollup aggregation, rating maximum, ...); a view's `type`
+  is an enum too. An unknown type is refused as invalid params naming `type` (or
+  `fields[n].type`) and the valid values, by the headless host and by the engine itself. A new
+  document's starter table (table 1, "Table": title, status, notes; view All) is described in
+  agent/guide.md and kit.json, and a host that builds its own schema removes it with one
+  table.tables.delete as a system write the person's Undo does not bring back. Before, `type` was
+  a bare string, an unknown type failed with "Failed to create field", and nothing said the new
+  document held a table.
+layer: gate
+source:
+  kind: issue
+  from: Kition Table regression suite
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: field_types }
+  - cargo-test: { package: kition-table, test: command_catalogue, filter: "an_unknown_field_type_is_invalid_params" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

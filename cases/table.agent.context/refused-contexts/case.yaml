@@ -1,0 +1,21 @@
+format: 1
+id: table.agent.context/refused-contexts
+feature: table.agent.context
+intent: >-
+  A table or view the file lacks, a view of another table, another kit's part, a table by title, and an on id that is no record or field of the part's table or both are invalid-params; a time or a selection is not available; nothing moves.
+layer: gate
+source:
+  kind: synthetic
+  from: apps/kition-table/tests/context.rs
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test:
+      package: kition-table
+      test: context
+      filter: a_context_the_file_lacks_or_cannot_mean_is_refused_and_moves_nothing
+expected:
+  - actual: out:cargo-test
+    compare: exit
+    value: 0
+since: "2026-11-16"

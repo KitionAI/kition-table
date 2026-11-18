@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-focus-shows-bars
+feature: table.editor.display-modes
+intent: >-
+  Focus shows the records alone: the tables bar, the views bar, the toolbar, and the footer are
+  the editor's own bars and leave with the rest of the chrome (they stayed, and the Focus bar sat
+  on the "N records" footer). Outside Focus the frame draws no empty status bar under the
+  editor's footer, which shows the document's state (unsaved, edited by the agent) instead.
+  Escape that closes a menu (a column's, a record's, a toolbar popover, the attachment preview)
+  is the menu's alone: in Focus it no longer leaves Focus as well.
+layer: gate
+source:
+  kind: probe
+  from: review of the kits' display modes
+  license: Apache-2.0
+input: []
+steps:
+  - flow: { spec: web/tests/flow.mjs, scenario: "Focus shows the records alone", browsers: [chromium, webkit] }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"

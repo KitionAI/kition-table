@@ -1,0 +1,24 @@
+format: 1
+id: regressions/issue-room-snapshot-ignored
+feature: table.collab.replica
+intent: >-
+  A co-editing host stores the room's snapshot as the replica a table opens with (the embed's
+  adoptRoom), so a fresh page after a restart opens with every change the room acknowledged.
+  `openWithReplica` with file bytes merges a snapshot of the file's own document into the file;
+  a snapshot the file already holds leaves the document saved, and a damaged one is left out.
+  Before, file bytes opened as the file alone and the stored snapshot was ignored, so the
+  editor showed the last saved file until the relay caught up.
+layer: gate
+source:
+  kind: issue
+  from: "co-editing cases: table keeps no replica the room can use"
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "tests::a_room_snapshot_of_the_same_document_merges_into_the_file" }
+  - cargo-test: { package: kition-table-kit, filter: "tests::file_bytes_open_saved_with_the_replica_saved_with_them" }
+  - cargo-test: { package: kition-table-kit, filter: "tests::a_damaged_snapshot_leaves_the_file_as_it_is" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-16"
