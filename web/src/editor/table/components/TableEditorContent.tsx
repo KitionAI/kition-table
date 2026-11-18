@@ -67,7 +67,8 @@ type TableEditorContentProps = {
   resetScrollKey: string
   rowHeight?: number
   freezeColumnCount?: number
-  searchQuery?: string
+  /** The cells holding the search, from the engine's arrangement. */
+  searchHits: Array<{ recordId: number; fieldId: number }>
   onColumnFreeze?: (count: number) => void
   draggingRecordId: number | null
   dragOverRecordId: number | null
@@ -164,7 +165,7 @@ export const TableEditorContent = forwardRef<TableEditorHandle, TableEditorConte
       resetScrollKey,
       rowHeight,
       freezeColumnCount,
-      searchQuery,
+      searchHits,
       onColumnFreeze,
       draggingRecordId,
       dragOverRecordId,
@@ -317,7 +318,7 @@ export const TableEditorContent = forwardRef<TableEditorHandle, TableEditorConte
         resetScrollKey={resetScrollKey}
         rowHeight={rowHeight}
         freezeColumnCount={freezeColumnCount}
-        searchQuery={searchQuery}
+        searchHits={searchHits}
         onColumnFreeze={onColumnFreeze}
         onLoadWindow={onLoadWindow}
         onToggleAllSelected={onToggleAllSelected}

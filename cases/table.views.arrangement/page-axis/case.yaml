@@ -1,0 +1,20 @@
+format: 1
+id: table.views.arrangement/page-axis
+feature: table.views.arrangement
+intent: >-
+  The editor reads the engine's axis (format v1, from any offset of a buffer) and refuses another
+  version, and turns its group headers into the grid's group points: each header, then the run of
+  records up to the next, inner headers nested under outer ones, collapsed marks kept.
+layer: gate
+source:
+  kind: synthetic
+  from: web/src/editor/table/lib/gridAxis.spec.ts
+  license: Apache-2.0
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/lib/gridAxis.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-18"

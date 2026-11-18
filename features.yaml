@@ -143,10 +143,10 @@ features:
     title: "One arrangement of a view's records in the engine (filter, sorts, groups, search), kept up to date edit by edit, for the editor's views and the agent's read"
     dimension: [function, performance]
     priority: P0
-    status: partial
-    paths: [crates/engine/arrange/**, bindings/wasm/src/grid.rs, bindings/wasm/src/grid_tests.rs, bindings/wasm/examples/grid_arrange.rs]
-    gap: "The editor does not use it yet; the picture (crates/view/picture/src/data.rs) still has its own copy of the arrangement."
-    cases: [table.views.arrangement/filter-operators, table.views.arrangement/groups-search-relocation, table.views.arrangement/engine-axis]
+    status: has
+    paths: [crates/engine/arrange/**, bindings/wasm/src/grid.rs, bindings/wasm/src/grid_tests.rs, bindings/wasm/examples/grid_arrange.rs, web/src/editor/table/hooks/useTableArrangement.ts, web/src/editor/table/hooks/useTableEditorDerivedState.ts, web/src/editor/table/lib/gridAxis.ts, web/src/editor/table/filter/tree.ts]
+    gap: "The picture (crates/view/picture/src/data.rs) still has its own copy of the arrangement until it moves onto kition-table-arrange."
+    cases: [table.views.arrangement/filter-operators, table.views.arrangement/groups-search-relocation, table.views.arrangement/engine-axis, table.views.arrangement/page-axis]
     since: "2026-11-18"
   - id: table.links
     title: "Links between records"

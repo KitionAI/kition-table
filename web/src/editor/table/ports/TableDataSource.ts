@@ -7,6 +7,7 @@ import type {
   DataDocumentsTransactUndoRedoResponse,
 } from '../../generated/data-documents-transact'
 import type { TableChangedParams } from '../../generated/table-changed'
+import type { GridAxis } from '../lib/gridAxis'
 import type {
   BulkCopyRecordsPayload,
   BulkCopyRecordsResult,
@@ -55,6 +56,19 @@ type FieldParams = TableParams & { fieldId: number }
 type ViewParams = TableParams & { viewId: number }
 type RecordParams = TableParams & { recordId: number }
 type ListWindow = { limit?: number; offset?: number }
+
+/**
+ * What the editor arranges (`gridOpen`): a view of a table with the view's config as the editor
+ * holds it (its saved settings, or the ones it has not saved yet), the search, and the collapsed
+ * group ids.
+ */
+export type GridOpenParams = {
+  tableId: number
+  viewId: number | null
+  config: Record<string, unknown>
+  query: string
+  collapsed: string[]
+}
 
 /**
  * Everything the table editor (table and dashboard) reads from and writes to a table document.
@@ -127,6 +141,18 @@ export interface TableDataSource {
   }
   /** Calls `listener` for each change to `documentId` made elsewhere; returns the unsubscribe. */
   onChange(documentId: number, listener: (event: TableChangeEvent) => void): () => void
+  /**
+   * The engine's arrangement of the view the editor shows: the only place a view's filter, sorts,
+   * groups and the search are applied (kition-table-arrange). `open` arranges a view and answers
+   * its axis; `sync` brings the arrangement to the document's current state and answers the new
+   * axis, or null when it is the same; `subscribe` calls back after every change to the document
+   * (the editor's own writes too), when a `sync` may answer a new axis.
+   */
+  grid: {
+    open(params: GridOpenParams): Promise<GridAxis>
+    sync(): Promise<GridAxis | null>
+    subscribe(listener: () => void): () => void
+  }
 }
 
 const TableDataSourceContext = createContext<TableDataSource | null>(null)

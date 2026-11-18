@@ -1,5 +1,5 @@
 export type { FilterConjunction, FilterOperator, FilterValue } from './types'
-export { countFilterConditions, isConditionActive, parseFilterTree } from './evaluate'
+export { countFilterConditions, parseFilterTree } from './tree'
 export { coerceConditionOnChange } from './coerce'
 export { getOperatorLabel, getOperatorsForField, isFieldFilterable } from './operators'
 export { FilterPopover } from './components/FilterPopover'

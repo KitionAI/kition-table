@@ -251,6 +251,23 @@ try {
     await search.fill('')
   })
 
+  // 7b. The engine arranges the view (kition-table-arrange): the search keeps the records that hold
+  // it, any field, case ignored, and clearing it shows them all again.
+  await test('the search keeps the records that hold it', async () => {
+    const search = kit.getByTestId('ktable-toolbar-search')
+    const footer = kit.locator('.data-inline-footer')
+    const shows = (count) => until(async () => new RegExp(`(^|\\D)${count} records`).test(await footer.textContent()))
+    await search.fill('PHASE')
+    const both = await shows(2)
+    await search.fill('deferred')
+    const one = await shows(1)
+    await search.fill('nothing like it')
+    const none = await shows(0)
+    await search.fill('')
+    const all = await shows(2)
+    step('the search keeps the records that hold it', both && one && none && all, JSON.stringify({ both, one, none, all }))
+  })
+
   // 11. Editing a text cell shows one brand-purple border.
   await test('a text cell editor has one brand border', async () => {
     await stage().click({ position: { x: 145, y: 48 } })

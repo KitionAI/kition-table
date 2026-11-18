@@ -1,12 +1,11 @@
 import { CalendarDaysIcon as CalendarDays, CheckIcon as Check, CircleDotIcon as CircleDot, FileTextIcon as FileText, HashIcon as Hash, Link2Icon as Link2, StarIcon as Star, Table2Icon as Table2, UserIcon as User, WorkflowIcon as Workflow, GalleryHorizontalEndIcon as GalleryHorizontalEnd, SquareKanbanIcon as KanbanSquare } from '@kition/tessera-icons/react'
-import { LinearRowType, type IGroupPoint, type IGroupCollection, type IGridColumn } from '../grid/interface'
+import type { IGroupCollection, IGridColumn } from '../grid/interface'
 import { CellType, type ICell } from '../grid/renderers/cell-renderer/interface'
 import type {
   DataAttachment,
   DataField,
   DataFieldOptions,
   DataFieldType,
-  DataRecord,
   DataRecordValue,
   DataView,
   DataViewType,
@@ -14,7 +13,7 @@ import type {
 // The filter barrel also exports the popover components, which import this
 // module; reach the pure modules directly so the graph stays acyclic.
 export { createEmptyFilterCondition, createEmptyFilterGroup } from '../filter/types'
-export { countFilterConditions, evaluateFilterTree, filterTreeHasActiveCondition } from '../filter/evaluate'
+export { countFilterConditions, filterTreeHasActiveCondition } from '../filter/tree'
 export type { FilterConjunction, FilterOperator } from '../../types/tableFilter'
 import type { FilterCondition, FilterGroup, FilterNode } from '../../types/tableFilter'
 import { blobHashOfURL } from './blobAttachments'
@@ -492,13 +491,6 @@ export function reorderByIdAtPosition<T extends { id: number }>(items: T[], sour
   return nextItems
 }
 
-export function compareRecordValues(a: DataRecordValue, b: DataRecordValue, direction: SortDirection) {
-  const left = displayValue(a)
-  const right = displayValue(b)
-  const result = left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' })
-  return direction === 'asc' ? result : -result
-}
-
 export function readViewConfig(view?: DataView | null): DataInlineViewConfig {
   return (view?.config || {}) as DataInlineViewConfig
 }
@@ -509,83 +501,12 @@ export function kanbanGroupToValue(field: DataField, group: string): string | bo
   return group
 }
 
-export function recordMatchesSearch(record: DataRecord, fields: DataField[], query: string) {
-  const normalized = query.trim().toLowerCase()
-  if (!normalized) return true
-  return fields.some((field) => displayValue(record.values?.[field.name] ?? null).toLowerCase().includes(normalized))
-}
-
 export type FieldSaveUpdates = {
   title?: string
   type?: DataFieldType
   readonly?: boolean
   options?: DataFieldOptions | null
   formula?: string
-}
-
-export function buildGroupId(values: ReadonlyArray<unknown>): string {
-  return values
-    .map((value, depth) => `g${depth}:${JSON.stringify(value ?? null)}`)
-    .join('::')
-}
-
-function groupValuesEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (a == null && b == null) return true
-  if (a == null || b == null) return false
-  return JSON.stringify(a) === JSON.stringify(b)
-}
-
-export function buildGroupPoints(
-  records: DataRecord[],
-  groupItems: DataInlineGroupItem[],
-  collapsedIds: ReadonlySet<string>,
-): IGroupPoint[] {
-  if (!records.length || !groupItems.length) return []
-  const points: IGroupPoint[] = []
-  let prevKeys: unknown[] | null = null
-  let rowRunCount = 0
-
-  const flushRowRun = () => {
-    if (rowRunCount > 0) {
-      points.push({ type: LinearRowType.Row, count: rowRunCount })
-      rowRunCount = 0
-    }
-  }
-
-  for (const record of records) {
-    const keys = groupItems.map((item) => record.values?.[item.field_name] ?? null)
-
-    let changedDepth = -1
-    if (prevKeys === null) {
-      changedDepth = 0
-    } else {
-      for (let d = 0; d < keys.length; d++) {
-        if (!groupValuesEqual(keys[d], prevKeys[d])) {
-          changedDepth = d
-          break
-        }
-      }
-    }
-
-    if (changedDepth !== -1) {
-      flushRowRun()
-      for (let d = changedDepth; d < keys.length; d++) {
-        const id = buildGroupId(keys.slice(0, d + 1))
-        points.push({
-          id,
-          type: LinearRowType.Group,
-          depth: d,
-          value: keys[d],
-          isCollapsed: collapsedIds.has(id),
-        })
-      }
-    }
-    rowRunCount++
-    prevKeys = keys
-  }
-  flushRowRun()
-  return points
 }
 
 export function buildGroupCollection(

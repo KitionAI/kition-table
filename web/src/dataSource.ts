@@ -7,6 +7,7 @@ import {
   type DataTable,
   type TableDataSource,
 } from './editor'
+import { decodeGridAxis } from './editor/table/lib/gridAxis'
 
 /** What a data-document request answers from the engine: the route's answer, and what it changed. */
 type Answer<T> = { result: T; change: unknown }
@@ -121,6 +122,11 @@ function own<T extends { documentId?: number }>({ documentId: _documentId, ...pa
  */
 export function createWorkerTableDataSource(engine: TableEngineAccess, path: string) {
   const listeners = new Set<ChangeListener>()
+  /** The editor's arrangement, told after every change to the document. */
+  const gridListeners = new Set<() => void>()
+  const changed = () => {
+    for (const listener of gridListeners) listener()
+  }
   /** The last revision this source saw or made. */
   let seen: number | null = null
 
@@ -130,7 +136,10 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
       throw refusalMessage(error)
     })
     if (answer == null) throw new Error('The table is not open.')
-    if (!read) seen = engine.revision()
+    if (!read) {
+      seen = engine.revision()
+      changed()
+    }
     return (JSON.parse(answer) as Answer<T>).result
   }
 
@@ -216,16 +225,33 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
         listeners.delete(listener)
       }
     },
+    grid: {
+      open: async (params) => decodeGridAxis(await engine.invoke<Uint8Array>('gridOpen', JSON.stringify(params))),
+      sync: async () => {
+        const bytes = await engine.invoke<Uint8Array>('gridSync')
+        return bytes.byteLength ? decodeGridAxis(bytes) : null
+      },
+      subscribe(listener) {
+        gridListeners.add(listener)
+        return () => {
+          gridListeners.delete(listener)
+        }
+      },
+    },
     command: <T>(method: string, params?: Record<string, unknown>) => call<T>(method, params),
     observe(revision) {
       if (seen === revision) return
       const first = seen == null
       seen = revision
-      if (!first) void foreign().catch(() => emit({ type: 'resync' }))
+      if (!first) {
+        changed()
+        void foreign().catch(() => emit({ type: 'resync' }))
+      }
     },
     reopened(revision) {
       // A new engine's revisions start again, so `observe` alone may see nothing new.
       seen = revision
+      changed()
       emit({ type: 'resync' })
     },
   }

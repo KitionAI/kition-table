@@ -1,11 +1,9 @@
 import { useMemo, type CSSProperties } from 'react'
 import type { DataField, DataRecord } from '../../types/dataDocument'
+import { gridGroupPoints, type GridAxis } from '../lib/gridAxis'
 import {
   buildGroupCollection,
-  buildGroupPoints,
-  compareRecordValues,
   displayValue,
-  evaluateFilterTree,
   filterTreeHasActiveCondition,
   gridAddColumnWidth,
   gridFieldColumnWidth,
@@ -14,16 +12,15 @@ import {
   gridRowNumberColumnWidth,
   maxVirtualGridCanvasHeight,
   normalizeChoiceList,
-  recordMatchesSearch,
   type DataInlineFilterGroup,
   type DataInlineGroupItem,
   type DataInlineSortItem,
   type SortDirection,
 } from '../lib/tableEditorShared'
 
-const EMPTY_COLLAPSED_SET: ReadonlySet<string> = new Set()
-
 type UseTableEditorDerivedStateArgs = {
+  /** The engine's arrangement of the view (`useTableArrangement`); null until it arrives. */
+  axis: GridAxis | null
   fields: DataField[]
   hiddenFieldNames: Set<string>
   coverFieldName: string
@@ -33,7 +30,6 @@ type UseTableEditorDerivedStateArgs = {
   filterValue: string
   groupFieldName: string
   groupItems?: DataInlineGroupItem[]
-  collapsedGroupIds?: ReadonlySet<string>
   query: string
   recordContextMenuRecordId: number | null
   recordOffset: number
@@ -47,6 +43,7 @@ type UseTableEditorDerivedStateArgs = {
 }
 
 export function useTableEditorDerivedState({
+  axis,
   fields,
   hiddenFieldNames,
   coverFieldName,
@@ -56,7 +53,6 @@ export function useTableEditorDerivedState({
   filterValue,
   groupFieldName,
   groupItems,
-  collapsedGroupIds,
   query,
   recordContextMenuRecordId,
   recordOffset,
@@ -107,36 +103,22 @@ export function useTableEditorDerivedState({
     return fields.find((field) => field.name === coverFieldName) || fields.find((field) => field.type === 'attachment') || fields.find((field) => field.type === 'url') || null
   }, [coverFieldName, fields])
   const filterTreeActive = useMemo(() => filterTreeHasActiveCondition(filterTree ?? null), [filterTree])
-  const combinedSortKeys = useMemo<DataInlineSortItem[]>(() => {
-    const groupAsSort: DataInlineSortItem[] = effectiveGroupItems.map((item) => ({
-      id: `group-key:${item.field_name}`,
-      field_name: item.field_name,
-      direction: item.direction,
-    }))
-    return [...groupAsSort, ...effectiveSortItems]
-  }, [effectiveGroupItems, effectiveSortItems])
+  // The view's records in its order: the engine filters, sorts, groups and searches them
+  // (kition-table-arrange); the editor keeps the records' contents.
+  const recordsById = useMemo(() => new Map(records.map((record) => [record.id, record])), [records])
   const sortedAndFilteredRecords = useMemo(() => {
-    const nextRecords = records
-      .filter((record) => recordMatchesSearch(record, fields, query))
-      .filter((record) => {
-        if (filterTreeActive && filterTree) {
-          return evaluateFilterTree(filterTree, record, fields)
-        }
-        return true
-      })
-    if (!combinedSortKeys.length) return nextRecords
-    return [...nextRecords].sort((a, b) => {
-      for (const item of combinedSortKeys) {
-        const cmp = compareRecordValues(
-          a.values?.[item.field_name] ?? null,
-          b.values?.[item.field_name] ?? null,
-          item.direction,
-        )
-        if (cmp !== 0) return cmp
-      }
-      return 0
-    })
-  }, [fields, filterFieldName, filterOperator, filterTree, filterTreeActive, filterValue, query, records, combinedSortKeys])
+    if (!axis) return []
+    const arranged: DataRecord[] = []
+    for (const id of axis.ids) {
+      const record = recordsById.get(id)
+      if (record) arranged.push(record)
+    }
+    return arranged
+  }, [axis, recordsById])
+  const searchHits = useMemo(() => {
+    if (!axis) return []
+    return axis.hits.map(([row, fieldId]) => ({ recordId: axis.ids[row], fieldId }))
+  }, [axis])
   const groupedRecords = useMemo(() => {
     const groups = new Map<string, DataRecord[]>()
     if (groupField?.type === 'single_select') {
@@ -154,12 +136,8 @@ export function useTableEditorDerivedState({
   }, [groupField, sortedAndFilteredRecords])
   const groupPoints = useMemo(() => {
     if (!effectiveGroupItems.length) return null
-    return buildGroupPoints(
-      sortedAndFilteredRecords,
-      effectiveGroupItems,
-      collapsedGroupIds ?? EMPTY_COLLAPSED_SET,
-    )
-  }, [effectiveGroupItems, sortedAndFilteredRecords, collapsedGroupIds])
+    return axis ? gridGroupPoints(axis) : []
+  }, [effectiveGroupItems, axis])
 
   const groupCollection = useMemo(() => {
     if (!effectiveGroupItems.length) return null
@@ -229,6 +207,7 @@ export function useTableEditorDerivedState({
     numericSummaries,
     primaryField,
     renderedGridRecords,
+    searchHits,
     sortedAndFilteredRecords,
     visibleFields,
   }

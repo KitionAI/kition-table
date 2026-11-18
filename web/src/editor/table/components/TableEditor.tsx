@@ -44,7 +44,8 @@ import { useTableEditorDerivedState } from '../hooks/useTableEditorDerivedState'
 import { useTableEditorUiState } from '../hooks/useTableEditorUiState'
 import { useTableHistory } from '../hooks/useTableHistory'
 import { useTableLiveChanges } from '../ports/useTableLiveChanges'
-import { useTableViewState } from '../hooks/useTableViewState'
+import { useTableViewState, viewConfigOf } from '../hooks/useTableViewState'
+import { useTableArrangement } from '../hooks/useTableArrangement'
 
 function TableEditorBody({
   agentOpen: controlledAgentOpen,
@@ -224,6 +225,42 @@ function TableEditorBody({
     setRecords,
   })
   const { collapsedGroupIds, setCollapsedGroupIds } = useGridCollapsedGroup(activeView?.id ?? null)
+  // The view's settings as the editor holds them, saved or not: the engine arranges with these
+  // (only the keys that change which records show and their order, so hiding a field or changing
+  // the row height arranges nothing again).
+  const arrangedConfig = useMemo(() => {
+    const config = viewConfigOf({
+      hiddenFieldNames,
+      filterFieldName,
+      filterOperator,
+      filterValue,
+      filterTree,
+      sortFieldName,
+      sortDirection,
+      sortItems,
+      groupFieldName,
+      groupItems,
+      coverFieldName,
+      rowHeightKey,
+      frozenColumnCount,
+    })
+    return {
+      filter_tree: config.filter_tree,
+      sort: config.sort,
+      sort_items: config.sort_items,
+      group_field_name: config.group_field_name,
+      group_items: config.group_items,
+    } as Record<string, unknown>
+  }, [hiddenFieldNames, filterFieldName, filterOperator, filterValue, filterTree, sortFieldName, sortDirection, sortItems, groupFieldName, groupItems, coverFieldName, rowHeightKey, frozenColumnCount])
+  const arrangedRevision = useMemo(() => ({}), [records, fields])
+  const axis = useTableArrangement({
+    tableId: activeTable?.id ?? null,
+    viewId: activeView?.id ?? null,
+    config: arrangedConfig,
+    query,
+    collapsedGroupIds,
+    revision: arrangedRevision,
+  })
   const {
     allVisibleSelected,
     canMoveKanbanCards,
@@ -246,9 +283,11 @@ function TableEditorBody({
     numericSummaries,
     primaryField,
     renderedGridRecords,
+    searchHits,
     sortedAndFilteredRecords,
     visibleFields,
   } = useTableEditorDerivedState({
+    axis,
     fields,
     hiddenFieldNames,
     coverFieldName,
@@ -258,7 +297,6 @@ function TableEditorBody({
     filterValue,
     groupFieldName,
     groupItems,
-    collapsedGroupIds,
     query,
     recordContextMenuRecordId: recordContextMenu?.recordId ?? null,
     recordOffset,
@@ -665,7 +703,7 @@ function TableEditorBody({
           resetScrollKey={`${document.id}:${activeTable.id}:${viewMode}`}
           rowHeight={resolveGridRowHeight(rowHeightKey)}
           freezeColumnCount={frozenColumnCount}
-          searchQuery={query}
+          searchHits={searchHits}
           onColumnFreeze={viewOnly(setFrozenColumnCount)}
           draggingRecordId={kanbanDraggingRecordId}
           dragOverRecordId={kanbanDragOverRecordId}

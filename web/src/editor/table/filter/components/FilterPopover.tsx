@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import type { DataField } from '../../../types/dataDocument'
 import { ToolbarPopover } from '../../components/TableEditorOverlays'
-import { countFilterConditions, filterTreeHasActiveCondition } from '../evaluate'
+import { countFilterConditions, filterTreeHasActiveCondition } from '../tree'
 import type { FilterGroup } from '../types'
 import { FilterTree } from './FilterTree'
 

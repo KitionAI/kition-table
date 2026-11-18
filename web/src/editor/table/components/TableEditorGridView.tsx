@@ -66,7 +66,8 @@ type GridViewProps = {
   resetScrollKey: string
   rowHeight?: number
   freezeColumnCount?: number
-  searchQuery?: string
+  /** The cells holding the search, from the engine's arrangement. */
+  searchHits: Array<{ recordId: number; fieldId: number }>
   onColumnFreeze?: (count: number) => void
   onLoadWindow: (window: DataRecordWindow) => void
   onToggleAllSelected: () => void
@@ -104,7 +105,7 @@ export const GridView = forwardRef<IGridRef, GridViewProps>(function GridView(pr
     canReorderRows,
     rowHeight,
     freezeColumnCount,
-    searchQuery,
+    searchHits: arrangedSearchHits,
     onColumnFreeze,
     onToggleRecordSelected,
     onSelectCell,
@@ -415,21 +416,11 @@ export const GridView = forwardRef<IGridRef, GridViewProps>(function GridView(pr
   }, [canReorderRows])
 
   const searchHits = useMemo(() => {
-    const needle = (searchQuery ?? '').trim().toLowerCase()
-    if (!needle) return [] as { fieldId: string; recordId: string }[]
-    const hits: { fieldId: string; recordId: string }[] = []
-    for (const record of sortedAndFilteredRecords) {
-      for (const field of visibleFields) {
-        const raw = record.values?.[field.name]
-        if (raw == null) continue
-        const text = typeof raw === 'string' ? raw : JSON.stringify(raw)
-        if (text.toLowerCase().includes(needle)) {
-          hits.push({ fieldId: String(field.id), recordId: String(record.id) })
-        }
-      }
-    }
-    return hits
-  }, [searchQuery, sortedAndFilteredRecords, visibleFields])
+    const shown = new Set(visibleFields.map((field) => field.id))
+    return arrangedSearchHits
+      .filter((hit) => shown.has(hit.fieldId))
+      .map((hit) => ({ fieldId: String(hit.fieldId), recordId: String(hit.recordId) }))
+  }, [arrangedSearchHits, visibleFields])
 
   // Pick the canvas theme based on the current `<html>.dark` state. Memoised
   // so the prop identity stays stable across renders and only flips when the

@@ -1,53 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import type { DataField, DataRecord } from '../../types/dataDocument'
-import type { IGroupRowPoint } from '../grid/interface'
+import type { DataField } from '../../types/dataDocument'
 
 import {
   buildGroupCollection,
-  buildGroupId,
-  buildGroupPoints,
-  compareRecordValues,
   displayValue,
   getSortDirectionLabels,
   normalizeLegacyViewTitle,
-  recordMatchesSearch,
 } from './tableEditorShared'
 
-function makeField(overrides: Partial<DataField>): DataField {
-  return {
-    id: overrides.id ?? 1,
-    user_id: 1,
-    document_id: 1,
-    table_id: 1,
-    name: overrides.name ?? 'name',
-    title: overrides.title ?? overrides.name ?? 'Name',
-    type: overrides.type ?? 'text',
-    required: false,
-    unique: false,
-    readonly: false,
-    is_primary: false,
-    order: 0,
-    options: overrides.options ?? null,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-    ...overrides,
-  } as DataField
-}
-
-function makeRecord(id: number, values: Record<string, any>): DataRecord {
-  return {
-    id,
-    user_id: 1,
-    document_id: 1,
-    table_id: 1,
-    row_key: `row_${id}`,
-    order: id,
-    values,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  } as DataRecord
-}
+// Sorting, the search, group ids and group points are the engine's: those assertions moved to
+// kition-table-arrange (crates/engine/arrange) with the editor's arrangement.
 
 describe('normalizeLegacyViewTitle', () => {
   it('maps the included task table legacy grid title to Grid view', () => {
@@ -79,137 +42,6 @@ describe('displayValue — phase 2 ref shapes', () => {
 
   it('returns empty string for an empty link/user array', () => {
     expect(displayValue([])).toBe('')
-  })
-})
-
-describe('compareRecordValues (multi-sort building block)', () => {
-  it('ascending text', () => {
-    expect(compareRecordValues('apple', 'banana', 'asc')).toBeLessThan(0)
-    expect(compareRecordValues('banana', 'apple', 'asc')).toBeGreaterThan(0)
-    expect(compareRecordValues('apple', 'apple', 'asc')).toBe(0)
-  })
-
-  it('descending text', () => {
-    expect(compareRecordValues('apple', 'banana', 'desc')).toBeGreaterThan(0)
-  })
-
-  it('numeric comparison via numeric: true locale', () => {
-    expect(compareRecordValues(2, 10, 'asc')).toBeLessThan(0)
-    expect(compareRecordValues(10, 2, 'asc')).toBeGreaterThan(0)
-  })
-})
-
-describe('recordMatchesSearch (table-wide search)', () => {
-  const fields = [
-    makeField({ id: 1, name: 'name', type: 'text' }),
-    makeField({ id: 2, name: 'tags', type: 'multi_select' }),
-  ]
-
-  it('empty query matches every record', () => {
-    expect(recordMatchesSearch(makeRecord(1, { name: 'X' }), fields, '')).toBe(true)
-    expect(recordMatchesSearch(makeRecord(1, { name: 'X' }), fields, '   ')).toBe(true)
-  })
-
-  it('matches text in any field case-insensitively', () => {
-    const rec = makeRecord(1, { name: 'Project Apollo', tags: ['urgent'] })
-    expect(recordMatchesSearch(rec, fields, 'apollo')).toBe(true)
-    expect(recordMatchesSearch(rec, fields, 'URGENT')).toBe(true)
-    expect(recordMatchesSearch(rec, fields, 'zeta')).toBe(false)
-  })
-})
-
-describe('buildGroupId', () => {
-  it('joins ancestor key values with depth-prefixed JSON', () => {
-    expect(buildGroupId(['Done'])).toBe('g0:"Done"')
-    expect(buildGroupId(['Done', 'Alice'])).toBe('g0:"Done"::g1:"Alice"')
-  })
-
-  it('uses null when value is null/undefined', () => {
-    expect(buildGroupId([null])).toBe('g0:null')
-    expect(buildGroupId([undefined as unknown])).toBe('g0:null')
-  })
-
-  it('distinguishes same leaf value under different parents', () => {
-    expect(buildGroupId(['Done', 'Alice'])).not.toBe(buildGroupId(['Todo', 'Alice']))
-  })
-})
-
-describe('buildGroupPoints', () => {
-  const item = (field_name: string) => ({
-    id: `g:${field_name}`,
-    field_name,
-    direction: 'asc' as const,
-  })
-
-  const rec = (id: number, values: Record<string, unknown>) =>
-    ({ id, values } as unknown as DataRecord)
-
-  it('returns empty array when there are no records', () => {
-    expect(buildGroupPoints([], [item('status')], new Set())).toEqual([])
-  })
-
-  it('returns empty array when there are no group items', () => {
-    expect(buildGroupPoints([rec(1, { status: 'Done' })], [], new Set())).toEqual([])
-  })
-
-  it('emits one header + one row-block for a single group of contiguous rows', () => {
-    const records = [
-      rec(1, { status: 'Done' }),
-      rec(2, { status: 'Done' }),
-      rec(3, { status: 'Done' }),
-    ]
-    const result = buildGroupPoints(records, [item('status')], new Set())
-    expect(result).toEqual([
-      { id: 'g0:"Done"', type: 0 /* LinearRowType.Group */, depth: 0, value: 'Done', isCollapsed: false },
-      { type: 1 /* LinearRowType.Row */, count: 3 },
-    ])
-  })
-
-  it('emits a new depth-0 header each time the top-level key changes', () => {
-    const records = [
-      rec(1, { status: 'Done' }),
-      rec(2, { status: 'Todo' }),
-      rec(3, { status: 'Todo' }),
-    ]
-    const result = buildGroupPoints(records, [item('status')], new Set())
-    expect(result).toHaveLength(4)
-    expect(result[0]).toMatchObject({ depth: 0, value: 'Done' })
-    expect(result[1]).toEqual({ type: 1, count: 1 })
-    expect(result[2]).toMatchObject({ depth: 0, value: 'Todo' })
-    expect(result[3]).toEqual({ type: 1, count: 2 })
-  })
-
-  it('nests depth-1 headers under depth-0 headers (two-level grouping)', () => {
-    const records = [
-      rec(1, { status: 'Done', owner: 'Alice' }),
-      rec(2, { status: 'Done', owner: 'Bob' }),
-      rec(3, { status: 'Todo', owner: 'Alice' }),
-    ]
-    const result = buildGroupPoints(records, [item('status'), item('owner')], new Set())
-    expect(result.map((p) => ('depth' in p ? `H${p.depth}:${String(p.value)}` : `R${(p as IGroupRowPoint).count}`))).toEqual([
-      'H0:Done',
-      'H1:Alice',
-      'R1',
-      'H1:Bob',
-      'R1',
-      'H0:Todo',
-      'H1:Alice',
-      'R1',
-    ])
-  })
-
-  it('uses null as the value when the field is missing/null', () => {
-    const records = [rec(1, {}), rec(2, { status: null })]
-    const result = buildGroupPoints(records, [item('status')], new Set())
-    expect(result[0]).toMatchObject({ depth: 0, value: null })
-    expect(result[1]).toEqual({ type: 1, count: 2 })
-  })
-
-  it('marks isCollapsed=true on headers whose id is in collapsedIds', () => {
-    const records = [rec(1, { status: 'Done' })]
-    const collapsed = new Set(['g0:"Done"'])
-    const result = buildGroupPoints(records, [item('status')], collapsed)
-    expect(result[0]).toMatchObject({ isCollapsed: true })
   })
 })
 

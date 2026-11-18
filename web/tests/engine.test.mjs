@@ -237,3 +237,26 @@ test('table.file.export answers the table as CSV or Markdown bytes, for the host
   assert.equal(doc.dirty, false)
   doc.free()
 })
+
+test('gridOpen and gridSync answer the arrangement as axis bytes the editor reads', () => {
+  const doc = TableDocument.create('Tasks.ktable', 0, 0)
+  for (const title of ['b', 'a', 'c']) add(doc, title)
+  const table = firstTable(doc)
+  const primary = table.fields.find((field) => field.id === table.primary_field_id).name
+  const ids = (bytes) => {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    assert.equal(String.fromCharCode(...bytes.subarray(0, 4)), 'KTAX')
+    return Array.from({ length: view.getUint32(16, true) }, (_, index) => view.getFloat64(32 + index * 8, true))
+  }
+  const byTitle = Object.fromEntries(call(doc, 'records.list', { tableId: table.id }).result.items.map((record) => [record.values[primary], record.id]))
+  const sorted = doc.gridOpen(JSON.stringify({ tableId: table.id, viewId: table.views[0].id, config: { sort_items: [{ id: 's', field_name: primary, direction: 'asc' }] } }))
+  assert.ok(sorted instanceof Uint8Array)
+  assert.deepEqual(ids(sorted), [byTitle.a, byTitle.b, byTitle.c])
+  assert.equal(doc.gridSync().length, 0)
+  call(doc, 'records.update', { tableId: table.id, recordId: byTitle.a, values: { [primary]: 'd' } })
+  assert.deepEqual(ids(doc.gridSync()), [byTitle.b, byTitle.c, byTitle.a])
+  const stats = JSON.parse(doc.gridStats())
+  assert.equal(stats.arrange.count, 1)
+  assert.equal(stats.relocate.count, 1)
+  doc.free()
+})
