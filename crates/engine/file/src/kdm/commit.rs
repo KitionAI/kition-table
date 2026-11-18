@@ -257,10 +257,11 @@ impl TableFile {
             TableOp::CellsSet { table_id, records } => {
                 let table = table_object(&self.conn, *table_id)?;
                 let names = field_objects_by_name(&self.conn, *table_id)?;
+                let link_fields = LinkFields::read(&self.conn, *table_id)?;
                 let mut edits = Vec::with_capacity(records.len());
                 let mut links = Vec::with_capacity(records.len());
                 for edit in records {
-                    let (cells, link_cells) = split_links(&self.conn, *table_id, &edit.values)?;
+                    let (cells, link_cells) = link_fields.split(&self.conn, &edit.values)?;
                     edits.push((ObjectId::from_string(edit.row_key.clone()), by_field_id(&names, &cells)));
                     links.push(link_cells);
                 }
@@ -273,10 +274,11 @@ impl TableFile {
                     CreateAt::Before(key) => model::Anchor::Before(ObjectId::from_string(key)),
                     CreateAt::After(key) => model::Anchor::After(ObjectId::from_string(key)),
                 });
+                let link_fields = LinkFields::read(&self.conn, *table_id)?;
                 let mut rows = Vec::with_capacity(records.len());
                 let mut links = Vec::with_capacity(records.len());
                 for values in records {
-                    let (cells, link_cells) = split_links(&self.conn, *table_id, values)?;
+                    let (cells, link_cells) = link_fields.split(&self.conn, values)?;
                     rows.push(by_field_id(&names, &cells));
                     links.push(link_cells);
                 }
@@ -622,54 +624,73 @@ pub(crate) fn by_field_id(
 /// A record's link cells: each `link_to_record` field written, with the records it names.
 pub(crate) type LinkCells = Vec<(ObjectId, Vec<ObjectId>)>;
 
-/// Takes the link cells out of `values` (keyed by field name). A link field's value lists the
-/// records it links to as row keys, record ids or the `{row_key, display}` objects records are
-/// read with (one alone is a list of one); `null` names none. An id that names no live record, or
-/// another kind of value, is [`TableFileError::Invalid`].
+/// Takes the link cells out of `values` (keyed by field name); see [`LinkFields::split`].
 pub(crate) fn split_links(
     conn: &Connection,
     table_id: i64,
     values: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<(serde_json::Map<String, serde_json::Value>, LinkCells)> {
-    use serde_json::Value;
-    let mut statement = conn.prepare_cached(
-        "SELECT name, kdm_id FROM kition_fields WHERE table_id = ?1 AND type = 'link_to_record' AND deleted_at IS NULL AND kdm_id IS NOT NULL",
-    )?;
-    let fields: std::collections::HashMap<String, String> =
-        statement.query_map([table_id], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<std::result::Result<_, _>>()?;
-    let mut cells = serde_json::Map::new();
-    let mut links = Vec::new();
-    for (name, value) in values {
-        let Some(field) = fields.get(name) else {
-            cells.insert(name.clone(), value.clone());
-            continue;
-        };
-        let target = |item: &Value| -> Result<ObjectId> {
-            let key = match item {
-                Value::String(key) => Some(key.clone()),
-                Value::Object(map) => map.get("row_key").and_then(Value::as_str).map(str::to_owned),
-                Value::Number(number) => match number.as_i64() {
-                    Some(id) => Some(
-                        conn.prepare_cached("SELECT row_key FROM kition_records WHERE id = ?1 AND deleted_at IS NULL")?
-                            .query_row([id], |row| row.get::<_, String>(0))
-                            .optional()?
-                            .ok_or_else(|| TableFileError::invalid(format!("{name}: no record {id} to link to")))?,
-                    ),
-                    None => None,
-                },
-                _ => None,
-            };
-            key.map(ObjectId::from_string)
-                .ok_or_else(|| TableFileError::invalid(format!("{name}: a link value lists row keys or record ids, not {item}")))
-        };
-        let targets = match value {
-            Value::Null => Vec::new(),
-            Value::Array(items) => items.iter().map(target).collect::<Result<_>>()?,
-            single => vec![target(single)?],
-        };
-        links.push((ObjectId::from_string(field.clone()), targets));
+    LinkFields::read(conn, table_id)?.split(conn, values)
+}
+
+/// A table's `link_to_record` fields (name → field object id), read once for a write of many
+/// records.
+pub(crate) struct LinkFields(std::collections::HashMap<String, String>);
+
+impl LinkFields {
+    pub(crate) fn read(conn: &Connection, table_id: i64) -> Result<Self> {
+        let mut statement = conn.prepare_cached(
+            "SELECT name, kdm_id FROM kition_fields WHERE table_id = ?1 AND type = 'link_to_record' AND deleted_at IS NULL AND kdm_id IS NOT NULL",
+        )?;
+        let fields = statement.query_map([table_id], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<std::result::Result<_, _>>()?;
+        Ok(Self(fields))
     }
-    Ok((cells, links))
+
+    /// Takes the link cells out of `values` (keyed by field name). A link field's value lists
+    /// the records it links to as row keys, record ids or the `{row_key, display}` objects
+    /// records are read with (one alone is a list of one); `null` names none. An id that names no
+    /// live record, or another kind of value, is [`TableFileError::Invalid`].
+    pub(crate) fn split(
+        &self,
+        conn: &Connection,
+        values: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(serde_json::Map<String, serde_json::Value>, LinkCells)> {
+        use serde_json::Value;
+        let fields = &self.0;
+        let mut cells = serde_json::Map::new();
+        let mut links = Vec::new();
+        for (name, value) in values {
+            let Some(field) = fields.get(name) else {
+                cells.insert(name.clone(), value.clone());
+                continue;
+            };
+            let target = |item: &Value| -> Result<ObjectId> {
+                let key = match item {
+                    Value::String(key) => Some(key.clone()),
+                    Value::Object(map) => map.get("row_key").and_then(Value::as_str).map(str::to_owned),
+                    Value::Number(number) => match number.as_i64() {
+                        Some(id) => Some(
+                            conn.prepare_cached("SELECT row_key FROM kition_records WHERE id = ?1 AND deleted_at IS NULL")?
+                                .query_row([id], |row| row.get::<_, String>(0))
+                                .optional()?
+                                .ok_or_else(|| TableFileError::invalid(format!("{name}: no record {id} to link to")))?,
+                        ),
+                        None => None,
+                    },
+                    _ => None,
+                };
+                key.map(ObjectId::from_string)
+                    .ok_or_else(|| TableFileError::invalid(format!("{name}: a link value lists row keys or record ids, not {item}")))
+            };
+            let targets = match value {
+                Value::Null => Vec::new(),
+                Value::Array(items) => items.iter().map(target).collect::<Result<_>>()?,
+                single => vec![target(single)?],
+            };
+            links.push((ObjectId::from_string(field.clone()), targets));
+        }
+        Ok((cells, links))
+    }
 }
 
 /// Writes the link cells of `records` (one entry per record, in order), one field at a time.

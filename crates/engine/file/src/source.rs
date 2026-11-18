@@ -8,8 +8,8 @@ use serde_json::{Map, Value};
 
 use crate::json::{self, encode_default, fallback};
 use crate::kdm::commit::{
-    any_object, by_field_id, field_id_of, field_object, field_objects_by_name, link_records, record_id_of, record_object, split_links, table_id_of,
-    table_object, view_id_of, view_object,
+    LinkFields, any_object, by_field_id, field_id_of, field_object, field_objects_by_name, link_records, record_id_of, record_object, split_links,
+    table_id_of, table_object, view_id_of, view_object,
 };
 use crate::kdm::model;
 use crate::kdm::options::{self, IdKind};
@@ -581,10 +581,11 @@ impl TableFile {
         self.writable()?;
         let table = self.get_table(table_id)?;
         let names = field_objects_by_name(&self.conn, table_id)?;
+        let link_fields = LinkFields::read(&self.conn, table_id)?;
         let mut cells = Vec::with_capacity(rows.len());
         let mut links = Vec::with_capacity(rows.len());
         for values in rows {
-            let (row, link_cells) = split_links(&self.conn, table_id, &validate_record_values(&table.fields, values)?)?;
+            let (row, link_cells) = link_fields.split(&self.conn, &validate_record_values(&table.fields, values)?)?;
             cells.push(by_field_id(&names, &row));
             links.push(link_cells);
         }

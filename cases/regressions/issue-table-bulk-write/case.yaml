@@ -1,0 +1,26 @@
+format: 1
+id: regressions/issue-table-bulk-write
+feature: table.records
+intent: >-
+  A large write on a table (a whole column cleared, pasted or filled, one transact of one
+  cells.set as the grid sends it) costs about the same per record whatever its size, is one undo
+  step that undo and redo take back and bring again, and reaches a second copy of the document
+  that ends equal. Before, the replica noted each written record in its undo footprint with a
+  search and a sort of everything noted so far (kition-sdk's case
+  regressions/issue-kition-table-bulk-write), each record's edit read the table's link fields
+  again, and the projection read every written record twice, so clearing a column of 100,000
+  records took minutes.
+layer: gate
+source:
+  kind: issue
+  from: Kition Table grid card tg4c, column clear over 100,000 records (card bulk-write)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-file, test: bulk_writes }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+timeout_s: 60
+since: "2026-11-18"
