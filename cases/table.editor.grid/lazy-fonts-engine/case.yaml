@@ -1,0 +1,25 @@
+format: 1
+id: table.editor.grid/lazy-fonts-engine
+feature: table.editor.grid
+intent: >-
+  The engine takes its faces late (grid plan D3; Kition platform E9 and E9a, kit-editor's
+  lazyFonts): with only Inter registered, Latin text wants no face, while a Chinese or Korean
+  character shapes as tofu and an emoji has no emoji face, and each makes wantsFonts answer true
+  once (the call clears it). Every face registered moves the faces' generation (the same face
+  again does not), each script then shapes in its own face (Droid Sans Fallback, Nanum Gothic,
+  the emoji face), and the grid's shaper forgets the lines and cut lines it shaped with fewer
+  faces, so a band laid out again draws them in their faces instead of tofu.
+layer: gate
+source:
+  kind: synthetic
+  from: the lazy fonts of the engine (card sdk-fonts-lazy)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-fonts, filter: "text_wants_the_faces_it_lacks_and_shapes_in_each_once_it_is_registered" }
+  - cargo-test: { package: kition-table-grid, filter: "the_shaper_forgets_lines_shaped_before_a_face_came" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

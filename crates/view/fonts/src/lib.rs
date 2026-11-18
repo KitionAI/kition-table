@@ -21,8 +21,15 @@
 //!
 //! Weight comes from a variable face's `wght` axis, optical size from its `opsz` axis. Outlines are
 //! cached per face, weight, optical size and glyph.
+//!
+//! The editor gives the engine Inter before a table opens and the other faces only once text needs
+//! them (Kition platform E9, E9a: kit-editor's `lazyFonts`): [`take_wanted`] answers whether text
+//! laid out since it last answered had a character no registered face covers (or an emoji without
+//! the emoji face), and [`generation`] moves with every face registered, so a layout cached with
+//! fewer faces is made again.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 mod color;
@@ -162,6 +169,25 @@ struct Store {
 /// The cache drops everything past this many outlines (a long CJK table reaches thousands).
 const OUTLINE_CACHE_MAX: usize = 20_000;
 
+/// Moves with every face registered (see [`generation`]).
+static GENERATION: AtomicU32 = AtomicU32::new(0);
+/// Whether text needed a face that is not registered since [`take_wanted`] last answered.
+static WANTED: AtomicBool = AtomicBool::new(false);
+
+/// How many faces were registered so far: what text lays out as may change when it moves (a
+/// character drawn as tofu gets its face), so a cache of layouts keeps the generation it was made
+/// in and starts again when it moves.
+pub fn generation() -> u32 {
+    GENERATION.load(Ordering::Acquire)
+}
+
+/// Whether text laid out since the last call had a character no registered face covers (a tofu
+/// run), or an emoji while no emoji face is registered; the call clears it. The editor gives the
+/// engine its other faces once this answers `true` (Kition platform E9a, `wantsFonts`).
+pub fn take_wanted() -> bool {
+    WANTED.swap(false, Ordering::AcqRel)
+}
+
 fn store() -> &'static Store {
     static STORE: std::sync::OnceLock<Store> = std::sync::OnceLock::new();
     STORE.get_or_init(Store::default)
@@ -233,6 +259,7 @@ pub fn add_font(bytes: Vec<u8>) -> Result<String, String> {
             plans: Mutex::new(HashMap::new()),
             bmp,
         }));
+        GENERATION.fetch_add(1, Ordering::AcqRel);
     }
     Ok(family)
 }
@@ -484,6 +511,9 @@ fn runs(text: &str, family: Family, weight: u16, size: f32, make: RunMaker) -> V
     };
     while let Some((at, c)) = chars.next() {
         let next = chars.peek().map(|(_, next)| *next);
+        if emoji.is_none() && is_emoji(c, next) {
+            WANTED.store(true, Ordering::Release);
+        }
         let in_emoji = emoji.is_some() && current == emoji.map(Slot::Face);
         // Spaces and marks stay in the run they are in, so a run breaks only at a real change; an
         // emoji sequence's joiners and modifiers stay with its emoji, but a space after an emoji is
@@ -497,6 +527,9 @@ fn runs(text: &str, family: Family, weight: u16, size: f32, make: RunMaker) -> V
         } else {
             Some(face_for(&faces, family, c).map_or(Slot::Tofu, Slot::Face))
         };
+        if slot == Some(Slot::Tofu) {
+            WANTED.store(true, Ordering::Release);
+        }
         if slot != current {
             flush(&mut runs, current, start..at);
             start = at;

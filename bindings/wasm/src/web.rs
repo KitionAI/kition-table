@@ -13,12 +13,20 @@ fn error(message: String) -> JsError {
     JsError::new(&message)
 }
 
-/// Registers a font file for the document's picture (Kition platform E9; kit-editor calls it for
-/// each of its `fonts` before a table opens); answers its family name. Without fonts the picture
-/// has no text.
+/// Registers a font file for the document's picture and grid (Kition platform E9; kit-editor
+/// calls it for Inter, its `fonts`, before a table opens, and for the others, its `lazyFonts`,
+/// once `wantsFonts` answers `true`); answers its family name. Without fonts the picture has no
+/// text. Text laid out after it is set in the new face.
 #[wasm_bindgen(js_name = addFont, wasm_bindgen = kition_kit::wasm_bindgen)]
 pub fn add_font(bytes: Vec<u8>) -> Result<String, JsError> {
     kition_table_fonts::add_font(bytes).map_err(error)
+}
+
+/// Whether text laid out since the last call had a character none of the registered faces covers
+/// (it drew as tofu), or an emoji without the emoji face (Kition platform E9a); the call clears it.
+#[wasm_bindgen(js_name = wantsFonts, wasm_bindgen = kition_kit::wasm_bindgen)]
+pub fn wants_fonts() -> bool {
+    kition_table_fonts::take_wanted()
 }
 
 #[wasm_bindgen(js_class = "TableDocument", wasm_bindgen = kition_kit::wasm_bindgen)]

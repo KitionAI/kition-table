@@ -130,12 +130,17 @@ impl<K: std::hash::Hash + Eq, V: Clone> Recent<K, V> {
 /// (`kition_table_fonts::advances`: no kerning or ligatures) and leaves emoji out, several times
 /// faster: for the grid's low-detail bands while its view jumps, which exact bands replace. It
 /// remembers nothing (a jumping view rarely shows a text twice).
+///
+/// What it remembers was shaped with the faces registered then: a face registered later (the
+/// editor's lazy fonts) drops it all, so text drawn as tofu gets its face.
 #[derive(Default)]
 pub struct Shaper {
     draft: bool,
     lines: Recent<(String, u16, u32), Arc<Line>>,
     /// Lines cut to a width: (text, weight, size, width) to the line [`Shaper::line`] answered.
     cuts: Recent<(String, u16, u32, u32), Arc<Line>>,
+    /// The faces' generation (`kition_table_fonts::generation`) what it remembers was shaped in.
+    generation: u32,
 }
 
 impl Shaper {
@@ -155,8 +160,19 @@ impl Shaper {
         line
     }
 
+    /// Forgets what was shaped with fewer faces than are registered now.
+    fn follow_faces(&mut self) {
+        let now = kition_table_fonts::generation();
+        if now != self.generation {
+            self.generation = now;
+            self.lines = Recent::default();
+            self.cuts = Recent::default();
+        }
+    }
+
     /// `text` on one line, as it is (line breaks and tabs as spaces).
     pub fn shape(&mut self, text: &str, weight: u16, size: f32) -> Arc<Line> {
+        self.follow_faces();
         if self.draft {
             return Arc::new(self.measure(text, weight, size));
         }
@@ -176,6 +192,7 @@ impl Shaper {
     /// `text` on one line, cut with an ellipsis to fit `max` px ([`SLACK`] short of it when cut;
     /// `f32::INFINITY`: no limit).
     pub fn line(&mut self, text: &str, weight: u16, size: f32, max: f32) -> Arc<Line> {
+        self.follow_faces();
         // A text longer than any line `max` wide can hold is cut: only its head is shaped.
         let most = if max.is_finite() { (max / (size * NARROWEST)).ceil() as usize + 8 } else { usize::MAX };
         if let Some((at, _)) = text.char_indices().nth(most) {
