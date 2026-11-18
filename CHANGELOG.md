@@ -3,6 +3,11 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
+## 0.5.4
+
+- Undoing a step that created or deleted records, after a large write, no longer runs out of memory in the editor: the model releases the history an undo read (kition-sdk 8c4acc8, KitionPkg/loro b7e6dfea).
+- The first large write after opening a table reads its records faster (Loro reads a lazy map with less copying).
+
 ## 0.5.3
 
 - Undo and redo of a write to a whole column of a large table no longer run out of memory in the editor: the model now undoes a write of cell values by writing back the values it replaced, instead of rewinding the document's history (kition-sdk 4b81569). Later edits by other people and by the agent still survive an undo, as before.
