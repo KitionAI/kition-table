@@ -7,7 +7,9 @@
 // headless tier relaxes it three times, as tests/perf.mjs does). Then a whole number column of
 // the 100,000 records cleared with Delete, a value pasted into every record of it (a pasted line
 // for each), and the first record's value filled down over all the others (the fill handle's
-// action), each timed the same way from the key or the action and checked in the engine.
+// action), each timed the same way from the key or the action and checked in the engine; between
+// the clear and the paste, the clear is undone and redone (the page's Undo and Redo), each timed
+// to the first complete frame after the engine answered and checked.
 //
 // The fixture is tests/perf.mjs's (bindings/wasm/examples/perf_fixture.rs, in target/perf/; it is
 // written when missing). PERF_TIER=strict checks the line itself (owner's machine, PERF_HEADED=1);
@@ -136,6 +138,15 @@ try {
   // A whole number column cleared.
   await page.evaluate(() => window.__ktableGrid.view.scrollTo(0, 0))
   await settled(page)
+  const column = () =>
+    page.evaluate(async (col) => {
+      const { interaction, data, view } = window.__ktableGrid
+      const field = data.field(view.currentAxes.columns[col].fieldId)
+      const rows = interaction.rows
+      const ids = [0, Math.floor(rows.count / 2), rows.count - 2].map((row) => rows.recordId(row)).filter((id) => id != null)
+      return (await data.records(ids, [field.name])).map((record) => record.values[field.name] ?? null)
+    }, columns.number)
+  const original = await column()
   const header = await centre(0, columns.number)
   await page.mouse.click(box.left + header.x, box.top + 16)
   await settled(page)
@@ -153,6 +164,42 @@ try {
   results.clear = { ms: clearMs, records: rows }
   console.log(`clear a column of ${rows} records: ${f(clearMs)} ms from Delete to the redraw`)
   step('a whole column is cleared', left.every((value) => value == null), JSON.stringify(left))
+
+  // The clear undone and redone, as the page's Undo and Redo (Cmd+Z, Cmd+Shift+Z) run them: each
+  // timed from the action to the first complete frame after the engine answered.
+  const timedHistory = async (name) => {
+    const seen = await page.evaluate(() => window.__ktableGridEvents.length)
+    const started = await page.evaluate((name) => {
+      const at = performance.now()
+      const { handlers } = window.__ktableGrid.interaction
+      ;(name === 'undo' ? handlers.onUndo : handlers.onRedo)()
+      return at
+    }, name)
+    await page.waitForFunction(
+      ([seen, name]) => window.__ktableGridEvents.slice(seen).some((event) => event.name === `${name}:done` || event.name === `${name}:failed`),
+      [seen, name],
+      { timeout: 600_000, polling: 50 },
+    )
+    const failed = await page.evaluate(([seen, name]) => window.__ktableGridEvents.slice(seen).find((event) => event.name === `${name}:failed`)?.detail ?? null, [seen, name])
+    const ms = await page.evaluate(
+      (started) =>
+        new Promise((resolve) => {
+          const { view } = window.__ktableGrid
+          const check = () => (view.complete() ? resolve(performance.now() - started) : requestAnimationFrame(check))
+          requestAnimationFrame(check)
+        }),
+      started,
+    )
+    results[name] = { ms, records: rows }
+    console.log(`${name} the clear of ${rows} records: ${f(ms)} ms from the action to the redraw`)
+    return failed
+  }
+  const undoFailed = await timedHistory('undo')
+  const undone = await column()
+  step('the clear is undone', undoFailed == null && JSON.stringify(undone) === JSON.stringify(original), undoFailed ?? JSON.stringify(undone))
+  const redoFailed = await timedHistory('redo')
+  const redone = await column()
+  step('the clear is redone', redoFailed == null && redone.every((value) => value == null), redoFailed ?? JSON.stringify(redone))
 
   // The same column pasted (one line for each record) from its first cell, then that cell's value
   // filled down over every other record.
