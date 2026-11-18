@@ -1,0 +1,16 @@
+{
+  "about": "The faces the grid draws with, in the editor package (public/fonts/) and in the engine (addFont): the same bytes on both sides, so the page and the engine measure text alike. scripts/fonts.mjs copies them from a kition-fonts checkout and refuses any file whose hash differs.",
+  "source": "https://github.com/KitionAI/kition-fonts",
+  "commit": "461fc082fab0467990e9ad9d34470f2134731987",
+  "files": {
+    "inter/Inter-Variable.ttf": { "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031", "bytes": 876576 },
+    "inter/OFL.txt": { "sha256": "5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57", "bytes": 4377 },
+    "droid-sans-fallback/DroidSansFallbackFull.ttf": { "sha256": "acb6440a713d880a13a21b468ba7cd43f5a2b2934972e51be791c880730777b8", "bytes": 4033420 },
+    "droid-sans-fallback/LICENSE": { "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594", "bytes": 10174 },
+    "droid-sans-fallback/NOTICE": { "sha256": "38751245389e1e23f73e6f5384b5cbe7fa972cc4410c5adc9c04b082a0b9561a", "bytes": 10695 },
+    "nanum-gothic/NanumGothic-Regular.ttf": { "sha256": "76f45ef4a6bcff344c837c95a7dcc26e017e38b5846d5ae0cdcb5b86be2e2d31", "bytes": 2054744 },
+    "nanum-gothic/OFL.txt": { "sha256": "eeacf16032901d0ed0456876ec77b8f0fda6b3fecec7d972f8543eb602e6c30f", "bytes": 4534 },
+    "noto-color-emoji/Noto-COLRv1.ttf": { "sha256": "b8e25ea68db82f9e4d0aee921f4420be2be39887bd5c893a2ad98710531f9d0c", "bytes": 5038236 },
+    "noto-color-emoji/OFL.txt": { "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2", "bytes": 4301 }
+  }
+}

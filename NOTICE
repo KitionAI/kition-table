@@ -12,10 +12,11 @@ Third-party material
 - Lucide icon path data in kition-tessera-icons and @kition/tessera-icons (linked by the engine,
   bundled by the editor): Copyright (c) 2026 Lucide Icons and Contributors, ISC License (below);
   the icons Lucide derives from Feather: Copyright (c) 2013-present Cole Bemis, MIT License (below).
-- Fonts built into the headless kition-table executable: Inter (Copyright 2020 The Inter Project
-  Authors) and Noto Color Emoji (Copyright 2022 Google Inc.), SIL Open Font License 1.1 (below);
-  Droid Sans Fallback (Copyright (c) 2005-2008 The Android Open Source Project), Apache License
-  2.0 (LICENSE).
+- Fonts built into the headless kition-table executable and shipped in the editor's package
+  (`fonts/`, each with its license file): Inter (Copyright 2020 The Inter Project Authors), Nanum
+  Gothic (Copyright (c) 2010, NHN Corporation) and Noto Color Emoji (Copyright 2022 Google Inc.),
+  SIL Open Font License 1.1 (below); Droid Sans Fallback (Copyright (c) 2005-2008 The Android Open
+  Source Project), Apache License 2.0 (LICENSE).
 - Loro (https://github.com/loro-dev/loro): Copyright (c) 2023 Zixuan Chen, MIT License (below).
 - MPL-2.0 crates used unmodified (source on crates.io): bitmaps, im, sized-chunks.
 

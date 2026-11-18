@@ -1,0 +1,24 @@
+format: 1
+id: table.editor.grid/page-player
+feature: table.editor.grid
+intent: >-
+  The page reads display lists exactly as the engine writes them (format v1, field for field) and
+  refuses another version, short or long bytes and unknown opcodes; it snaps edges and hairlines to
+  device pixels by the rules the engine's rasterizer uses; it finds rows by y over runs of heights
+  and splits rows and scrolling columns into the engine's bands; its band cache drops the least
+  recently used bands past its count or byte budget but never one the current frame needs, and
+  drops the bands of an old arrangement; and it reads gridBands batches of bands, icons and emoji
+  tiles.
+layer: gate
+source:
+  kind: synthetic
+  from: web/src/editor/table/canvas/canvas.spec.ts (card tg3)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/canvas/canvas.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-18"
