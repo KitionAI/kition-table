@@ -1,0 +1,38 @@
+format: 1
+id: table.editor.grid/editing-page
+feature: table.editor.grid
+intent: >-
+  On the development page, in Chromium and WebKit: a typed key opens a text cell's editor, which is
+  the focused textarea on the cell with one brand border and the text centred on the row; Enter
+  writes one records.update and moves down, Tab commits and moves right, Escape closes without
+  writing, and a number cell writes a number; an input method's composition opens the editor and
+  stays in it; a date cell opens the compact calendar (no native picker) and the compact time
+  menu, and a picked day is one records.update of the stored instant; a choice cell opens its
+  list, a single pick writes it and a multiple choice writes its picks when the list closes; a
+  click on a checkbox toggles it and on a rating's fourth symbol rates 4; copy puts the selected
+  cells on the clipboard as tab-separated text; a paste past the last record is one transact of
+  cells.set and records.create; Delete clears the selected cells in one transact; the fill handle
+  fills down in one transact and the range grows over it; a row dragged by its handle is one
+  records.move; a selected column dragged is one fields.move; a column's edge resizes it with
+  views.patchField; the frozen edge dragged saves the frozen count; an attachment's picture is
+  drawn from the document's blob and a click previews it; an AI cell shows a regenerate button on
+  hover, which asks for its cell, and a spinner turns over a cell while it generates; undo takes
+  back one action.
+layer: gate
+source:
+  kind: synthetic
+  from: web/tests/gridEditing.mjs (card tg4b; the intents of the old grid's tests in the grid plan's section 6)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [node, web/tests/gridEditing.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/gridEditing.mjs, webkit]
+expected:
+  - actual: out:exit
+    compare: exit
+requires: [chromium, webkit]
+tags: [browser]
+timeout_s: 240
+since: "2026-11-18"

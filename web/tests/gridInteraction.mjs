@@ -246,9 +246,13 @@ try {
   await test('Enter, F2 and a typed key ask to edit the active cell', async () => {
     const a = await cellCenter(page, 2, 1)
     await page.mouse.click(a.x, a.y)
+    // Each opens the cell's editor (card tg4b), which Escape closes before the next key.
     await page.keyboard.press('Enter')
+    await page.keyboard.press('Escape')
     await page.keyboard.press('F2')
+    await page.keyboard.press('Escape')
     await page.keyboard.press('k')
+    await page.keyboard.press('Escape')
     const edits = (await events(page, 'edit')).slice(-3)
     step('Enter, F2 and a typed key ask to edit the active cell', JSON.stringify(edits) === JSON.stringify([{ cell: { row: 2, col: 1 }, text: null }, { cell: { row: 2, col: 1 }, text: null }, { cell: { row: 2, col: 1 }, text: 'k' }]), JSON.stringify(edits))
   })

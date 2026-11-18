@@ -17,6 +17,9 @@ import type { EmojiTile, IconData } from './resources'
 export const BATCH_MAGIC = 'KTDB'
 export const BATCH_VERSION = 1
 
+/** An attachment picture a band shows: its image key, its size as shown (0 when unknown) and where it is. */
+export type ImageEntry = { key: number; width: number; height: number; url: string }
+
 export type BandBatch = { bands: DisplayList[]; icons: Array<{ id: number; data: IconData }>; emoji: EmojiTile[]; bytes: number }
 
 export function decodeBatch(source: ArrayBuffer | Uint8Array): BandBatch {

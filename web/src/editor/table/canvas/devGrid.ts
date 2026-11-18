@@ -8,7 +8,11 @@
  * The page stands in for the editor where the grid hands over: undo and redo, adding a record and
  * collapsing a group run on the engine and arrange again; the record and column menus are a plain
  * marker (`[data-ktable-grid-menu]`) at the grid's anchor, closed by Escape or a press elsewhere;
- * every handler call is logged to `window.__ktableGridEvents`.
+ * every handler call is logged to `window.__ktableGridEvents`. Editing is the grid's own
+ * (`GridEditing`: the cell editors, the clipboard, the drags, pictures, the AI overlay) over the
+ * engine (`engineData`); every write it sends is logged to `window.__ktableGridWrites`, an
+ * attachment preview is a marker (`[data-ktable-grid-preview]`) holding the picture, and an AI
+ * cell's regenerate button turns the cell's spinner on.
  *
  * Query: `file` (a .ktable URL, default the development sample), `table` and `view` (ids, default
  * the first table's first view), `theme` (`light` or `dark`), `brand` (`#rrggbb`), `hud=1` (a
@@ -17,8 +21,13 @@
  * `window.__ktableGrid` holds the view and the engine, `window.__ktableGridStats` the view's
  * timings: only this page has them. `body[data-ready]` is set once the axes are in.
  */
+import '../../../styles/index.css'
+import '@kition/kit-editor/styles.css'
 import { KitEngine } from '@kition/kit-editor'
+import { mountPopups } from './devGridEditors'
 import { type EngineSource, engineSource } from './engineSource'
+import { engineData, type GridData } from './gridData'
+import { GridEditing } from './gridEditing'
 import { engineFontUrls } from './gridFonts'
 import { GridView } from './gridView'
 import { type ClientRect, type GridHandlers, GridInteraction } from './interaction'
@@ -28,9 +37,10 @@ export type GridEvent = { name: string; detail: unknown }
 
 declare global {
   interface Window {
-    __ktableGrid?: { view: GridView; engine: KitEngine; interaction: GridInteraction; source: EngineSource }
+    __ktableGrid?: { view: GridView; engine: KitEngine; interaction: GridInteraction; source: EngineSource; editing: GridEditing; data: GridData }
     __ktableGridStats?: GridView['stats']
     __ktableGridEvents?: GridEvent[]
+    __ktableGridWrites?: Array<{ command: string; params: unknown }>
   }
 }
 
@@ -53,6 +63,7 @@ async function start(): Promise<{ view: GridView; engine: KitEngine; source: Eng
   const viewId = params.has('view') ? Number(params.get('view')) : (table?.views[0]?.id ?? null)
   const theme = params.get('theme') === 'dark' ? 'dark' : 'light'
   document.documentElement.style.background = theme === 'dark' ? '#18181b' : '#fff'
+  document.documentElement.classList.toggle('dark', theme === 'dark')
   const host = document.getElementById('grid') as HTMLElement
   const source = engineSource(engine, { tableId, viewId, theme, brand: params.get('brand') })
   const view = new GridView(host, source, { fontsBase, stats: true })
@@ -75,10 +86,11 @@ function closeMenu() {
 }
 
 /** The page's stand-ins for the editor's handlers. */
-function handlers(engine: KitEngine, tableId: number, view: () => GridView, source: () => EngineSource): GridHandlers {
+function handlers(engine: KitEngine, tableId: number, view: () => GridView, source: () => EngineSource, editing: GridEditing): GridHandlers {
   const events: GridEvent[] = []
   window.__ktableGridEvents = events
   const log = (name: string, detail: unknown = null) => events.push({ name, detail })
+  const edit = editing.gridHandlers
   const call = async (method: string, params: unknown) => {
     const answer = JSON.parse(await engine.invoke<string>('call', method, JSON.stringify(params))) as { error?: unknown }
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
@@ -91,8 +103,14 @@ function handlers(engine: KitEngine, tableId: number, view: () => GridView, sour
   }
   const below = (anchor: ClientRect) => ({ x: anchor.x, y: anchor.y + anchor.height })
   return {
-    onEdit: (cell, text) => log('edit', { cell, text }),
-    onDelete: (selection) => log('delete', selection),
+    onEdit: (cell, text) => {
+      log('edit', { cell, text })
+      edit.onEdit?.(cell, text)
+    },
+    onDelete: (selection) => {
+      log('delete', selection)
+      edit.onDelete?.(selection)
+    },
     onUndo: () => {
       log('undo')
       again('undo', () => call('undo', {}))
@@ -126,8 +144,62 @@ function handlers(engine: KitEngine, tableId: number, view: () => GridView, sour
       source().update({ collapsed: [...collapsed] })
       again('toggleGroup', async () => {})
     },
-    onCellPart: (hit) => log('cellPart', { row: hit.row, col: hit.col, kind: hit.part?.kind, index: hit.part?.index }),
+    onCellPart: (hit) => {
+      log('cellPart', { row: hit.row, col: hit.col, kind: hit.part?.kind, index: hit.part?.index })
+      edit.onCellPart?.(hit)
+    },
   }
+}
+
+/** The engine's data for editing, its writes logged to `window.__ktableGridWrites`. */
+async function loggedData(engine: KitEngine, tableId: number, viewId: number | null): Promise<GridData> {
+  const data = await engineData(engine, tableId, viewId)
+  const writes: Array<{ command: string; params: unknown }> = []
+  window.__ktableGridWrites = writes
+  return {
+    ...data,
+    field: data.field,
+    fields: data.fields,
+    records: data.records,
+    blob: data.blob,
+    async transact(ops) {
+      writes.push({ command: 'transact', params: { ops } })
+      await data.transact(ops)
+    },
+    async update(recordId, values) {
+      writes.push({ command: 'records.update', params: { recordId, values } })
+      await data.update(recordId, values)
+    },
+    async patchFieldWidth(fieldId, width) {
+      writes.push({ command: 'views.patchField', params: { fieldId, width } })
+      await data.patchFieldWidth(fieldId, width)
+    },
+    async setFrozen(count) {
+      writes.push({ command: 'views.patchConfig', params: { frozen_column_count: count } })
+      await data.setFrozen(count)
+    },
+  }
+}
+
+/** The page's attachment preview: a marker holding the picture (or the file's name). */
+async function preview(data: GridData, item: { url?: string; name?: string }) {
+  closePreview()
+  const box = document.createElement('div')
+  box.dataset.ktableGridPreview = item.name ?? ''
+  box.style.cssText = 'position:fixed;inset:10%;display:grid;place-items:center;background:rgba(0,0,0,.6);border-radius:12px;z-index:40'
+  document.body.append(box)
+  const hash = /^kition-blob:([0-9a-f]{64})$/.exec(item.url ?? '')?.[1]
+  const held = hash ? await data.blob(hash) : null
+  if (held && held.mimeType.startsWith('image/')) {
+    const image = document.createElement('img')
+    image.src = URL.createObjectURL(new Blob([held.bytes as BlobPart], { type: held.mimeType }))
+    image.style.cssText = 'max-width:100%;max-height:100%'
+    box.append(image)
+  } else box.textContent = item.name ?? item.url ?? ''
+}
+
+function closePreview() {
+  for (const box of document.querySelectorAll('[data-ktable-grid-preview]')) box.remove()
 }
 
 function hud(view: GridView) {
@@ -153,10 +225,37 @@ function hud(view: GridView) {
 
 start()
   .then(async ({ view, engine, source }) => {
-    const interaction = new GridInteraction(view, handlers(engine, source.target.tableId, () => view, () => source))
-    window.__ktableGrid = { view, engine, interaction, source }
+    const data = await loggedData(engine, source.target.tableId, source.target.viewId ?? null)
+    const popupHost = document.createElement('div')
+    document.body.append(popupHost)
+    const showPopup = await mountPopups(popupHost)
+    const log = (name: string, detail: unknown = null) => window.__ktableGridEvents?.push({ name, detail })
+    const editing: GridEditing = new GridEditing(data, {
+      onPopup: (popup) => showPopup(popup),
+      onPreviewAttachments: (event) => {
+        log('preview', { recordId: event.recordId, fieldId: event.fieldId, index: event.index, count: event.items.length })
+        void preview(data, event.items[event.index] as { url?: string; name?: string })
+      },
+      onButton: (event) => log('button', event),
+      onOpenLink: (event) => log('openLink', event),
+      onRegenerate: (event) => {
+        log('regenerate', event)
+        editing.setGenerating([event])
+      },
+      onWritten: async () => {
+        await view.reopen()
+        log('write:done')
+      },
+      onError: (error) => log('write:failed', String(error)),
+    })
+    const interaction = new GridInteraction(view, handlers(engine, source.target.tableId, () => view, () => source, editing))
+    editing.attach(interaction)
+    window.__ktableGrid = { view, engine, interaction, source, editing, data }
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeMenu()
+      if (event.key === 'Escape') {
+        closeMenu()
+        closePreview()
+      }
     })
     document.addEventListener('pointerdown', (event) => {
       if (!(event.target instanceof Element && event.target.closest('[data-ktable-grid-menu]'))) closeMenu()

@@ -1,0 +1,31 @@
+format: 1
+id: table.editor.grid/editing
+feature: table.editor.grid
+intent: >-
+  The page's editing on the new grid, its pure parts: a selection covers the records of its rows
+  in display order (group headers and add rows skipped) and its columns; a copy is the cells as
+  tab-separated text, dates as the grid shows them, a cell holding a tab, a line break or a quote
+  quoted; a paste writes over the records there are and creates the rest, in one cells.set and one
+  records.create, skipping read-only and computed fields; clearing sets the writable fields to their
+  empty values in one cells.set; the fill handle repeats the selection's values as stored, down from
+  its top and up from its bottom; a moved column lands among hidden fields, which keep their
+  places; a resize never goes below the narrowest column; a dragged column drops before the column
+  whose middle is right of the pointer, a dragged row in the place of the record under it; a freeze
+  drag freezes the leading columns whose middle is left of the pointer; a text editor starts from
+  the value as typed. The date editor is the compact calendar with the cell's day and time, never
+  the native picker; a picked day commits once, as the stored instant with the time kept, and the
+  calendar does not come back; Escape closes it without a value. A choice list commits a single
+  choice on the pick and keeps a multiple choice's picks as a draft.
+layer: gate
+source:
+  kind: synthetic
+  from: web/src/editor/table/canvas/editing.spec.ts and GridCellEditors.spec.tsx (card tg4b; the intents of the old grid's TextEditor, tableClipboard and tableColumnOrdering specs)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/canvas/editing.spec.ts, src/editor/table/canvas/GridCellEditors.spec.tsx]
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-18"

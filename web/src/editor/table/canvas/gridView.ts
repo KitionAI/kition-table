@@ -14,7 +14,7 @@
  * - A scroll extent beyond what a browser lays out is mapped onto `MAX_SCROLL_PX` proportionally.
  */
 import { type Area, Axes, type AxesInput, bandKeys, keyId } from './axes'
-import { decodeBatch } from './bandBatch'
+import { decodeBatch, type ImageEntry } from './bandBatch'
 import { BandCache } from './bandCache'
 import { type BandKey, Layer } from './displayList'
 import { GridFonts } from './gridFonts'
@@ -103,6 +103,7 @@ export class GridView {
   private readonly cleanup: Array<() => void> = []
   private readonly axesListeners = new Set<(opened: GridOpened) => void>()
   private readonly frameListeners = new Set<() => void>()
+  private readonly imageListeners = new Set<(images: ImageEntry[]) => void>()
   /** What the latest `open` answered. */
   opened: GridOpened | null = null
   /** How many times the overlay canvas was drawn (the interaction tests count redraws). */
@@ -171,6 +172,12 @@ export class GridView {
   onFrame(listener: () => void): () => void {
     this.frameListeners.add(listener)
     return () => this.frameListeners.delete(listener)
+  }
+
+  /** Calls `listener` with the attachment pictures each batch of bands shows (to load them into `resources`); answers how to stop. */
+  onImages(listener: (images: ImageEntry[]) => void): () => void {
+    this.imageListeners.add(listener)
+    return () => this.imageListeners.delete(listener)
   }
 
   /** Scrolls by (`dx`, `dy`) document pixels. */
