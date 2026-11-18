@@ -205,11 +205,11 @@ export class GridView {
   private scrollMap(): { x: number; y: number } {
     const axes = this.axes
     if (!axes) return { x: 1, y: 1 }
-    const fit = (total: number, view: number) => {
+    const scale = (total: number, view: number) => {
       const shown = Math.min(total, MAX_SCROLL_PX)
       return shown > view && total > shown ? (total - view) / (shown - view) : 1
     }
-    return { x: fit(axes.width, this.width), y: fit(axes.height, this.height) }
+    return { x: scale(axes.width, this.width), y: scale(axes.height, this.height) }
   }
 
   private resize() {
