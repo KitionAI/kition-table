@@ -1,5 +1,5 @@
 //! The editor's grid in bands (grid plan sections 3.4, 3.7, 3.8): the extras `gridAxes`,
-//! `gridBands`, `gridRaster`, `gridMeasure` and `gridBandStats`.
+//! `gridBands`, `gridRaster` and `gridMeasure`, and the bands' timings in `gridStats`.
 //!
 //! The page arranges a view with `gridOpen` (`grid.rs`, `kition-table-arrange`) and hands the axis
 //! it got to `gridAxes`, which lays out the arrangement's linear rows (group headers, records, add
@@ -78,10 +78,15 @@ struct Layout {
     band_rows: usize,
 }
 
+/// How many band times `gridStats` keeps (the latest).
+const TIMINGS_KEPT: usize = 4096;
+
 /// The bands' timings, for the performance test.
 #[derive(Default)]
 struct Timings {
-    made: Vec<f64>,
+    /// Bands made so far, and the time of the latest `TIMINGS_KEPT` of them.
+    count: u64,
+    made: std::collections::VecDeque<f64>,
     bytes: u64,
 }
 
@@ -221,15 +226,6 @@ impl Batch {
         self.0[8..12].copy_from_slice(&self.1.to_le_bytes());
         self.0
     }
-}
-
-fn quantile(values: &[f64], q: f64) -> f64 {
-    if values.is_empty() {
-        return 0.0;
-    }
-    let mut sorted = values.to_vec();
-    sorted.sort_by(f64::total_cmp);
-    sorted[((sorted.len() - 1) as f64 * q).round() as usize]
 }
 
 impl Layout {
@@ -664,7 +660,11 @@ impl Bands {
             let watch = Stopwatch::start();
             let Some(list) = self.band(source, Key { layer, col_band, row_band: key[2] })? else { continue };
             let bytes = kition_table_display::encode(&list);
-            self.timings.made.push(watch.elapsed_ms());
+            if self.timings.made.len() == TIMINGS_KEPT {
+                self.timings.made.pop_front();
+            }
+            self.timings.made.push_back(watch.elapsed_ms());
+            self.timings.count += 1;
             self.timings.bytes += bytes.len() as u64;
             for op in &list.ops {
                 if let Op::Emoji { atlas, size, .. } = op
@@ -742,26 +742,15 @@ impl Bands {
         Ok(Value::Array(answer))
     }
 
-    /// `gridBandStats`: how long the bands took (count, p50, p95, max milliseconds, bytes) since
-    /// the last reset; `reset` starts again, `cold` also forgets the shaped text and read records.
-    pub(crate) fn stats(&mut self, reset: bool, cold: bool) -> Value {
-        let made = &self.timings.made;
-        let answer = json!({
-            "count": made.len(),
-            "p50": quantile(made, 0.5),
-            "p95": quantile(made, 0.95),
-            "max": made.iter().copied().fold(0.0, f64::max),
+    /// The bands' part of `gridStats`: how many were made, the milliseconds of the latest ones
+    /// (oldest first), the bytes answered, and the row bands of the layout.
+    pub(crate) fn stats(&self) -> Value {
+        json!({
+            "count": self.timings.count,
+            "ms": self.timings.made,
             "bytes": self.timings.bytes,
             "rowBands": self.layout.as_ref().map_or(0, Layout::row_bands),
-        });
-        if reset {
-            self.timings = Timings::default();
-        }
-        if cold {
-            self.shaper = Shaper::default();
-            self.records.clear();
-        }
-        answer
+        })
     }
 }
 
@@ -785,11 +774,6 @@ impl crate::TableDocument {
     /// How the grid splits and measures text (`gridMeasure`).
     pub fn grid_measure(&mut self, asks: &Value) -> Result<Value, String> {
         self.bands.measure(asks)
-    }
-
-    /// The bands' timings (`gridBandStats`).
-    pub fn grid_band_stats(&mut self, reset: bool, cold: bool) -> Value {
-        self.bands.stats(reset, cold)
     }
 }
 
@@ -833,12 +817,6 @@ mod web {
         pub fn grid_measure(&mut self, asks: &str) -> Result<String, JsError> {
             let asks: serde_json::Value = serde_json::from_str(asks).map_err(|e| error(e.to_string()))?;
             self.0.grid_measure(&asks).map(|value| value.to_string()).map_err(error)
-        }
-
-        /// The bands' timings as JSON; `reset` starts again, `cold` also empties the caches.
-        #[wasm_bindgen(js_name = gridBandStats)]
-        pub fn grid_band_stats(&mut self, reset: Option<bool>, cold: Option<bool>) -> String {
-            self.0.grid_band_stats(reset.unwrap_or(false), cold.unwrap_or(false)).to_string()
         }
     }
 }

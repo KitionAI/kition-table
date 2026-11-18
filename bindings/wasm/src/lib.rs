@@ -566,9 +566,12 @@ impl TableDocument {
 
     /// How long arranging took (`gridStats`): whole arrangements and relocations, each with its
     /// count, total, last and longest milliseconds and the records of the last; the last axis's
-    /// bytes; the current epoch and shown records.
+    /// bytes; the current epoch and shown records; and the grid's bands (`bands`: how many were
+    /// made, the latest ones' milliseconds, their bytes).
     pub fn grid_stats(&self) -> Value {
-        self.grid.stats()
+        let mut stats = self.grid.stats();
+        stats["bands"] = self.bands.stats();
+        stats
     }
 
     /// The changes imported since the last call, as `table/changed` params (with `documentPath`).

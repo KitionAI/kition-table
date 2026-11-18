@@ -79,7 +79,7 @@
     "gridStats": {
       "params": [],
       "returns": "string",
-      "description": "How long arranging took, as JSON (whole arrangements and relocations), for performance tests."
+      "description": "How long arranging took (whole arrangements and relocations) and how long the grid's bands took (bands), as JSON, for performance tests."
     },
     "gridAxes": {
       "params": [
@@ -117,14 +117,6 @@
       ],
       "returns": "string",
       "description": "How the grid splits text into runs of one face and how wide each run is, as JSON, for the width test."
-    },
-    "gridBandStats": {
-      "params": [
-        "reset",
-        "cold"
-      ],
-      "returns": "string",
-      "description": "How long making bands took (count, p50, p95, max ms, bytes), as JSON, for performance tests; reset starts again, cold also empties the caches."
     }
   },
   "ui": {
