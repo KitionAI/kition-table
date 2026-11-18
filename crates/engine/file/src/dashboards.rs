@@ -8,7 +8,6 @@ use serde_json::{Map, Value};
 use crate::kdm::commit::{any_object, table_id_of};
 use crate::kdm::model;
 use crate::kdm::options::{self, IdKind};
-use crate::kdm::read::ModelView;
 use crate::{Result, TableFile, TableFileError};
 
 /// One dashboard, in the relational API's shape: `config`'s table reference (when present) is
@@ -25,8 +24,8 @@ pub struct Dashboard {
 impl TableFile {
     /// The base's dashboards in order.
     pub fn list_dashboards(&self) -> Result<Vec<Dashboard>> {
-        let view = ModelView::new(&self.replica);
-        view.dashboards()?
+        self.model_view()
+            .dashboards()?
             .into_iter()
             .map(|data| {
                 Ok(Dashboard {

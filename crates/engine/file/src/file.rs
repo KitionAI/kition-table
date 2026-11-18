@@ -390,6 +390,21 @@ impl TableFile {
         &self.replica
     }
 
+    /// The document's base object (the one its writes go to), when it has one. Read this rather
+    /// than looking for the base among the replica's objects, which decodes every record of a
+    /// document loaded from a snapshot.
+    pub fn base_object(&self) -> Option<&ObjectId> {
+        self.base.as_ref()
+    }
+
+    /// A read view of the replica that knows the document's base.
+    pub(crate) fn model_view(&self) -> crate::kdm::read::ModelView<'_> {
+        match &self.base {
+            Some(base) => crate::kdm::read::ModelView::with_base(&self.replica, base.clone()),
+            None => crate::kdm::read::ModelView::new(&self.replica),
+        }
+    }
+
     /// Closes the file after letting SQLite refresh its statistics.
     pub fn close(self) {
         let _ = self.conn.execute_batch("PRAGMA optimize");

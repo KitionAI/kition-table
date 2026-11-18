@@ -207,11 +207,7 @@ pub fn tool(file: &TableFile, ty: &str, value: &Value) -> Value {
 
 pub fn label(file: &TableFile, ty: &str, value: &mut Value) {
     if value.get("id").is_some() {
-        value["tool_id"] = if ty == "Base" {
-            file.replica().objects_of_type("Base").first().map_or(Value::Null, |id| json!(id.as_str()))
-        } else {
-            tool(file, ty, &value["id"])
-        };
+        value["tool_id"] = if ty == "Base" { file.base_object().map_or(Value::Null, |id| json!(id.as_str())) } else { tool(file, ty, &value["id"]) };
     }
 }
 

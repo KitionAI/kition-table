@@ -117,8 +117,8 @@ features:
     priority: P0
     status: has
     commands: [table.records.list, table.records.create, table.records.update, table.records.delete, table.records.history, table.records.bulkDelete, table.records.bulkCopy]
-    paths: [bindings/wasm/src/model.rs, bindings/wasm/src/check.rs, bindings/wasm/examples/checks.rs, crates/engine/file/src/ids.rs, crates/engine/time/src/lib.rs, crates/engine/api/src/values.rs, crates/engine/file/src/kdm/store.rs, crates/engine/file/tests/storage_scale.rs]
-    cases: [table.records/save-reopen, regressions/issue-7, regressions/issue-8, regressions/issue-grid-typing-and-drag, regressions/issue-rating-draws-stars, regressions/issue-table-100k-rows]
+    paths: [bindings/wasm/src/model.rs, bindings/wasm/src/check.rs, bindings/wasm/examples/checks.rs, crates/engine/file/src/ids.rs, crates/engine/time/src/lib.rs, crates/engine/api/src/values.rs, crates/engine/file/src/kdm/store.rs, crates/engine/file/tests/storage_scale.rs, bindings/wasm/tests/open_scale.rs]
+    cases: [table.records/save-reopen, regressions/issue-7, regressions/issue-8, regressions/issue-grid-typing-and-drag, regressions/issue-rating-draws-stars, regressions/issue-table-100k-rows, regressions/issue-table-open-100k]
     since: "2026-11-16"
   - id: table.schema
     title: "Tables and fields: create, update, delete, duplicate, link candidates"

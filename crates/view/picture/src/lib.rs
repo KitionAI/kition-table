@@ -46,6 +46,19 @@ pub struct Picture {
 /// The picture of `file` showing `shown`, with `focus` outlined in a grid. A table, view or
 /// dashboard `shown` names that does not exist is an error.
 pub fn draw(file: &TableFile, shown: &Shown, focus: Option<Focus>) -> Result<Picture, String> {
+    compose(file, shown, focus, false)
+}
+
+/// The width and height of the picture [`draw`] answers, in pixels. A grid view's rows have fixed
+/// heights, so its size is had without laying its cells out (shaping every cell's text), which is
+/// most of a large table's picture; the other views are drawn.
+pub fn size(file: &TableFile, shown: &Shown) -> Result<(u32, u32), String> {
+    let picture = compose(file, shown, None, true)?;
+    Ok((picture.width(), picture.height()))
+}
+
+/// [`draw`]; with `measure`, a grid view's cells are left out (its size is the same).
+fn compose(file: &TableFile, shown: &Shown, focus: Option<Focus>, measure: bool) -> Result<Picture, String> {
     let document = data::read(file, shown)?;
     let mut content = Scene::default();
     let mut focused = None;
@@ -72,6 +85,11 @@ pub fn draw(file: &TableFile, shown: &Shown, focus: Option<Focus>) -> Result<Pic
                 "kanban" => cards::board(&mut content, table, body_top),
                 "gallery" => cards::gallery(&mut content, table, body_top),
                 "calendar" => cards::calendar(&mut content, table, body_top, width),
+                _ if measure => {
+                    let columns = grid_columns(table);
+                    let height = f64::from(kition_table_grid::geometry(&grid_view(table, &columns), body_top as f32).height);
+                    height + chrome::footer(&mut content, table, body_top + height, width)
+                }
                 _ => {
                     let (height, area) = grid(&mut content, file, table, body_top, width, focus);
                     focused = area;
@@ -109,6 +127,20 @@ pub fn draw(file: &TableFile, shown: &Shown, focus: Option<Focus>) -> Result<Pic
 /// The shown columns as the grid takes them.
 fn grid_columns(table: &data::TableShown) -> Vec<kition_table_grid::Column> {
     table.columns.iter().map(|column| kition_table_grid::Column { field: column.field.clone(), width: column.width as f32 }).collect()
+}
+
+/// `table` as the grid lays it out, with its shown `columns`.
+fn grid_view<'a>(table: &'a data::TableShown, columns: &'a [kition_table_grid::Column]) -> kition_table_grid::View<'a> {
+    kition_table_grid::View {
+        columns,
+        records: &table.records,
+        groups: &table.groups,
+        first: table.first,
+        row_height: table.row_height as f32,
+        frozen: table.frozen,
+        reorderable: reorderable(table),
+        theme: kition_table_grid::theme::Theme::LIGHT,
+    }
 }
 
 /// Whether the view's rows can be dragged in the editor (no sort, no groups): its row heads have
@@ -157,17 +189,7 @@ fn pictures(file: &TableFile, table: &data::TableShown) -> Resources {
 /// pictures its attachments show; answers its height and the focused cell's area.
 fn grid(scene: &mut Scene, file: &TableFile, table: &data::TableShown, top: f64, width: f64, focus: Option<Focus>) -> (f64, Option<Rect>) {
     let columns = grid_columns(table);
-    let view = kition_table_grid::View {
-        columns: &columns,
-        records: &table.records,
-        groups: &table.groups,
-        first: table.first,
-        row_height: table.row_height as f32,
-        frozen: table.frozen,
-        reorderable: reorderable(table),
-        theme: kition_table_grid::theme::Theme::LIGHT,
-    };
-    let grid = kition_table_grid::lay_out(&view, top as f32, width as f32, focus, pictures(file, table));
+    let grid = kition_table_grid::lay_out(&grid_view(table, &columns), top as f32, width as f32, focus, pictures(file, table));
     let height = f64::from(grid.geometry.height);
     let focused = grid.focus.map(|area| Rect::new(f64::from(area.x), f64::from(area.y), f64::from(area.right()), f64::from(area.bottom())));
     scene.list(Rect::new(0.0, top, f64::from(grid.width), top + height), grid.list, grid.resources);

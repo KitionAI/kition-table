@@ -9,7 +9,7 @@
 
 use std::cmp::Ordering;
 
-use kition_table_arrange::Arrangement;
+use kition_table_arrange::{Arranged, Arrangement};
 use kition_table_file::{Dashboard, Field, Record, Table, TableFile, View};
 use serde_json::{Map, Value};
 
@@ -143,8 +143,7 @@ pub fn read(file: &TableFile, shown: &Shown) -> Result<Document, String> {
             None => table.views.first().cloned(),
         }
     };
-    let records = file.list_records(table.id).map_err(failed)?;
-    let shown_table = arrange(file, table, view, records, shown.rows)?;
+    let shown_table = arrange(file, table, view, shown.rows)?;
     Ok(Document { tabs: tabs(&tables, &dashboards, Some(table.id), None), content: Content::Table(Box::new(shown_table)) })
 }
 
@@ -158,10 +157,11 @@ fn strings(value: Option<&Value>) -> Vec<String> {
     value.and_then(Value::as_array).map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect()).unwrap_or_default()
 }
 
-/// The view's settings applied to the table's records.
-fn arrange(file: &TableFile, table: &Table, view: Option<View>, records: Vec<Record>, rows: Option<(usize, usize)>) -> Result<TableShown, String> {
+/// The view's settings applied to the table's records. The records are arranged reading only
+/// the cells the view's filter and order need ([`Arranged`]); only the ones the picture lays out
+/// are read whole, so a picture of a large table does not parse every record.
+fn arrange(file: &TableFile, table: &Table, view: Option<View>, rows: Option<(usize, usize)>) -> Result<TableShown, String> {
     let fields = table.fields.clone();
-    let total = records.len();
     let empty = Map::new();
     let config = view.as_ref().map_or(&empty, |view| &view.config);
     let view_fields = match &view {
@@ -181,21 +181,25 @@ fn arrange(file: &TableFile, table: &Table, view: Option<View>, records: Vec<Rec
 
     let arrangement = Arrangement::of(file, &fields, view.as_ref())?;
     let filters = arrangement.filters();
-    let mut records = arrangement.apply(&fields, records);
+    let arranged = Arranged::new(file, table.id, &fields, &arrangement, "")?;
+    let total = arranged.total();
     let groups: Vec<&Field> = arrangement.groups.iter().map(|(field, _)| field).collect();
     let sorts: Vec<&Field> = arrangement.sorts.iter().map(|(field, _)| field).collect();
-    let shown = records.len();
-    let first = match rows {
+    let ids: Vec<i64> = arranged.ids().collect();
+    let shown = ids.len();
+    let (first, count) = match rows {
         Some((from, to)) if from == 0 || to < from || from > shown.max(1) => {
             return Err(format!("not found: rows {from} to {to}: the rows are counted from 1, and {shown} records are shown"));
         }
-        Some((from, to)) => {
-            records = records.into_iter().skip(from - 1).take(to + 1 - from).collect();
-            from
-        }
-        None => 1,
+        Some((from, to)) => (from, to + 1 - from),
+        None => (1, shown),
     };
-    records.truncate(MAX_RECORDS);
+    let records = ids
+        .iter()
+        .skip(first - 1)
+        .take(count.min(MAX_RECORDS))
+        .map(|id| file.get_record(table.id, *id).map_err(failed))
+        .collect::<Result<Vec<Record>, String>>()?;
 
     let row_height = f64::from(kition_table_grid::row_height(config.get("row_height").and_then(Value::as_str)));
     // The editor freezes the first column unless the view says otherwise.

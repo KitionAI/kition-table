@@ -100,6 +100,9 @@ pub struct DashboardData {
 /// view (O(records + objects)); make a new view after the replica changes.
 pub struct ModelView<'a> {
     replica: &'a Replica,
+    /// The document's base, once known: finding it by its type reads every object of the
+    /// replica, which for a document loaded from a snapshot decodes every record.
+    base: OnceCell<Option<ObjectId>>,
     structure: OnceCell<Structure>,
     links: OnceCell<LinkIndex>,
 }
@@ -120,16 +123,25 @@ struct LinkIndex {
 
 impl<'a> ModelView<'a> {
     pub fn new(replica: &'a Replica) -> Self {
-        Self { replica, structure: OnceCell::new(), links: OnceCell::new() }
+        Self { replica, base: OnceCell::new(), structure: OnceCell::new(), links: OnceCell::new() }
+    }
+
+    /// A view of a document whose base is known to be `base` (a [`crate::TableFile`]'s, the one
+    /// its writes go to), so that reads starting from the base do not look for it.
+    pub fn with_base(replica: &'a Replica, base: ObjectId) -> Self {
+        let view = Self::new(replica);
+        let _ = view.base.set(Some(base));
+        view
     }
 
     pub fn replica(&self) -> &'a Replica {
         self.replica
     }
 
-    /// The document's base: the one with the lowest id, should several exist.
+    /// The document's base: the one the view was made with, else the one with the lowest id,
+    /// should several exist.
     pub fn base(&self) -> Option<ObjectId> {
-        self.replica.objects_of_type(BASE).into_iter().next()
+        self.base.get_or_init(|| self.replica.objects_of_type(BASE).into_iter().next()).clone()
     }
 
     pub fn base_data(&self) -> Result<Option<BaseData>> {

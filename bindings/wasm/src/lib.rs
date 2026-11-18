@@ -234,10 +234,19 @@ pub struct TableDocument {
     shown: kition_table_picture::Shown,
     /// The picture of the last revision and `shown` drawn.
     picture: RefCell<Option<(u64, kition_table_picture::Shown, Arc<kition_table_picture::Picture>)>>,
+    /// The picture's size at the last revision and `shown` asked for, had without drawing it.
+    size: RefCell<Option<Measured>>,
     /// The editor's arrangement of the view it shows (`gridOpen`, `gridSync`); not saved.
     grid: grid::Grid,
     /// The editor's grid in bands (`gridAxes`, `gridBands`); not saved.
     bands: bands::Bands,
+}
+
+/// A picture's size, and the revision and `shown` it was measured at.
+struct Measured {
+    revision: u64,
+    shown: kition_table_picture::Shown,
+    size: (u32, u32),
 }
 
 fn error(err: impl std::fmt::Display) -> String {
@@ -347,6 +356,7 @@ impl TableDocument {
             imported: Vec::new(),
             shown: kition_table_picture::Shown::default(),
             picture: RefCell::new(None),
+            size: RefCell::new(None),
             grid: grid::Grid::default(),
             bands: bands::Bands::default(),
         }
@@ -367,6 +377,30 @@ impl TableDocument {
             .map(Arc::new)?;
         *self.picture.borrow_mut() = Some((self.revision, self.shown.clone(), picture.clone()));
         Ok(picture)
+    }
+
+    /// The picture's width and height ([`KitDocument::width`] and [`KitDocument::height`]): a
+    /// host asks for them on opening and after every change, so they are measured
+    /// ([`kition_table_picture::size`]) rather than drawn, unless the picture is drawn already.
+    fn size(&self) -> (u32, u32) {
+        if let Some((revision, shown, picture)) = self.picture.borrow().as_ref()
+            && *revision == self.revision
+            && *shown == self.shown
+        {
+            return (picture.width(), picture.height());
+        }
+        if let Some(measured) = self.size.borrow().as_ref()
+            && measured.revision == self.revision
+            && measured.shown == self.shown
+        {
+            return measured.size;
+        }
+        // As `picture` does: a table or view the picture showed may be gone.
+        let size = kition_table_picture::size(&self.file, &self.shown)
+            .or_else(|_| kition_table_picture::size(&self.file, &kition_table_picture::Shown::default()))
+            .unwrap_or((1, 1));
+        *self.size.borrow_mut() = Some(Measured { revision: self.revision, shown: self.shown.clone(), size });
+        size
     }
 
     /// The open file, for reads the requests do not cover.
@@ -953,11 +987,11 @@ impl KitDocument for TableDocument {
     }
 
     fn width(&self) -> u32 {
-        self.picture().map_or(1, |picture| picture.width())
+        self.size().0
     }
 
     fn height(&self) -> u32 {
-        self.picture().map_or(1, |picture| picture.height())
+        self.size().1
     }
 
     fn revision(&self) -> u64 {

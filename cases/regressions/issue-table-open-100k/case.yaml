@@ -1,0 +1,28 @@
+format: 1
+id: regressions/issue-table-open-100k
+feature: table.records
+intent: >-
+  Opening a large table does not read every record before the editor shows anything. What a host
+  asks of a document right after opening it (its overview, the document, and its picture's
+  width and height) reads the document's base from the file instead of looking for it among
+  every object of the replica, which decodes every record of a replica loaded from its snapshot,
+  and the picture's size is measured (a grid view's rows have fixed heights) instead of drawn,
+  arranging the view from each record's place and reading whole only the records the picture
+  lays out. The measured size is the drawn picture's for every view of every conformance file.
+  Before, each of the overview, the document and the size cost about as much as reading every
+  record (a 100,000-record table took seconds for each in WebAssembly), and the host asks for the
+  size again after every change.
+layer: gate
+source:
+  kind: issue
+  from: Kition Table grid plan 4.2, open to first content (card table-open)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: open_scale }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+timeout_s: 60
+since: "2026-11-18"
