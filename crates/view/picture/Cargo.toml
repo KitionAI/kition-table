@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+kition-table-arrange = { workspace = true }
 kition-table-file = { workspace = true }
 kition-table-fonts = { workspace = true }
 kition-table-display = { workspace = true }

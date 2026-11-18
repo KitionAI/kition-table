@@ -1,0 +1,24 @@
+format: 1
+id: regressions/issue-picture-filter-as-editor
+feature: table.picture
+intent: >-
+  The picture shows the records the editor shows, because both arrange a view with the kit's one
+  arrangement (kition-table-arrange). An editor filter condition the editor does not apply (one
+  still being written, with no value yet, or one whose operator the editor does not offer for the
+  field's type) is left out of the picture too. Before, the picture kept its own copy of the
+  arrangement and applied such conditions: a condition "is" with no value kept only the records
+  with an empty cell, so the picture of a 25-record view showed none of them while the editor
+  showed all 25.
+layer: gate
+source:
+  kind: issue
+  from: Kition Table grid phase 2, one arrangement (card tg-arr2)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: picture, filter: "the_picture_leaves_out_a_filter_condition_the_editor_does_not_apply" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-17"

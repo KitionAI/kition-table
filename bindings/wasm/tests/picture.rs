@@ -141,3 +141,25 @@ fn a_dashboard_is_drawn_with_its_widgets_data() {
     // Back to what the editor opens.
     assert_eq!(call(&mut doc, "preview.show", json!({}))["tableId"], json!(table));
 }
+
+/// regressions/issue-picture-filter-as-editor: the picture shows the records the editor shows.
+/// An editor condition the editor does not apply (one still being written, with no value yet, or
+/// one whose operator the editor does not offer for the field's type) is left out of the picture
+/// too. Before, the picture had its own copy of the arrangement and applied them: `is` with no
+/// value kept only the records with an empty cell, so the picture showed none of the 25.
+#[test]
+fn the_picture_leaves_out_a_filter_condition_the_editor_does_not_apply() {
+    let (mut doc, table, fields) = deals("Deal");
+    let view = call(&mut doc, "views.create", json!({ "tableId": table, "title": "Half written", "type": "grid" }))["id"].clone();
+    let (deal, value) = (fields[0]["id"].clone(), fields[2]["id"].clone());
+    let tree = json!({ "conjunction": "and", "children": [
+        { "condition": { "field_id": deal, "operator": "is", "value": null } },
+        { "condition": { "field_id": value, "operator": "hasAnyOf", "value": ["1000"] } },
+        { "condition": { "field_id": deal, "operator": "isNot", "value": "  " } },
+    ] });
+    call(&mut doc, "views.putFilterTree", json!({ "tableId": table, "viewId": view, "tree": tree }));
+    let shown = call(&mut doc, "preview.show", json!({ "viewId": view }));
+    let axis = doc.grid_open(&json!({ "tableId": table, "viewId": view })).unwrap();
+    let editor = u32::from_le_bytes(axis[16..20].try_into().unwrap());
+    assert_eq!((shown["records"].clone(), editor), (json!(25), 25));
+}

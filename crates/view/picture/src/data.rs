@@ -2,14 +2,15 @@
 //! table and that table's first view) or the ones [`Shown`] names, with the view's records
 //! filtered, sorted and grouped as the editor does, or a dashboard.
 //!
-//! A view's settings come from both places they are written: the editor's config keys
-//! (`sort_items`, `group_items`, `group_field_name`, `hidden_field_names`, `row_height`) and the
-//! engine's (`views.putSorts`, `views.putGroups`, `views.patchField`); filter conditions use the
-//! editor's operators (`is`, `isNot`, `isAnyOf`, …) or the engine's (`eq`, `neq`, `gt`, …).
+//! The view's filter, sorts and groups are the kit's one arrangement (`kition-table-arrange`), the
+//! same the editor and the agent's `read` show; its layout comes from the editor's config keys
+//! (`hidden_field_names`, `row_height`, `frozen_column_count`) and the engine's
+//! (`views.patchField`).
 
 use std::cmp::Ordering;
 
-use kition_table_file::{Dashboard, Field, FilterTree, Record, Table, TableFile, View};
+use kition_table_arrange::Arrangement;
+use kition_table_file::{Dashboard, Field, Record, Table, TableFile, View};
 use serde_json::{Map, Value};
 
 use crate::format::{display, natural_cmp};
@@ -157,110 +158,6 @@ fn strings(value: Option<&Value>) -> Vec<String> {
     value.and_then(Value::as_array).map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect()).unwrap_or_default()
 }
 
-/// `[(field, descending)]` from the editor's `[{field_name, direction}]` items.
-fn named_items<'f>(config: &Map<String, Value>, key: &str, fields: &'f [Field]) -> Vec<(&'f Field, bool)> {
-    config
-        .get(key)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|item| {
-            let name = item.get("field_name").and_then(Value::as_str)?;
-            let field = fields.iter().find(|field| field.name == name)?;
-            Some((field, item.get("direction").and_then(Value::as_str) == Some("desc")))
-        })
-        .collect()
-}
-
-/// What a view does to its table's records, as the editor applies it: its filter, then its
-/// groups and sorts as one ordering (groups first). Each field comes with whether it runs
-/// descending.
-#[derive(Clone, Debug, Default)]
-pub struct Arrangement {
-    pub filter: Option<FilterTree>,
-    pub groups: Vec<(Field, bool)>,
-    pub sorts: Vec<(Field, bool)>,
-}
-
-impl Arrangement {
-    /// The settings of `view` of a table with `fields`, read from the editor's config keys and
-    /// the engine's (see the module's notes); none without a view.
-    pub fn of(file: &TableFile, fields: &[Field], view: Option<&View>) -> Result<Self, String> {
-        let Some(view) = view else {
-            return Ok(Self::default());
-        };
-        let config = &view.config;
-        let filter = file.load_filter_tree(view.id).map_err(failed)?;
-        let by_id = |id: i64| fields.iter().find(|field| field.id == id);
-        let mut groups: Vec<(&Field, bool)> = named_items(config, "group_items", fields);
-        if groups.is_empty() {
-            groups = file
-                .list_view_groups(view.id)
-                .map_err(failed)?
-                .iter()
-                .filter_map(|item| Some((by_id(item.field_id)?, item.direction == "desc")))
-                .collect();
-        }
-        if groups.is_empty()
-            && let Some(name) = config.get("group_field_name").and_then(Value::as_str)
-            && let Some(field) = fields.iter().find(|field| field.name == name)
-            && view.view_type == "grid"
-        {
-            groups.push((field, false));
-        }
-        let mut sorts: Vec<(&Field, bool)> = named_items(config, "sort_items", fields);
-        if sorts.is_empty() {
-            sorts = file
-                .list_view_sorts(view.id)
-                .map_err(failed)?
-                .iter()
-                .filter_map(|item| Some((by_id(item.field_id)?, item.direction == "desc")))
-                .collect();
-        }
-        let owned = |items: Vec<(&Field, bool)>| items.into_iter().map(|(field, descending)| (field.clone(), descending)).collect();
-        Ok(Self { filter, groups: owned(groups), sorts: owned(sorts) })
-    }
-
-    /// How many filter conditions apply.
-    pub fn filters(&self) -> usize {
-        self.filter.as_ref().map_or(0, count_conditions)
-    }
-
-    /// `records` as the view shows them: the ones its filter keeps, in its order.
-    pub fn apply(&self, fields: &[Field], mut records: Vec<Record>) -> Vec<Record> {
-        if let Some(tree) = &self.filter {
-            records.retain(|record| matches_tree(tree, record, fields));
-        }
-        let ordering: Vec<&(Field, bool)> = self.groups.iter().chain(&self.sorts).collect();
-        if !ordering.is_empty() {
-            records.sort_by(|a, b| {
-                for (field, descending) in &ordering {
-                    let order = natural_cmp(&display(a.values.get(&field.name)), &display(b.values.get(&field.name)));
-                    let order = if *descending { order.reverse() } else { order };
-                    if order != Ordering::Equal {
-                        return order;
-                    }
-                }
-                Ordering::Equal
-            });
-        }
-        records
-    }
-}
-
-/// The records of table `table_id` as its view `view_id` shows them (filtered and in its order),
-/// or every record in order without a view; all of them, not only the [`MAX_RECORDS`] a picture
-/// lays out. A view that is not the table's is an error.
-pub fn view_records(file: &TableFile, table_id: i64, view_id: Option<i64>) -> Result<Vec<Record>, String> {
-    let table = file.get_table(table_id).map_err(|_| format!("not found: table {table_id}"))?;
-    let records = file.list_records(table_id).map_err(failed)?;
-    let view = match view_id {
-        Some(id) => Some(table.views.iter().find(|view| view.id == id).ok_or_else(|| format!("not found: view {id} of table {table_id}"))?),
-        None => None,
-    };
-    Ok(Arrangement::of(file, &table.fields, view)?.apply(&table.fields, records))
-}
-
 /// The view's settings applied to the table's records.
 fn arrange(file: &TableFile, table: &Table, view: Option<View>, records: Vec<Record>, rows: Option<(usize, usize)>) -> Result<TableShown, String> {
     let fields = table.fields.clone();
@@ -340,164 +237,6 @@ fn arrange(file: &TableFile, table: &Table, view: Option<View>, records: Vec<Rec
 
 /// A column's width when the view sets none, as the editor's grid draws it.
 pub const DEFAULT_WIDTH: f64 = kition_table_grid::DEFAULT_WIDTH as f64;
-
-fn count_conditions(tree: &FilterTree) -> usize {
-    tree.children
-        .iter()
-        .map(|child| match (&child.group, &child.condition) {
-            (Some(group), _) => count_conditions(group),
-            (None, Some(_)) => 1,
-            _ => 0,
-        })
-        .sum()
-}
-
-fn matches_tree(tree: &FilterTree, record: &Record, fields: &[Field]) -> bool {
-    let results = tree.children.iter().filter_map(|child| match (&child.group, &child.condition) {
-        (Some(group), _) => Some(matches_tree(group, record, fields)),
-        (None, Some(rule)) => {
-            let field = fields.iter().find(|field| field.id == rule.field_id)?;
-            condition(field, &rule.operator, &rule.value, record.values.get(&field.name))
-        }
-        _ => None,
-    });
-    let results: Vec<bool> = results.collect();
-    if results.is_empty() {
-        return true;
-    }
-    if tree.conjunction == "or" { results.iter().any(|ok| *ok) } else { results.iter().all(|ok| *ok) }
-}
-
-/// A cell's value as filters compare it.
-#[derive(Clone, Debug, PartialEq)]
-enum Cell {
-    Empty,
-    Number(f64),
-    Day(i64),
-    Flag(bool),
-    Text(String),
-    List(Vec<String>),
-}
-
-const DATE_TYPES: [&str; 4] = ["date", "datetime", "created_time", "last_modified_time"];
-const NUMBER_TYPES: [&str; 3] = ["number", "rating", "auto_number"];
-
-fn day_of(value: &Value) -> Option<i64> {
-    let millis = match value {
-        Value::Number(number) => number.as_f64()? as i64,
-        Value::String(text) => crate::format::parse_time(text)?,
-        _ => return None,
-    };
-    Some(millis.div_euclid(86_400_000))
-}
-
-fn cell_of(field: &Field, value: Option<&Value>) -> Cell {
-    let Some(value) = value.filter(|value| !value.is_null()) else {
-        return if field.field_type == "checkbox" { Cell::Flag(false) } else { Cell::Empty };
-    };
-    let kind = field.field_type.as_str();
-    if DATE_TYPES.contains(&kind) {
-        return day_of(value).map_or(Cell::Empty, Cell::Day);
-    }
-    if NUMBER_TYPES.contains(&kind) {
-        return match value {
-            Value::Number(number) => number.as_f64().map_or(Cell::Empty, Cell::Number),
-            Value::String(text) => text.trim().parse::<f64>().map_or(Cell::Empty, Cell::Number),
-            _ => Cell::Empty,
-        };
-    }
-    match kind {
-        "checkbox" => Cell::Flag(crate::format::truthy(value)),
-        "multi_select" | "user" | "created_by" | "last_modified_by" | "link_to_record" => {
-            let items: Vec<String> = match value {
-                Value::Array(items) => items.iter().map(|item| display(Some(item))).filter(|text| !text.is_empty()).collect(),
-                other => vec![display(Some(other))],
-            };
-            if items.is_empty() { Cell::Empty } else { Cell::List(items) }
-        }
-        _ => {
-            let text = display(Some(value));
-            if text.trim().is_empty() { Cell::Empty } else { Cell::Text(text.trim().to_owned()) }
-        }
-    }
-}
-
-/// A filter value in the cell's terms.
-fn value_as(cell: &Cell, value: &Value) -> Cell {
-    match cell {
-        Cell::Day(_) => day_of(value).map_or(Cell::Empty, Cell::Day),
-        Cell::Number(_) => match value {
-            Value::Number(number) => number.as_f64().map_or(Cell::Empty, Cell::Number),
-            Value::String(text) => text.trim().parse::<f64>().map_or_else(|_| Cell::Text(text.clone()), Cell::Number),
-            _ => Cell::Empty,
-        },
-        Cell::Flag(_) => Cell::Flag(crate::format::truthy(value)),
-        _ => match value {
-            Value::Null => Cell::Empty,
-            Value::Array(items) => Cell::List(items.iter().map(|item| display(Some(item))).collect()),
-            other => Cell::Text(display(Some(other))),
-        },
-    }
-}
-
-fn texts(cell: &Cell) -> Vec<String> {
-    match cell {
-        Cell::Empty => Vec::new(),
-        Cell::List(items) => items.clone(),
-        Cell::Text(text) => vec![text.clone()],
-        Cell::Number(number) => vec![crate::format::number(*number)],
-        Cell::Day(day) => vec![day.to_string()],
-        Cell::Flag(flag) => vec![flag.to_string()],
-    }
-}
-
-fn same(a: &Cell, b: &Cell) -> bool {
-    match (a, b) {
-        (Cell::Number(a), Cell::Number(b)) => (a - b).abs() < 1e-9,
-        (Cell::List(a), Cell::Text(b)) | (Cell::Text(b), Cell::List(a)) => a.len() == 1 && a.iter().all(|item| item == b),
-        _ => a == b,
-    }
-}
-
-/// Whether a condition holds; `None` when its operator is unknown (it is ignored, as the editor
-/// leaves out a condition it cannot apply).
-fn condition(field: &Field, operator: &str, value: &Value, raw: Option<&Value>) -> Option<bool> {
-    let cell = cell_of(field, raw);
-    let wanted = value_as(&cell, value);
-    let lower = |text: &str| text.to_lowercase();
-    let contains = || {
-        let needle = lower(&display(Some(value)));
-        texts(&cell).iter().any(|text| lower(text).contains(&needle))
-    };
-    let empty = matches!(cell, Cell::Empty) || matches!(&cell, Cell::List(items) if items.is_empty());
-    let compare = || match (&cell, &wanted) {
-        (Cell::Number(a), Cell::Number(b)) => a.partial_cmp(b),
-        (Cell::Day(a), Cell::Day(b)) => Some(a.cmp(b)),
-        _ => None,
-    };
-    let wanted_list = texts(&wanted);
-    let have = texts(&cell);
-    let any_of = || have.iter().any(|item| wanted_list.iter().any(|want| want.eq_ignore_ascii_case(item)));
-    let all_of = || wanted_list.iter().all(|want| have.iter().any(|item| want.eq_ignore_ascii_case(item)));
-    Some(match operator {
-        "is" | "eq" | "equals" | "isWithIn" => same(&cell, &wanted),
-        "isNot" | "neq" | "ne" | "not_equals" => !same(&cell, &wanted),
-        "contains" => contains(),
-        "doesNotContain" | "not_contains" | "notContains" => !contains(),
-        "isEmpty" | "is_empty" | "empty" | "falsy" => empty || cell == Cell::Flag(false),
-        "isNotEmpty" | "is_not_empty" | "not_empty" | "truthy" => !(empty || cell == Cell::Flag(false)),
-        "isGreater" | "gt" | "greater_than" | "isAfter" => compare() == Some(Ordering::Greater),
-        "isGreaterEqual" | "gte" | "isOnOrAfter" => matches!(compare(), Some(Ordering::Greater | Ordering::Equal)),
-        "isLess" | "lt" | "less_than" | "isBefore" => compare() == Some(Ordering::Less),
-        "isLessEqual" | "lte" | "isOnOrBefore" => matches!(compare(), Some(Ordering::Less | Ordering::Equal)),
-        "isAnyOf" | "hasAnyOf" | "in" => any_of(),
-        "isNoneOf" | "hasNoneOf" | "not_in" => !any_of(),
-        "hasAllOf" => all_of(),
-        "isExactly" => all_of() && have.len() == wanted_list.len(),
-        "isNotExactly" => !(all_of() && have.len() == wanted_list.len()),
-        _ => return None,
-    })
-}
 
 /// A dashboard widget's answer, as the editor's dashboard computes it.
 #[derive(Clone, Debug, PartialEq)]

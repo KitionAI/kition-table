@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 
 pub(crate) use kition_table_grid::format;
 
-pub use data::{Arrangement, MAX_RECORDS, Shown, view_records};
+pub use data::{MAX_RECORDS, Shown};
 pub use kition_table_grid::Focus;
 pub use scene::Scene;
 
