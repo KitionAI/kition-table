@@ -126,6 +126,7 @@ fn a_missing_or_null_value_groups_as_null() {
     let axis = axis(&file, id, &fields, &grouped(&fields, &["status"]), "", &[]);
     assert_eq!(axis.groups.len(), 1);
     assert_eq!((axis.groups[0].value.clone(), axis.groups[0].count), (Value::Null, 2));
+    assert_eq!(axis.groups[0].id, "g0:null");
 }
 
 #[test]
