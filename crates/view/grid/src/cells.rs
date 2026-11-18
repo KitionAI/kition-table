@@ -177,7 +177,7 @@ pub fn is_picture(item: &Value) -> bool {
         return mime.starts_with("image/");
     }
     let name = display(Some(item)).to_ascii_lowercase();
-    [".png", ".jpg", ".jpeg", ".webp", ".gif"].iter().any(|ext| name.ends_with(ext))
+    [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".heic", ".heif"].iter().any(|ext| name.ends_with(ext))
 }
 
 /// The url an attachment's file is loaded from, as the editor finds it: the item itself when it

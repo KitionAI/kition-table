@@ -13,11 +13,14 @@ kition-table-fonts = { workspace = true }
 kition-tessera-icons = { workspace = true }
 kurbo = { workspace = true }
 vello_cpu = { workspace = true }
-# Attachment thumbnails for the headless picture (PNG, JPEG, WebP).
+# Attachment thumbnails (PNG, JPEG, WebP, GIF, SVG, HEIC).
 png = { workspace = true }
 zune-jpeg = { workspace = true }
 zune-core = { workspace = true }
 image-webp = { workspace = true }
+gif = { workspace = true }
+resvg = { workspace = true }
+heic-rs = { workspace = true }
 
 [lints]
 workspace = true

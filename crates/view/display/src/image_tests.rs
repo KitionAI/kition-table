@@ -1,10 +1,12 @@
-//! Attachment pictures: PNG, JPEG and WebP decoded into thumbnails, turned by their orientation,
-//! measured from their headers, and refused when they are something else or too large.
+//! Attachment pictures: PNG, JPEG, WebP, GIF, SVG and HEIC decoded into thumbnails, turned by their
+//! orientation, measured from their headers, and refused when they are something else or too large.
 
 use super::image::{MAX_PIXELS, decode, exif_orientation, size};
 
 /// A 32 x 16 JPEG, its left half red and its right half blue, with no EXIF block.
 const SPLIT_JPEG: &[u8] = include_bytes!("../testdata/split.jpg");
+/// The same picture as a HEIC (made with sips), with no EXIF block.
+const SPLIT_HEIC: &[u8] = include_bytes!("../testdata/split.heic");
 
 const RED: [u8; 3] = [220, 30, 30];
 const BLUE: [u8; 3] = [30, 30, 220];
@@ -145,11 +147,119 @@ fn orientation_reads_both_byte_orders() {
     assert_eq!(exif_orientation(b""), 1);
 }
 
+/// `bytes` (a PNG) with an `eXIf` chunk naming `orientation` right after its IHDR chunk.
+fn turned_png(bytes: &[u8], orientation: u16) -> Vec<u8> {
+    let tiff = exif(orientation, false);
+    let mut chunk = u32::try_from(tiff.len()).expect("short").to_be_bytes().to_vec();
+    chunk.extend_from_slice(b"eXIf");
+    chunk.extend_from_slice(&tiff);
+    let crc = crc32(&chunk[4..]);
+    chunk.extend_from_slice(&crc.to_be_bytes());
+    // The signature (8) and the IHDR chunk (25).
+    let mut out = bytes[..33].to_vec();
+    out.extend_from_slice(&chunk);
+    out.extend_from_slice(&bytes[33..]);
+    out
+}
+
+/// A PNG's `eXIf` orientation is applied as a JPEG's is (as a browser shows it).
+#[test]
+fn a_png_turns_by_its_exif_chunk() {
+    let bytes = png(16, 8, &halves(16, 8, [220, 30, 30, 255], [30, 30, 220, 255]));
+    let turned = turned_png(&bytes, 6);
+    assert_eq!(size(&turned), Some((8, 16)));
+    let shown = decode(&turned, 512).expect("decodes");
+    assert_eq!((shown.width(), shown.height()), (8, 16));
+    assert_eq!((at(&shown, 4, 1), at(&shown, 4, 14)), ([220, 30, 30, 255], [30, 30, 220, 255]), "the left half on top");
+    let shown = decode(&turned_png(&bytes, 3), 512).expect("decodes");
+    assert_eq!((shown.width(), shown.height()), (16, 8));
+    assert_eq!((at(&shown, 1, 4), at(&shown, 14, 4)), ([30, 30, 220, 255], [220, 30, 30, 255]), "half a turn");
+    assert_eq!(size(&turned_png(&bytes, 1)), Some((16, 8)));
+}
+
+/// A GIF of two frames: the first a 4 x 2 red-and-blue picture at (2, 1) on an 8 x 4 screen, the
+/// second all green.
+fn two_frame_gif() -> Vec<u8> {
+    let palette = [220, 30, 30, 30, 30, 220, 30, 200, 30];
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = gif::Encoder::new(&mut bytes, 8, 4, &palette).expect("a header");
+        let mut first = gif::Frame {
+            left: 2,
+            top: 1,
+            width: 4,
+            height: 2,
+            buffer: std::borrow::Cow::Owned(vec![0, 0, 1, 1, 0, 0, 1, 1]),
+            ..gif::Frame::default()
+        };
+        first.delay = 10;
+        encoder.write_frame(&first).expect("the first frame");
+        let second = gif::Frame { width: 8, height: 4, buffer: std::borrow::Cow::Owned(vec![2; 32]), ..gif::Frame::default() };
+        encoder.write_frame(&second).expect("the second frame");
+    }
+    bytes
+}
+
+/// A GIF shows its first frame on its logical screen, transparent where the frame is not.
+#[test]
+fn a_gif_shows_its_first_frame() {
+    let bytes = two_frame_gif();
+    assert_eq!(size(&bytes), Some((8, 4)));
+    let shown = decode(&bytes, 512).expect("decodes");
+    assert_eq!((shown.width(), shown.height()), (8, 4));
+    assert_eq!((at(&shown, 2, 1), at(&shown, 5, 2)), ([220, 30, 30, 255], [30, 30, 220, 255]), "the first frame, where it is placed");
+    assert_eq!((at(&shown, 0, 0), at(&shown, 7, 3)), ([0, 0, 0, 0], [0, 0, 0, 0]), "nothing outside it, and never the second frame");
+    let small = decode(&bytes, 4).expect("decodes");
+    assert_eq!((small.width(), small.height()), (4, 2));
+}
+
+const SPLIT_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'>\
+    <rect width='20' height='20' fill='rgb(220,30,30)'/><rect x='20' width='20' height='20' fill='rgb(30,30,220)'/></svg>";
+
+/// An SVG is drawn by resvg at the thumbnail's size, larger than its own when that is smaller; its
+/// size is its own (from `width`/`height`, else its `viewBox`).
+#[test]
+fn an_svg_is_drawn_at_the_thumbnail_size() {
+    assert_eq!(size(SPLIT_SVG.as_bytes()), Some((40, 20)));
+    let shown = decode(SPLIT_SVG.as_bytes(), 80).expect("draws");
+    assert_eq!((shown.width(), shown.height()), (80, 40), "drawn larger than its own size");
+    assert_eq!((at(&shown, 2, 20), at(&shown, 77, 20)), ([220, 30, 30, 255], [30, 30, 220, 255]));
+    let small = decode(SPLIT_SVG.as_bytes(), 10).expect("draws");
+    assert_eq!((small.width(), small.height()), (10, 5));
+    let boxed = "\u{FEFF}<?xml version='1.0'?>\n<!-- a box -->\n<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 60'><rect width='30' height='60' fill='rgb(30,30,220)'/></svg>";
+    assert_eq!(size(boxed.as_bytes()), Some((30, 60)), "the viewBox's size");
+    let shown = decode(boxed.as_bytes(), 60).expect("draws");
+    assert_eq!((shown.width(), shown.height(), at(&shown, 15, 30)), (30, 60, [30, 30, 220, 255]));
+    // Nothing is loaded from outside the file: an image by reference draws nothing.
+    let linked = "<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='8' height='8'>\
+        <image width='8' height='8' xlink:href='https://kition.ai/logo.png'/></svg>";
+    let shown = decode(linked.as_bytes(), 8).expect("draws");
+    assert_eq!(at(&shown, 4, 4), [0, 0, 0, 0]);
+}
+
+/// A HEIC is decoded by heic-rs (a pure-Rust decoder).
+#[test]
+fn a_heic_decodes() {
+    assert_eq!(size(SPLIT_HEIC), Some((32, 16)));
+    let shown = decode(SPLIT_HEIC, 512).expect("decodes");
+    assert_eq!((shown.width(), shown.height()), (32, 16));
+    assert!(near(at(&shown, 2, 8), RED) && near(at(&shown, 29, 8), BLUE), "{:?} {:?}", at(&shown, 2, 8), at(&shown, 29, 8));
+    let small = decode(SPLIT_HEIC, 8).expect("decodes");
+    assert_eq!((small.width(), small.height()), (8, 4));
+}
+
 #[test]
 fn other_formats_broken_bytes_and_huge_pictures_are_refused() {
-    assert_eq!(size(b"GIF89a\x01\x00\x01\x00"), None);
-    assert!(decode(b"GIF89a\x01\x00\x01\x00", 64).is_none());
-    assert!(decode(b"<svg xmlns='http://www.w3.org/2000/svg'/>", 64).is_none());
+    // BMP, TIFF and AVIF are not read.
+    let bmp = b"BM\x3a\0\0\0\0\0\0\0\x36\0\0\0\x28\0\0\0\x01\0\0\0\x01\0\0\0\x01\0\x18\0";
+    assert_eq!(size(bmp), None);
+    assert!(decode(bmp, 64).is_none());
+    assert!(decode(b"II*\0\x08\0\0\0", 64).is_none(), "a TIFF");
+    assert!(decode(b"\0\0\0\x1cftypavif\0\0\0\0avifmif1miaf", 64).is_none(), "an AVIF");
+    assert!(decode(b"GIF89a\x01\x00\x01\x00", 64).is_none(), "a GIF cut short");
+    assert!(decode(b"<svg xmlns='http://www.w3.org/2000/svg'", 64).is_none(), "an SVG cut short");
+    assert!(decode(b"<html><body><svg/></body></html>", 64).is_none(), "an SVG inside HTML");
+    assert!(decode(&SPLIT_HEIC[..SPLIT_HEIC.len() / 2], 64).is_none(), "a HEIC cut short");
     let bytes = png(4, 4, &[9; 64]);
     assert!(decode(&bytes[..bytes.len() - 20], 64).is_none(), "cut short");
     assert!(decode(&SPLIT_JPEG[..SPLIT_JPEG.len() / 2], 64).is_none(), "a JPEG cut short");

@@ -483,3 +483,15 @@ fn thumbnails_beyond_the_cell_are_counted_by_a_badge() {
     assert!(badges.is_empty());
     assert_eq!(pictures[0].1, left + (184.0 - 72.0) / 2.0);
 }
+
+/// An attachment is a picture by its MIME type, else by its name: every format the thumbnails
+/// read (PNG, JPEG, WebP, GIF, SVG, HEIC) draws as a thumbnail, any other file as a chip.
+#[test]
+fn pictures_are_known_by_type_or_name() {
+    for name in ["a.png", "b.JPG", "c.jpeg", "d.webp", "e.gif", "f.svg", "g.heic", "h.HEIF"] {
+        assert!(is_picture(&json!({ "name": name })) && is_picture(&json!(name)), "{name}");
+    }
+    assert!(is_picture(&json!({ "name": "scan", "mime_type": "image/heic" })));
+    assert!(!is_picture(&json!({ "name": "logo.svg", "mime_type": "application/octet-stream" })), "the type wins");
+    assert!(!is_picture(&json!("brief.pdf")));
+}

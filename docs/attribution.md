@@ -20,6 +20,11 @@ these third-party libraries. Versions are the ones `Cargo.lock` and `web/pnpm-lo
 | [sqlite-wasm-rs](https://github.com/Spxg/sqlite-wasm-rs) | 0.5.5 | MIT | Engine (WebAssembly) |
 | `kition-tessera-icons` ([kition-tessera](https://github.com/KitionAI/kition-tessera)) | pinned by commit | Apache-2.0; its `lucide:` icons are [Lucide](https://lucide.dev) path data, ISC (Feather-derived ones MIT, Copyright (c) 2013-present Cole Bemis); texts in [NOTICE](../NOTICE) | Engine: the picture renderer |
 | Inter, Nanum Gothic, Noto Color Emoji, Droid Sans Fallback | The upstream files `scripts/fetch-fonts.sh` downloads and checks ([development.md](development.md#fonts)) | SIL OFL 1.1 (Inter, Nanum Gothic, Noto Color Emoji), Apache-2.0 (Droid Sans Fallback); OFL text in [NOTICE](../NOTICE) | The headless executable (`crates/view/fonts`, `embed` feature) and the web package (`web/public/fonts/`, copied by `web/scripts/fonts.mjs` and checked against `web/fonts.lock.json`, each file with its license) |
+| [resvg](https://github.com/linebender/resvg), usvg | 0.50.0 | Apache-2.0 OR MIT | Engine: SVG attachments drawn as thumbnails (no text, nothing loaded from outside the file) |
+| [tiny-skia](https://github.com/linebender/tiny-skia), tiny-skia-path | 0.12.0 | BSD-3-Clause; text in [NOTICE](../NOTICE) | Engine: resvg's rasterizer |
+| [arrayref](https://github.com/droundy/arrayref) | 0.3.9 | BSD-2-Clause; text in [NOTICE](../NOTICE) | Engine: through tiny-skia |
+| [heic-rs](https://github.com/tbraun96/heic-rs) | 0.1.4 (pinned) | MIT OR Apache-2.0; grants no HEVC patent licence | Engine: HEIC attachments decoded as thumbnails |
+| [gif](https://github.com/image-rs/image-gif) | 0.14.2 | MIT OR Apache-2.0 | Engine: GIF attachments (the first frame) |
 | Other Rust crates in `Cargo.lock` | as locked | MIT, Apache-2.0, or both (each crate's own licence) | Engine |
 | [CodeMirror](https://codemirror.net) (`@codemirror/autocomplete`, `commands`, `language`, `search`, `state`, `view`) | 6.x | MIT | Editor: formula and text editing |
 | [React](https://react.dev), React DOM | 19.3.1 | MIT | Editor |

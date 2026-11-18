@@ -50,6 +50,13 @@ png = "0.17"
 zune-jpeg = "0.5"
 zune-core = "0.5"
 image-webp = "0.2"
+# GIF attachments: the first frame.
+gif = "0.14"
+# SVG attachments, drawn by resvg (usvg's tree, tiny-skia's pixels); no text or embedded pictures.
+resvg = { version = "0.50", default-features = false }
+# HEIC/HEIF attachments: a pure-Rust decoder (MIT OR Apache-2.0), pinned exactly: a young crate that
+# parses untrusted files, so moving the pin is a reviewed change.
+heic-rs = { version = "=0.1.4", default-features = false }
 js-sys = "0.3"
 regex = "1"
 rusqlite = { version = "0.38", features = ["backup", "blob", "bundled", "hooks", "serde_json", "serialize"] }

@@ -2,12 +2,16 @@ format: 1
 id: table.editor.grid/picture-decode
 feature: table.editor.grid
 intent: >-
-  The headless rasterizer reads PNG, JPEG and WebP attachments into thumbnails: decoded,
-  premultiplied, scaled down by area so that the longest side is at most the size asked for, and
-  turned by the picture's EXIF orientation as a browser shows it (a JPEG with orientation 6 shows
-  its left half on top). The size as shown is read from the headers alone. Other formats (GIF,
-  SVG), bytes cut short and pictures of more than 50 million pixels are not decoded, so the grid
-  draws its placeholder for them.
+  The headless rasterizer reads PNG, JPEG, WebP, GIF, SVG and HEIC attachments into thumbnails:
+  decoded, premultiplied, scaled down by area so that the longest side is at most the size asked
+  for, and turned by the picture's EXIF orientation as a browser shows it (a JPEG with orientation 6
+  shows its left half on top; a PNG's eXIf chunk turns it the same way). A GIF shows its first
+  frame on its logical screen; an SVG is drawn by resvg at the size asked for (larger than its own
+  when that is smaller, from its viewBox when it has no width and height, with nothing loaded from
+  outside it); a HEIC is decoded with its container's rotation applied. The size as shown is read
+  from the headers alone (an SVG's from its tree). Other formats (BMP, TIFF, AVIF), bytes cut short
+  and pictures of more than 50 million pixels are not decoded, so the grid draws its placeholder
+  for them.
 layer: gate
 source:
   kind: synthetic
