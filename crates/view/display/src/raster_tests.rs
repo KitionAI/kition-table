@@ -3,7 +3,7 @@
 use super::*;
 
 /// The `kition-fonts` checkout's faces: `KITION_FONTS_DIR`, else the sibling of this repository.
-fn fonts() -> bool {
+pub(crate) fn fonts() -> bool {
     let dir = std::env::var_os("KITION_FONTS_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../kition-fonts"));

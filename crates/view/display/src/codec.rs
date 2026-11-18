@@ -2,12 +2,12 @@
 
 use crate::{Align, Axis, DisplayList, Face, Fit, HEADER_BYTES, HIT_BYTES, Header, Hit, HitKind, Key, Layer, Line, MAGIC, Op, Str, VERSION};
 
-/// Why bytes are not a display list of this version.
+/// Why bytes are not a display list (or a resource table) of this version.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DecodeError {
-    /// Not a display list (no `KTDL` magic).
+    /// Not a display list or resource table (no `KTDL` or `KTRS` magic).
     Magic,
-    /// A display list of another format version.
+    /// A display list or resource table of another format version.
     Version(u16),
     /// The bytes end before a section or record does.
     Truncated,
@@ -18,29 +18,29 @@ pub enum DecodeError {
 impl std::fmt::Display for DecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Magic => write!(f, "not a display list"),
-            Self::Version(version) => write!(f, "display list version {version}; this build reads version {VERSION}"),
-            Self::Truncated => write!(f, "the display list is cut short"),
-            Self::Invalid(what) => write!(f, "the display list has an invalid {what}"),
+            Self::Magic => write!(f, "not a display list or resource table"),
+            Self::Version(version) => write!(f, "format version {version}; this build reads version {VERSION}"),
+            Self::Truncated => write!(f, "the bytes are cut short"),
+            Self::Invalid(what) => write!(f, "the bytes hold an invalid {what}"),
         }
     }
 }
 
 impl std::error::Error for DecodeError {}
 
-struct Writer(Vec<u8>);
+pub(crate) struct Writer(pub(crate) Vec<u8>);
 
 impl Writer {
-    fn u8(&mut self, v: u8) {
+    pub(crate) fn u8(&mut self, v: u8) {
         self.0.push(v);
     }
-    fn u16(&mut self, v: u16) {
+    pub(crate) fn u16(&mut self, v: u16) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
-    fn u32(&mut self, v: u32) {
+    pub(crate) fn u32(&mut self, v: u32) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
-    fn f32(&mut self, v: f32) {
+    pub(crate) fn f32(&mut self, v: f32) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
     fn f32s(&mut self, values: &[f32]) {
@@ -177,13 +177,13 @@ pub fn encode(list: &DisplayList) -> Vec<u8> {
     w.0
 }
 
-struct Reader<'a> {
-    bytes: &'a [u8],
-    at: usize,
+pub(crate) struct Reader<'a> {
+    pub(crate) bytes: &'a [u8],
+    pub(crate) at: usize,
 }
 
 impl Reader<'_> {
-    fn take<const N: usize>(&mut self) -> Result<[u8; N], DecodeError> {
+    pub(crate) fn take<const N: usize>(&mut self) -> Result<[u8; N], DecodeError> {
         let end = self.at.checked_add(N).ok_or(DecodeError::Truncated)?;
         let slice = self.bytes.get(self.at..end).ok_or(DecodeError::Truncated)?;
         self.at = end;
@@ -191,16 +191,16 @@ impl Reader<'_> {
         out.copy_from_slice(slice);
         Ok(out)
     }
-    fn u8(&mut self) -> Result<u8, DecodeError> {
+    pub(crate) fn u8(&mut self) -> Result<u8, DecodeError> {
         Ok(self.take::<1>()?[0])
     }
-    fn u16(&mut self) -> Result<u16, DecodeError> {
+    pub(crate) fn u16(&mut self) -> Result<u16, DecodeError> {
         Ok(u16::from_le_bytes(self.take()?))
     }
-    fn u32(&mut self) -> Result<u32, DecodeError> {
+    pub(crate) fn u32(&mut self) -> Result<u32, DecodeError> {
         Ok(u32::from_le_bytes(self.take()?))
     }
-    fn f32(&mut self) -> Result<f32, DecodeError> {
+    pub(crate) fn f32(&mut self) -> Result<f32, DecodeError> {
         Ok(f32::from_le_bytes(self.take()?))
     }
     fn f32s<const N: usize>(&mut self) -> Result<[f32; N], DecodeError> {
@@ -210,7 +210,7 @@ impl Reader<'_> {
         }
         Ok(out)
     }
-    fn skip(&mut self, n: usize) -> Result<(), DecodeError> {
+    pub(crate) fn skip(&mut self, n: usize) -> Result<(), DecodeError> {
         let end = self.at.checked_add(n).ok_or(DecodeError::Truncated)?;
         if end > self.bytes.len() {
             return Err(DecodeError::Truncated);

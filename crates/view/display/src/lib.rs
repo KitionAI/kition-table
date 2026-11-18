@@ -41,15 +41,42 @@
 //!
 //! Everything else (text, rounded rectangles, icons, shadows, images) is drawn at its exact
 //! position and antialiased.
+//!
+//! # Resource table
+//!
+//! A list names icons, emoji and attachment pictures by id ([`Op::Icon`], [`Op::Emoji`],
+//! [`Op::Image`]); the header's `resources` is the version of the [`Resources`] those ids refer
+//! to. The engine sends the page what it lacks as a resource table, apart from the lists, in one
+//! buffer, little endian, 4-byte aligned ([`encode_resources`], [`decode_resources`]):
+//!
+//! ```text
+//! header   12 B   magic "KTRS" | version u16 = 1 | resources u16 | entry count u32
+//! entry           kind u8 | 0 u8 | 0 u16 | payload length u32 | payload, padded with zeros to 4 B
+//!   1 icon        id u16 | path count u16 | fill count u16 | 0 u16 | grid f32
+//!                 | (path count + fill count) x byte length u32 | UTF-8 SVG path data back to back
+//!                 (paths are stroked; fills are filled and stroked)
+//!   2 emoji       atlas u32 | size f32 | dpr f32 | width u32 | height u32 | left i32 | top i32
+//!                 | straight RGBA8, width x height x 4 B (the tile of `emoji_tile`)
+//!   3 image       key u32 | width u32 | height u32 | url byte length u32 | UTF-8 url
+//! ```
+//!
+//! `resources` is the version the entries bring the page to. An image's url is the attachment's
+//! (`kition-blob:<sha256>` for a file held in the document); the page loads and decodes it, and
+//! applies the picture's orientation as the engine does. Its width and height are the picture's
+//! as shown (after orientation), or 0 when the engine does not know them; the grid's layout uses
+//! them for the thumbnail's proportions. The headless rasterizer reads [`Resources`] directly.
+//! A table of another version is refused, as a list is.
 
 mod codec;
 pub mod emoji;
 mod raster;
 mod resources;
+mod table;
 
 pub use codec::{DecodeError, decode, encode};
 pub use raster::{Tile, draw, emoji_tile, raster};
-pub use resources::Resources;
+pub use resources::{Entry, ResourceTable, Resources};
+pub use table::{decode_resources, encode_resources};
 
 /// The first four bytes of every list.
 pub const MAGIC: [u8; 4] = *b"KTDL";
@@ -59,6 +86,10 @@ pub const VERSION: u16 = 1;
 pub const HEADER_BYTES: usize = 56;
 /// A hit record's size in bytes.
 pub const HIT_BYTES: usize = 28;
+/// The first four bytes of every resource table.
+pub const RESOURCE_MAGIC: [u8; 4] = *b"KTRS";
+/// The resource table format version this crate writes and reads.
+pub const RESOURCE_VERSION: u16 = 1;
 
 /// Which part of the grid a list draws.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -453,3 +484,6 @@ mod tests;
 
 #[cfg(test)]
 mod raster_tests;
+
+#[cfg(test)]
+mod table_tests;

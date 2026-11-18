@@ -152,7 +152,7 @@ pub fn draw(ctx: &mut RenderContext, list: &DisplayList, resources: &Resources, 
                 let area = rect(*x, *y, *w, *h);
                 let shape = RoundedRect::from_rect(area, f64::from(*radius)).to_path(0.05);
                 ctx.set_transform(screen);
-                match resources.image(*key) {
+                match resources.pixels(*key) {
                     Some(pixmap) if pixmap.width() > 0 && pixmap.height() > 0 => {
                         let (iw, ih) = (f64::from(pixmap.width()), f64::from(pixmap.height()));
                         let scale = match fit {
