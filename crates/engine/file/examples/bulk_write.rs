@@ -6,7 +6,9 @@
 //!
 //! With a file (the grid's performance fixture, `kition-table-kit`'s `perf_fixture` output) it
 //! opens a copy of it in memory; without one it builds a table of `BULK_ROWS` records (default
-//! 20,000) in 12 fields. `BULK_PHASES` picks the steps (default `clear,undo,redo,paste,fill`).
+//! 20,000) in 12 fields. `BULK_PHASES` picks the steps (default `clear,undo,redo,paste,fill`); a
+//! step repeated writes what is already there (a second `paste` changes nothing). Each step
+//! prints its time, the CPU time it took, and the process's resident memory after it.
 
 #![allow(clippy::disallowed_methods, reason = "a native timing tool reads the clock")]
 
@@ -17,10 +19,27 @@ use kition_table_file::{CellEdit, CreateOptions, FieldSpec, TableFile, TableOp, 
 use serde_json::{Map, Value, json};
 
 fn timed<R>(label: &str, run: impl FnOnce() -> Result<R, String>) -> Result<R, String> {
-    let started = Instant::now();
+    let (started, cpu) = (Instant::now(), process("cputime"));
     let out = run()?;
-    eprintln!("{label}: {:.2} s", started.elapsed().as_secs_f64());
+    let seconds = started.elapsed().as_secs_f64();
+    let cpu = process("cputime").zip(cpu).map(|(after, before)| clock_seconds(&after) - clock_seconds(&before));
+    let resident = process("rss").and_then(|kb| kb.parse::<u64>().ok()).map(|kb| kb / 1024);
+    match (cpu, resident) {
+        (Some(cpu), Some(mb)) => eprintln!("{label}: {seconds:.2} s, cpu {cpu:.2} s, resident {mb} MB"),
+        _ => eprintln!("{label}: {seconds:.2} s"),
+    }
     Ok(out)
+}
+
+/// One `ps` column of this process (`None` where there is no `ps`).
+fn process(column: &str) -> Option<String> {
+    let out = std::process::Command::new("ps").args(["-o", &format!("{column}="), "-p", &std::process::id().to_string()]).output().ok()?;
+    Some(String::from_utf8(out.stdout).ok()?.trim().to_owned())
+}
+
+/// `[[hh:]mm:]ss.cc` in seconds.
+fn clock_seconds(clock: &str) -> f64 {
+    clock.split(':').fold(0.0, |total, part| total * 60.0 + part.trim().parse::<f64>().unwrap_or(0.0))
 }
 
 fn text(error: impl std::fmt::Display) -> String {
