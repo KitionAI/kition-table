@@ -63,6 +63,23 @@
       "params": [],
       "returns": "string",
       "description": "The TableChanges of replica changes imported since the last call, as a JSON array of table/changed params."
+    },
+    "gridOpen": {
+      "params": [
+        "paramsJson"
+      ],
+      "returns": "Uint8Array",
+      "description": "Arranges a view for the editor ({tableId, viewId?, config?, query?, collapsed?}): the axis (kition-table-arrange format v1: record ids in order, group headers with counts, search hits)."
+    },
+    "gridSync": {
+      "params": [],
+      "returns": "Uint8Array",
+      "description": "The editor's arrangement brought to the document's current state: the new axis, or no bytes when it is the same."
+    },
+    "gridStats": {
+      "params": [],
+      "returns": "string",
+      "description": "How long arranging took, as JSON (whole arrangements and relocations), for performance tests."
     }
   },
   "ui": {

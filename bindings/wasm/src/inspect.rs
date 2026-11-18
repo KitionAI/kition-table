@@ -18,8 +18,8 @@
 //! the document, each text cut at [`CELL_CHARS`] characters. A table whose records are cut says
 //! so and names the `table.read` step that lists the rest (`next`).
 
+use kition_table_arrange::Arrangement;
 use kition_table_file::{Field, FilterTree, Record, Table, TableFile, View};
-use kition_table_picture::Arrangement;
 use serde_json::{Map, Value, json};
 
 use crate::error;
@@ -271,7 +271,7 @@ pub fn read(file: &TableFile, params: &Value) -> Result<Value, String> {
             .and_then(|cursor| cursor.parse::<usize>().ok())
             .ok_or("invalid params: cursor is the `next` cursor of a previous answer, such as \"50\"")?,
     };
-    let records = kition_table_picture::view_records(file, table.id, view_id)?;
+    let records = kition_table_arrange::view_records(file, table.id, view_id)?;
     let total = records.len();
     let page: Vec<Record> = records.into_iter().skip(offset).take(limit).collect();
     let part = match view_id {

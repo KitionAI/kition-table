@@ -53,6 +53,7 @@ mod context;
 mod dependencies;
 pub mod export;
 mod files;
+mod grid;
 pub mod inspect;
 #[cfg(feature = "headless")]
 mod model;
@@ -231,6 +232,8 @@ pub struct TableDocument {
     shown: kition_table_picture::Shown,
     /// The picture of the last revision and `shown` drawn.
     picture: RefCell<Option<(u64, kition_table_picture::Shown, Arc<kition_table_picture::Picture>)>>,
+    /// The editor's arrangement of the view it shows (`gridOpen`, `gridSync`); not saved.
+    grid: grid::Grid,
 }
 
 fn error(err: impl std::fmt::Display) -> String {
@@ -340,6 +343,7 @@ impl TableDocument {
             imported: Vec::new(),
             shown: kition_table_picture::Shown::default(),
             picture: RefCell::new(None),
+            grid: grid::Grid::default(),
         }
     }
 
@@ -397,6 +401,7 @@ impl TableDocument {
             file.set_origin(previous);
             self.file = file;
             self.history = history;
+            self.grid.replaced();
         }
         answer
     }
@@ -426,7 +431,9 @@ impl TableDocument {
             self.file.end_undo_group();
         }
         let change = self.file.take_last_change();
-        let moved = self.file.replica_version() != before;
+        let after = self.file.replica_version();
+        self.grid.note(&before, &after, change.as_ref());
+        let moved = after != before;
         if moved {
             self.revision += 1;
         }
@@ -506,7 +513,9 @@ impl TableDocument {
     pub fn import_changes(&mut self, changes: &[u8]) -> Result<Value, String> {
         let before = self.file.replica_version();
         let imported = self.file.import_replica_changes(changes).map_err(error)?;
-        if self.file.replica_version() == before {
+        let after = self.file.replica_version();
+        self.grid.note(&before, &after, Some(&imported.change));
+        if after == before {
             return Ok(json!({ "kind": "none" }));
         }
         self.revision += 1;
@@ -535,6 +544,27 @@ impl TableDocument {
     pub fn covered_facts(&self, command: &str, params: &Value) -> Result<Vec<(String, String)>, String> {
         let Some(command) = self.commands().into_iter().find(|c| c.id == command) else { return Ok(Vec::new()) };
         place::facts(&self.file, &command, params)
+    }
+
+    /// Arranges a view for the editor (`gridOpen`): `{tableId, viewId?, config?, query?,
+    /// collapsed?}`, where `config` is the view's config as the editor holds it, `query` its
+    /// search and `collapsed` its collapsed group ids. Answers the axis
+    /// (`kition_table_arrange::axis`, format v1).
+    pub fn grid_open(&mut self, params: &Value) -> Result<Vec<u8>, String> {
+        self.grid.open(&self.file, params)
+    }
+
+    /// Brings the editor's arrangement to the document's current state (`gridSync`): the new axis,
+    /// or no bytes when the axis is the same. An error before `gridOpen`.
+    pub fn grid_sync(&mut self) -> Result<Vec<u8>, String> {
+        self.grid.sync(&self.file)
+    }
+
+    /// How long arranging took (`gridStats`): whole arrangements and relocations, each with its
+    /// count, total, last and longest milliseconds and the records of the last; the last axis's
+    /// bytes; the current epoch and shown records.
+    pub fn grid_stats(&self) -> Value {
+        self.grid.stats()
     }
 
     /// The changes imported since the last call, as `table/changed` params (with `documentPath`).
@@ -1083,6 +1113,8 @@ kition_kit::export_kit_document!(TableDocument as "TableDocument");
 mod agent_tests;
 #[cfg(test)]
 mod engine_tests;
+#[cfg(test)]
+mod grid_tests;
 #[cfg(test)]
 mod round_trip_tests;
 #[cfg(test)]

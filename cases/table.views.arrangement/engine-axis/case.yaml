@@ -1,0 +1,22 @@
+format: 1
+id: table.views.arrangement/engine-axis
+feature: table.views.arrangement
+intent: >-
+  The engine's gridOpen arranges a view with the editor's unsaved settings, search and collapsed
+  groups and answers the axis; gridSync then follows every change (edits, created and deleted
+  records, undo, the view's engine sorts, a deleted field, a co-editor's imported changes) and
+  answers nothing when the axis stays the same; gridStats records each arrangement's time; the
+  agent's read lists a view in the same order.
+layer: gate
+source:
+  kind: synthetic
+  from: bindings/wasm/src/grid_tests.rs
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "grid_tests::" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

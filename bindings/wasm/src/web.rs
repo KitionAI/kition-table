@@ -1,6 +1,7 @@
 //! `addFont` (the picture's faces), and the extras on the exported `TableDocument` class, reached
 //! with `KitEngine.invoke(name, …)`:
-//! `call` (one data-document request), `takeImported`, and engine contract 2's replica members
+//! `call` (one data-document request), `takeImported`, `gridOpen`, `gridSync` and `gridStats`
+//! (the editor's arrangement, `grid.rs`), and engine contract 2's replica members
 //! (`openWithReplica`, `snapshot`, `undo`, `redo` and the rest) in the shapes kition-sdk's
 //! `session::web` gives them, as Kition Sheet adds them by hand.
 
@@ -44,6 +45,27 @@ impl WebDocument {
     #[wasm_bindgen(js_name = takeImported)]
     pub fn take_imported(&mut self) -> String {
         serde_json::Value::Array(self.0.take_imported()).to_string()
+    }
+
+    /// Arranges a view for the editor: `params` is JSON `{tableId, viewId?, config?, query?,
+    /// collapsed?}`; answers the axis (`kition-table-arrange`, format v1) as bytes.
+    #[wasm_bindgen(js_name = gridOpen)]
+    pub fn grid_open(&mut self, params: &str) -> Result<Vec<u8>, JsError> {
+        let params = kition_kit::parse_params(params).map_err(error)?;
+        self.0.grid_open(&params).map_err(error)
+    }
+
+    /// The editor's arrangement brought to the document's current state: the new axis, or no
+    /// bytes when the axis is the same.
+    #[wasm_bindgen(js_name = gridSync)]
+    pub fn grid_sync(&mut self) -> Result<Vec<u8>, JsError> {
+        self.0.grid_sync().map_err(error)
+    }
+
+    /// How long arranging took, as JSON (for performance tests).
+    #[wasm_bindgen(js_name = gridStats)]
+    pub fn grid_stats(&self) -> String {
+        self.0.grid_stats().to_string()
     }
 
     pub fn version(&mut self) -> Vec<u8> {

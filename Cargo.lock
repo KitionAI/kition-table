@@ -1374,6 +1374,7 @@ dependencies = [
  "kition-kit",
  "kition-table-ai",
  "kition-table-api",
+ "kition-table-arrange",
  "kition-table-file",
  "kition-table-fonts",
  "kition-table-import",

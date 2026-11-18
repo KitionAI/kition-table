@@ -19,6 +19,7 @@ workspace = true
 kition-kit = { workspace = true, features = ["session"] }
 kition-table-file = { workspace = true }
 kition-table-api = { workspace = true }
+kition-table-arrange = { workspace = true }
 kition-table-ai = { workspace = true }
 kition-table-import = { workspace = true }
 kition-table-picture = { workspace = true }

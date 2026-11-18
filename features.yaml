@@ -144,9 +144,9 @@ features:
     dimension: [function, performance]
     priority: P0
     status: partial
-    paths: [crates/engine/arrange/**]
-    gap: "The engine's extras and the editor do not use it yet; the picture (crates/view/picture/src/data.rs) still has its own copy of the arrangement."
-    cases: [table.views.arrangement/filter-operators, table.views.arrangement/groups-search-relocation]
+    paths: [crates/engine/arrange/**, bindings/wasm/src/grid.rs, bindings/wasm/src/grid_tests.rs, bindings/wasm/examples/grid_arrange.rs]
+    gap: "The editor does not use it yet; the picture (crates/view/picture/src/data.rs) still has its own copy of the arrangement."
+    cases: [table.views.arrangement/filter-operators, table.views.arrangement/groups-search-relocation, table.views.arrangement/engine-axis]
     since: "2026-11-18"
   - id: table.links
     title: "Links between records"
