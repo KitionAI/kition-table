@@ -138,6 +138,14 @@
       "returns": "Uint8Array",
       "description": "One band as the engine rasterizes it (width, height, RGBA8), for the parity test."
     },
+    "gridPicture": {
+      "params": [
+        "bytes",
+        "maxSide"
+      ],
+      "returns": "Uint8Array",
+      "description": "A picture's bytes decoded as the headless picture decodes them (PNG, JPEG, WebP, GIF's first frame, SVG drawn by resvg, HEIC): width and height (u32 each), then straight RGBA8, at most maxSide on its longest side; no bytes for another format. For the pictures the page's browser does not decode."
+    },
     "gridMeasure": {
       "params": [
         "asksJson"

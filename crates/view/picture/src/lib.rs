@@ -83,7 +83,7 @@ fn compose(file: &TableFile, shown: &Shown, focus: Option<Focus>, measure: bool)
             chrome::view_bar(Some(&mut content), table, width);
             let body = match view_type {
                 "kanban" => cards::board(&mut content, table, body_top),
-                "gallery" => cards::gallery(&mut content, table, body_top),
+                "gallery" => cards::gallery(&mut content, file, table, body_top),
                 "calendar" => cards::calendar(&mut content, table, body_top, width),
                 _ if measure => {
                     let columns = grid_columns(table);
@@ -149,13 +149,14 @@ fn reorderable(table: &data::TableShown) -> bool {
     table.sorts.is_empty() && table.groups.is_empty()
 }
 
-/// The longest side of an attachment's thumbnail, in pixels: a tall row's thumbnail drawn at
-/// twice the size, with room for a wide picture.
+/// The longest side of an attachment's thumbnail (and a gallery card's cover), in pixels: a tall
+/// row's thumbnail drawn at twice the size, with room for a wide picture.
 const THUMBNAIL: u32 = 384;
 
 /// The pictures the shown records attach that the file holds, decoded into thumbnails: the
 /// resources the grid is laid out with (their sizes set the thumbnails' proportions). A picture
-/// the file does not hold (a web address) or that is not a PNG, JPEG or WebP stays a placeholder.
+/// the file does not hold (a web address) or that is not read (see `kition_table_display::image`)
+/// stays a placeholder.
 fn pictures(file: &TableFile, table: &data::TableShown) -> Resources {
     let mut resources = Resources::default();
     for column in table.columns.iter().filter(|column| column.field.field_type == "attachment") {

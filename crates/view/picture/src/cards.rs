@@ -2,7 +2,8 @@
 //! cards with the record's title and three more fields), a gallery (cards with a cover, the title
 //! and four more fields) and a calendar (the records by their date, as a list).
 
-use kition_table_file::{Field, Record};
+use kition_table_display::{DisplayList, Fit, Header, Op, Resources};
+use kition_table_file::{Field, Record, TableFile, blobs};
 use kurbo::{Point, Rect};
 use serde_json::Value;
 
@@ -155,8 +156,30 @@ pub fn gallery_width(shown: &TableShown) -> f64 {
     PAD + columns as f64 * (GALLERY_CARD + GAP)
 }
 
-/// Lays a gallery out from `top`; answers its height.
-pub fn gallery(scene: &mut Scene, shown: &TableShown, top: f64) -> f64 {
+/// The cover a gallery card shows: the first attachment of the record's cover field when it is a
+/// picture (as the editor's gallery takes it), decoded as the grid's thumbnails are, from the blob
+/// the file holds for it. `None` for no picture, a picture at a web address (the picture loads
+/// nothing) or one that is not read.
+fn cover_picture(file: &TableFile, field: &Field, record: &Record) -> Option<(Resources, u32)> {
+    let first = match record.values.get(&field.name)? {
+        Value::Array(items) => items.first()?,
+        Value::Null => return None,
+        item => item,
+    };
+    if !kition_table_grid::is_picture(first) {
+        return None;
+    }
+    let url = kition_table_grid::attachment_url(first)?;
+    let blob = file.blob(blobs::blob_hash_of_url(&url)?).ok()??;
+    let pixmap = kition_table_display::image::decode(&blob.bytes, crate::THUMBNAIL)?;
+    let mut resources = Resources::default();
+    let key = resources.image(&url);
+    resources.set_image(key, pixmap);
+    Some((resources, key))
+}
+
+/// Lays a gallery out from `top`, its covers' pictures read from `file`; answers its height.
+pub fn gallery(scene: &mut Scene, file: &TableFile, shown: &TableShown, top: f64) -> f64 {
     let cover = shown.cover_field.as_ref();
     let others: Vec<&Field> = shown
         .columns
@@ -177,9 +200,17 @@ pub fn gallery(scene: &mut Scene, shown: &TableShown, top: f64) -> f64 {
         let card = Rect::new(x, y, x + GALLERY_CARD, y + card_height);
         card_box(scene, card, 12.0);
         let art = Rect::new(card.x0 + 12.0, card.y0 + 12.0, card.x1 - 12.0, card.y0 + 12.0 + cover_height);
-        scene.round_rect(art, 12.0, PRIMARY_SOFT);
-        let mid = Point::new((art.x0 + art.x1) / 2.0, (art.y0 + art.y1) / 2.0);
-        scene.icon("gallery-horizontal-end", Point::new(mid.x - 10.0, mid.y - 10.0), 20.0, PRIMARY);
+        if let Some((resources, key)) = cover.and_then(|field| cover_picture(file, field, record)) {
+            // The picture cover-cropped into the art box, centred, with its corners.
+            let mut list = DisplayList::new(Header::default());
+            let (x, y, w, h) = (art.x0 as f32, art.y0 as f32, art.width() as f32, art.height() as f32);
+            list.push(Op::Image { key, x, y, w, h, fit: Fit::Cover, radius: 12.0 });
+            scene.list(art, list, resources);
+        } else {
+            scene.round_rect(art, 12.0, PRIMARY_SOFT);
+            let mid = Point::new((art.x0 + art.x1) / 2.0, (art.y0 + art.y1) / 2.0);
+            scene.icon("gallery-horizontal-end", Point::new(mid.x - 10.0, mid.y - 10.0), 20.0, PRIMARY);
+        }
         let title_middle = art.y1 + 12.0 + 11.0;
         let title = shape(&record_title(shown, record), LARGE, SEMIBOLD, inner);
         scene.text_mid(title, card.x0 + 12.0, title_middle, FOREGROUND);

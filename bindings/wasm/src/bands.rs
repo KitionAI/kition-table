@@ -1,5 +1,6 @@
 //! The editor's grid in bands (grid plan sections 3.4, 3.7, 3.8): the extras `gridAxes`,
-//! `gridRows`, `gridBands`, `gridRaster` and `gridMeasure`, and the bands' timings in `gridStats`.
+//! `gridRows`, `gridBands`, `gridRaster`, `gridMeasure` and `gridPicture`, and the bands' timings in
+//! `gridStats`.
 //!
 //! The page arranges a view with `gridOpen` (`grid.rs`, `kition-table-arrange`) and hands the axis
 //! it got to `gridAxes`, which lays out the arrangement's linear rows (group headers, records, add
@@ -43,7 +44,8 @@
 //! way on both sides. Coordinates are the whole grid's, unscrolled (the picture's): the row heads
 //! from x = 0, the header from y = 0. `gridRaster` rasterizes a band as the headless picture does,
 //! for the parity test; `gridMeasure` answers how the grid's shaping splits and measures text,
-//! for the width test.
+//! for the width test; `gridPicture` decodes a picture the page's browser cannot (an SVG, a HEIC
+//! outside Safari) as the headless picture does.
 
 use std::collections::{HashMap, HashSet};
 
@@ -1110,6 +1112,24 @@ impl crate::TableDocument {
     pub fn grid_measure(&mut self, asks: &Value) -> Result<Value, String> {
         self.bands.measure(asks)
     }
+
+    /// A picture's thumbnail decoded as the headless picture decodes it (`gridPicture`), for a
+    /// picture the page's browser does not decode (an SVG anywhere, a HEIC outside Safari): width
+    /// and height (u32 each), then straight RGBA8, at most `max_side` on its longest side (an SVG
+    /// drawn at that size); no bytes for a format the engine does not read either.
+    pub fn grid_picture(&self, bytes: &[u8], max_side: u32) -> Vec<u8> {
+        let Some(pixmap) = kition_table_display::image::decode(bytes, max_side) else { return Vec::new() };
+        let mut out = Vec::with_capacity(8 + pixmap.data().len() * 4);
+        out.extend_from_slice(&u32::from(pixmap.width()).to_le_bytes());
+        out.extend_from_slice(&u32::from(pixmap.height()).to_le_bytes());
+        for px in pixmap.data() {
+            // Premultiplied to straight, rounded.
+            let straight =
+                |channel: u8| if px.a == 0 { 0 } else { ((u32::from(channel) * 255 + u32::from(px.a) / 2) / u32::from(px.a)).min(255) as u8 };
+            out.extend_from_slice(&[straight(px.r), straight(px.g), straight(px.b), px.a]);
+        }
+        out
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1150,6 +1170,13 @@ mod web {
         #[wasm_bindgen(js_name = gridRaster)]
         pub fn grid_raster(&mut self, epoch: u32, layer: u32, col_band: u32, row_band: u32, dpr: f64) -> Result<Vec<u8>, JsError> {
             self.0.grid_raster(epoch, [layer, col_band, row_band], dpr).map_err(error)
+        }
+
+        /// A picture the page's browser does not decode, decoded by the engine: width, height,
+        /// straight RGBA8; no bytes when the engine does not read it either.
+        #[wasm_bindgen(js_name = gridPicture)]
+        pub fn grid_picture(&self, bytes: &[u8], max_side: u32) -> Vec<u8> {
+            self.0.grid_picture(bytes, max_side)
         }
 
         /// How the grid splits `[{text, weight, size}]` into runs and measures them (JSON).

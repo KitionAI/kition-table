@@ -1,0 +1,22 @@
+format: 1
+id: table.picture/gallery-and-formats
+feature: table.picture
+intent: >-
+  The document's picture draws a GIF (its first frame, never a later one), an SVG (drawn by resvg)
+  and a HEIC (decoded by a pure-Rust decoder) stored in the file as the grid's thumbnails, and a
+  gallery view's cards show their cover (the cover field's first attachment, when it is a picture)
+  decoded the same way, cover-cropped into the card's art box. A cover the file does not hold (a
+  web address) keeps the placeholder, since the engine reads nothing from the network.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, D5 (real thumbnails), and the editor's gallery (card table-polish)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: thumbnails, filter: "gif_svg_and_heic_pictures_draw_in_the_grid_and_as_gallery_covers", features: [headless] }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"
