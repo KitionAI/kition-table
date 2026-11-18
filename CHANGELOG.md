@@ -3,6 +3,18 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
+## Unreleased
+
+- Attachment pictures in GIF (the first frame), SVG (drawn by resvg, without its text) and HEIC
+  (heic-rs, a pure-Rust decoder) show as thumbnails in the grid, in the gallery's covers and in the
+  headless picture, as PNG, JPEG and WebP did; a PNG's `eXIf` orientation turns it as a JPEG's
+  does. The page decodes with the browser and asks the engine (`gridPicture`, a new extra) for
+  what the browser cannot read: an SVG everywhere, a HEIC outside Safari.
+- The gallery's covers in the editor decode as the grid's thumbnails do (a GIF no longer plays
+  there), and the headless picture's gallery cards show their cover pictures.
+- A select field that lists no choices draws its values as neutral chips again, as the old grid
+  did, instead of a colour hashed from the text.
+
 ## 0.5.0
 
 - The editor's grid is rewritten: the engine arranges the view, lays it out and draws it in bands
