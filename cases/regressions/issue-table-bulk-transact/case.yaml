@@ -1,0 +1,26 @@
+format: 1
+id: regressions/issue-table-bulk-transact
+feature: table.records
+intent: >-
+  A paste or a fill over a whole column of a large table, as the grid on the page sends it, costs
+  about what the file's own write of it costs. The request layer reads each table's fields once
+  per request to check that every values key names a field (and still refuses each unknown key of
+  each record with the field it resembles), and gridRecords reads many records in one pass,
+  answering what it answers a few records at a time. Before, the check read the table's fields
+  again for every record, and gridRecords read every record whole, one at a time, for its row key;
+  on the page a column clear of 100,000 records spent longer in the check than in the write.
+layer: gate
+source:
+  kind: issue
+  from: Kition Table grid, 100,000-record column clear, paste and fill on the page (card bulk-write3)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-api, test: bulk_transact }
+  - cargo-test: { package: kition-table-kit, test: grid_records, filter: grid_records_of_many_ids_answers_what_a_few_at_a_time_answer }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+timeout_s: 120
+since: "2026-11-18"

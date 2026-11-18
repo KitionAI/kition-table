@@ -14,14 +14,40 @@ use std::collections::HashMap;
 
 use serde_json::{Map, Value, json};
 
+/// How many ids `gridRecords` reads one record at a time; past it, it reads the table in one pass.
+const SCAN_FROM: usize = 256;
+
 impl crate::TableDocument {
     /// `gridRecords`: `{tableId, ids, fields?}` → the records `ids` of the table, in the order
     /// asked, as `[{id, row_key, values}]`. With `fields` (field names) a record's values keep
     /// only those. An id that names no record of the table is left out.
+    ///
+    /// Past `SCAN_FROM` ids with `fields`, the table's records are read in one pass with only
+    /// those fields (as `gridClear` reads them) instead of one whole record at a time: a paste or
+    /// a fill over a whole column reads every record for its row key.
     pub fn grid_records(&self, params: &Value) -> Result<Value, String> {
         let table_id = params.get("tableId").and_then(Value::as_i64).ok_or("invalid params: tableId is a table's id")?;
         let ids = params.get("ids").and_then(Value::as_array).ok_or("invalid params: ids is a list of record ids")?;
         let names: Option<Vec<&str>> = params.get("fields").and_then(Value::as_array).map(|names| names.iter().filter_map(Value::as_str).collect());
+        if let Some(names) = names.as_ref().filter(|_| ids.len() > SCAN_FROM) {
+            let names: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
+            let read: HashMap<i64, kition_table_file::Record> = self
+                .file
+                .list_record_values(table_id, &names)
+                .map_err(|error| error.to_string())?
+                .into_iter()
+                .map(|record| (record.id, record))
+                .collect();
+            let records = ids
+                .iter()
+                .filter_map(Value::as_i64)
+                .filter_map(|id| {
+                    let record = read.get(&id)?;
+                    Some(json!({ "id": record.id, "row_key": record.row_key, "values": record.values }))
+                })
+                .collect();
+            return Ok(Value::Array(records));
+        }
         let mut records = Vec::with_capacity(ids.len());
         for id in ids.iter().filter_map(Value::as_i64) {
             let Ok(record) = self.file.get_record(table_id, id) else { continue };
