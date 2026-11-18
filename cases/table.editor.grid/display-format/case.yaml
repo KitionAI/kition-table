@@ -1,0 +1,26 @@
+format: 1
+id: table.editor.grid/display-format
+feature: table.editor.grid
+intent: >-
+  The grid's display list, format v1, is one little-endian buffer the editor's page and the
+  headless picture both read: a 56-byte header (magic KTDL, version 1, epoch, theme, resources,
+  band key, origin and size), a palette, a string section, fixed records per opcode (RECT, RRECT,
+  RRECT_STROKE, LINES, TEXT, TOFU, EMOJI, ICON, IMAGE, SHADOW, CLIP, UNCLIP) and 28-byte hit
+  records, all 4-byte aligned. Every op survives encode and decode unchanged, the bytes sit where
+  the format says, and a list of another version, cut short, too long, with an unknown opcode or a
+  string reference outside the strings is refused instead of read. The device pixel alignment
+  rules (snapped edges round, a hairline takes the device pixel it starts in) are fixed by the
+  same tests.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, display list format v1 and pixel alignment (card tg1)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-display, filter: "tests::" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-17"

@@ -1287,6 +1287,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "kition-table-display"
+version = "0.4.0"
+
+[[package]]
 name = "kition-table-file"
 version = "0.4.0"
 dependencies = [

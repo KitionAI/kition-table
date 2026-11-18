@@ -210,3 +210,12 @@ features:
     paths: [web/src/App.tsx, web/src/editor/table/components/TableEditor.tsx, web/src/editor/table/components/TableEditorFooter.tsx, web/src/editor/dashboard/components/DashboardEditor.tsx, web/src/editor/table/components/TableColumnHeaderMenu.tsx, web/src/editor/table/components/TableEditorOverlays.tsx, web/src/editor/table/components/AttachmentPreviewModal.tsx, web/tests/modes.mjs, web/tests/flow.mjs]
     cases: [regressions/issue-focus-shows-bars]
     since: "2026-11-16"
+  - id: table.editor.grid
+    title: "The grid as a display list: Rust lays out and draws it, the picture rasterizes the same list the editor will play"
+    dimension: [function, fidelity]
+    priority: P1
+    status: partial
+    paths: [crates/view/display/**]
+    gap: "Phase 1 of the grid moving to a Rust layout: the display list and the picture. The editor still draws its own grid; the page player, bands, fonts in the package and the parity tests come in later phases."
+    cases: [table.editor.grid/display-format]
+    since: "2026-11-17"
