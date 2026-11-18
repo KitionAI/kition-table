@@ -48,6 +48,7 @@ use serde_json::{Value, json};
 pub mod acts;
 mod address;
 pub mod agent;
+mod bands;
 mod check;
 mod context;
 mod dependencies;
@@ -234,6 +235,8 @@ pub struct TableDocument {
     picture: RefCell<Option<(u64, kition_table_picture::Shown, Arc<kition_table_picture::Picture>)>>,
     /// The editor's arrangement of the view it shows (`gridOpen`, `gridSync`); not saved.
     grid: grid::Grid,
+    /// The editor's grid in bands (`gridAxes`, `gridBands`); not saved.
+    bands: bands::Bands,
 }
 
 fn error(err: impl std::fmt::Display) -> String {
@@ -344,6 +347,7 @@ impl TableDocument {
             shown: kition_table_picture::Shown::default(),
             picture: RefCell::new(None),
             grid: grid::Grid::default(),
+            bands: bands::Bands::default(),
         }
     }
 

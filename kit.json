@@ -80,6 +80,51 @@
       "params": [],
       "returns": "string",
       "description": "How long arranging took, as JSON (whole arrangements and relocations), for performance tests."
+    },
+    "gridAxes": {
+      "params": [
+        "axis",
+        "paramsJson"
+      ],
+      "returns": "string",
+      "description": "Lays out an axis from gridOpen or gridSync for the grid ({tableId, viewId?, theme?, brand?}): row heights as runs, columns, header and row head sizes, band sizes and skeleton colors, as JSON."
+    },
+    "gridBands": {
+      "params": [
+        "epoch",
+        "keys",
+        "dpr",
+        "icons",
+        "tilesJson"
+      ],
+      "returns": "Uint8Array",
+      "description": "The grid's bands (layer, column band, row band triples) as display lists (format v1), with the icons from an id on and the emoji tiles the page lacks, in one batch."
+    },
+    "gridRaster": {
+      "params": [
+        "epoch",
+        "layer",
+        "colBand",
+        "rowBand",
+        "dpr"
+      ],
+      "returns": "Uint8Array",
+      "description": "One band as the engine rasterizes it (width, height, RGBA8), for the parity test."
+    },
+    "gridMeasure": {
+      "params": [
+        "asksJson"
+      ],
+      "returns": "string",
+      "description": "How the grid splits text into runs of one face and how wide each run is, as JSON, for the width test."
+    },
+    "gridBandStats": {
+      "params": [
+        "reset",
+        "cold"
+      ],
+      "returns": "string",
+      "description": "How long making bands took (count, p50, p95, max ms, bytes), as JSON, for performance tests; reset starts again, cold also empties the caches."
     }
   },
   "ui": {

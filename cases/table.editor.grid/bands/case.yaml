@@ -1,0 +1,27 @@
+format: 1
+id: table.editor.grid/bands
+feature: table.editor.grid
+intent: >-
+  The engine cuts the grid into bands the page fetches as it scrolls: gridAxes lays out the
+  arrangement gridOpen answered with the editor's geometry (row heights as runs, group headers of
+  48 px before a group's records and an add row after them, the row head 72 px or 48 px when the
+  rows cannot be dragged, the columns with the frozen ones first and the add-field column), and
+  gridBands answers each band as a display list of its own area, clipped to it, with the Tessera
+  icons from the id the page holds on and one emoji tile per emoji and size the page lacks; CJK
+  and Hangul run in their own faces and characters no face covers are tofu. A band of another
+  arrangement or an unknown layer is refused, a band past the rows is left out, and gridRaster
+  draws a band at its device size.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, sections 3.4, 3.7 and 3.8 (card tg3)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: grid_bands, features: [headless] }
+  - cargo-test: { package: kition-table-kit, filter: "bands::tests::", features: [headless] }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"
