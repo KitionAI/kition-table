@@ -226,5 +226,5 @@ features:
     status: partial
     paths: [crates/view/display/**, crates/view/grid/**, bindings/wasm/src/bands.rs, web/src/editor/table/canvas/**, web/dev/grid.html, web/fonts.lock.json, web/scripts/fonts.mjs, web/tests/gridPage.mjs, web/tests/parity.mjs, web/tests/perf.mjs, web/tests/widths.mjs]
     gap: "Phases 1 and 3 of the grid moving to a Rust layout: the display list, the picture, the engine's bands and the page's read-only player on the development page (dev/grid.html), with the fonts in the package. The editor still draws its own grid; interaction and the switch come in phases 4 and 5."
-    cases: [table.editor.grid/display-format, table.editor.grid/display-raster, table.editor.grid/layout-cells, table.editor.grid/shaping-as-canvas, table.editor.grid/resource-table, table.editor.grid/bands, table.editor.grid/page-player, table.editor.grid/widths, table.editor.grid/parity, table.editor.grid/scroll-perf]
+    cases: [table.editor.grid/display-format, table.editor.grid/display-raster, table.editor.grid/layout-cells, table.editor.grid/shaping-as-canvas, table.editor.grid/resource-table, table.editor.grid/bands, table.editor.grid/page-player, table.editor.grid/widths, table.editor.grid/parity, table.editor.grid/scroll-perf, table.editor.grid/interaction]
     since: "2026-11-17"

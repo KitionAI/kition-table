@@ -17,9 +17,12 @@ import { type Area, Axes, type AxesInput, bandKeys, keyId } from './axes'
 import { decodeBatch } from './bandBatch'
 import { BandCache } from './bandCache'
 import { type BandKey, Layer } from './displayList'
+import type { GridAxisGroup } from '../lib/gridAxis'
 import { GridFonts } from './gridFonts'
+import type { OverlayStyle } from './overlay'
 import { play } from './player'
 import { GridResources } from './resources'
+import type { GridRows } from './rows'
 
 export const MAX_BANDS_PER_CALL = 2
 /** The tallest or widest scroll extent the view lays out; larger grids map onto it. */
@@ -30,7 +33,16 @@ const FAST_SCROLL = 3000
 /** The colors of a band not here yet, from the engine's theme. */
 export type Skeleton = { background: string; line: string }
 
-export type GridOpened = { axes: AxesInput; skeleton: Skeleton }
+export type GridOpened = {
+  axes: AxesInput
+  skeleton: Skeleton
+  /** What each linear row is (`gridRows`), for hit testing and selection. */
+  rows?: GridRows
+  /** How the overlay draws (`gridAxes`' `overlay`). */
+  overlay?: OverlayStyle
+  /** The arrangement's group headers (`gridOpen`), for their ids. */
+  groups?: GridAxisGroup[]
+}
 
 /** What the view asks the engine (through `KitEngine.invoke`). */
 export type GridSource = {
@@ -87,6 +99,12 @@ export class GridView {
   private destroyed = false
   private overlayPainter: ((ctx: CanvasRenderingContext2D, dpr: number) => void) | null = null
   private readonly cleanup: Array<() => void> = []
+  private readonly axesListeners = new Set<(opened: GridOpened) => void>()
+  private readonly frameListeners = new Set<() => void>()
+  /** What the latest `open` answered. */
+  opened: GridOpened | null = null
+  /** How many times the overlay canvas was drawn (the interaction tests count redraws). */
+  overlayDraws = 0
 
   constructor(
     host: HTMLElement,
@@ -126,12 +144,44 @@ export class GridView {
     this.setAxes(opened)
   }
 
+  /** Arranges and lays out again (the source's state changed: collapsed groups, an edit). */
+  async reopen(): Promise<void> {
+    this.setAxes(await this.source.open())
+  }
+
   /** New axes (a new arrangement): bands of another epoch go. */
   setAxes(opened: GridOpened) {
     this.axes = new Axes(opened.axes)
+    this.opened = opened
     this.skeleton = opened.skeleton
     this.cache.keepEpoch(this.axes.epoch)
+    for (const listener of this.axesListeners) listener(opened)
     this.resize()
+  }
+
+  /** Calls `listener` with every new layout (`setAxes`); answers how to stop. */
+  onAxes(listener: (opened: GridOpened) => void): () => void {
+    this.axesListeners.add(listener)
+    return () => this.axesListeners.delete(listener)
+  }
+
+  /** Calls `listener` after every content frame (a scroll, a band arrived, a resize); answers how to stop. */
+  onFrame(listener: () => void): () => void {
+    this.frameListeners.add(listener)
+    return () => this.frameListeners.delete(listener)
+  }
+
+  /** Scrolls by (`dx`, `dy`) document pixels. */
+  scrollBy(dx: number, dy: number) {
+    const map = this.scrollMap()
+    this.scroller.scrollLeft += dx / map.x
+    this.scroller.scrollTop += dy / map.y
+    this.onScroll()
+  }
+
+  /** Draws the overlay again (the selection or the hover changed); the content is not touched. */
+  redrawOverlay() {
+    this.drawOverlay()
   }
 
   /** Every face loaded (the tests compare pixels only then). */
@@ -380,6 +430,9 @@ export class GridView {
     }
     this.received = 0
     this.request()
+    // The overlay follows the scroll and the row head controls of the bands that arrived.
+    this.drawOverlay()
+    for (const listener of this.frameListeners) listener()
   }
 
   /** A band not here yet: its background and lines, from the axes. */
@@ -413,6 +466,7 @@ export class GridView {
     if (!ctx) return
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, this.overlay.width, this.overlay.height)
+    this.overlayDraws += 1
     this.overlayPainter?.(ctx, this.dpr)
   }
 }

@@ -1,0 +1,30 @@
+format: 1
+id: table.editor.grid/interaction
+feature: table.editor.grid
+intent: >-
+  The page hit-tests the grid without the worker: the axes give the row and column, the linear rows
+  whether a row is a record, a group header or an add row, and the bands' hit records the part under
+  the pointer (a row head control, a column's menu caret or edge, a group's toggle, a cell's
+  checkbox); the header does not scroll down and the row heads and frozen columns not sideways. The
+  selection covers a cell range, checked rows (Shift checks a run, the header box all of them) and
+  columns, and names only records. The keyboard moves the active cell over records only (arrows,
+  Tab, Cmd/Ctrl to the edge, Shift to extend), scrolls it into view, asks to edit on Enter, F2 or a
+  typed character, collapses a range on Escape, selects all, undoes, redoes, deletes and expands, and
+  leaves the keys to an open editor. The overlay centres the row head controls in the engine's slots
+  at every row height, draws a checked box in the brand with the mark on it, tints the hovered row
+  and outlines the active cell; it is drawn again only when what it shows changes. A press counts
+  as a click only when released over the part it was pressed on, and a drag past an edge scrolls
+  faster the deeper it goes.
+layer: gate
+source:
+  kind: synthetic
+  from: web/src/editor/table/canvas/interaction.spec.ts (card tg4a; the intents of the old grid's RenderLayer, rowControl, baseRenderer, layoutRenderer and region specs)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/canvas/interaction.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-18"

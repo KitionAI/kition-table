@@ -11,7 +11,8 @@
  */
 import { type BandKey, Layer } from './displayList'
 
-export type Column = { x: number; width: number; frozen: boolean }
+/** A shown column; the last one is the add-field column, whose `fieldId` is null. */
+export type Column = { x: number; width: number; frozen: boolean; fieldId?: number | null }
 
 export type AxesInput = {
   epoch: number
