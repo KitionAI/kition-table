@@ -14,6 +14,7 @@
 use std::time::Instant;
 
 use kition_kdm::Origin;
+use kition_table_file::kdm::project;
 use kition_table_file::{CellEdit, CreateOptions, FieldSpec, TableFile, TableOp, TableSpec};
 use serde_json::{Map, Value, json};
 
@@ -111,6 +112,60 @@ fn a_column_cleared_pasted_and_filled_undoes_redoes_and_converges() {
     assert!(file.undo().unwrap().0);
     assert!(all_cleared(&file, table), "the paste undone is the clear");
     send(&file, &mut peer);
+    converged(&file, &peer, table);
+}
+
+/// Every live record row's key and stored values text, by key.
+fn rows(conn: &rusqlite::Connection) -> Vec<(String, String)> {
+    let mut statement = conn.prepare("SELECT row_key, values_json FROM kition_records WHERE deleted_at IS NULL ORDER BY row_key").unwrap();
+    statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?))).unwrap().collect::<Result<_, _>>().unwrap()
+}
+
+/// The rows hold, to the byte, what a projection of the whole replica writes into a file without
+/// record rows.
+fn projected_as_rebuilt(file: &TableFile) {
+    let written = rows(file.conn());
+    let tx = file.conn().unchecked_transaction().unwrap();
+    tx.execute("DELETE FROM kition_records", []).unwrap();
+    project::rebuild(&tx, file.replica(), 1).unwrap();
+    let rebuilt = rows(&tx);
+    drop(tx);
+    assert_eq!(written, rebuilt, "a write projects the cells it changed as a rebuild projects the record");
+}
+
+/// A write of some cells reads back only those cells, and leaves each row as a projection of the
+/// whole record leaves it: kept, replaced, cleared, and new cells (written in the middle of the
+/// row, at the end, and into an empty row), by the writer, by its undo and redo, and by a copy
+/// that hears of them.
+#[test]
+fn cells_a_write_changes_are_projected_as_the_whole_record_is() {
+    let (mut file, table, keys) = table(40);
+    let mut peer = TableFile::open_bytes(&file.to_bytes().unwrap()).unwrap();
+    let steps: Vec<Box<dyn Fn(usize) -> Value>> = vec![
+        Box::new(|index| if index % 3 == 0 { json!({ "amount": null }) } else { json!({ "amount": index as f64 + 0.5 }) }),
+        Box::new(|index| if index % 2 == 0 { json!({ "amount": index, "notes": null }) } else { json!({ "title": null }) }),
+        Box::new(|index| json!({ "title": null, "amount": null, "notes": null, "unknown": index })),
+        Box::new(|index| {
+            if index % 4 == 0 { json!({ "notes": format!("é \"{index}\"\n") }) } else { json!({ "amount": [index], "title": { "a": index } }) }
+        }),
+        Box::new(|index| json!({ "title": format!("Record {index}"), "amount": index, "notes": null })),
+    ];
+    for step in &steps {
+        set_cells(&mut file, table, &keys, step);
+        projected_as_rebuilt(&file);
+        send(&file, &mut peer);
+        projected_as_rebuilt(&peer);
+    }
+    for _ in 0..3 {
+        assert!(file.undo().unwrap().0);
+        projected_as_rebuilt(&file);
+    }
+    for _ in 0..2 {
+        assert!(file.redo().unwrap().0);
+        projected_as_rebuilt(&file);
+    }
+    send(&file, &mut peer);
+    projected_as_rebuilt(&peer);
     converged(&file, &peer, table);
 }
 

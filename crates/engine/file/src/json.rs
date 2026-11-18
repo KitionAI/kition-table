@@ -150,6 +150,84 @@ pub fn fallback(value: &str, fallback: &str) -> String {
     }
 }
 
+/// The members of a JSON object written as [`Value::to_string`] writes one (no whitespace
+/// outside strings): each key, without its quotes, and its value's text, in order. `None` for
+/// any other text, and for an object with a key holding an escape, so a key's text is the key.
+pub fn compact_members(raw: &str) -> Option<Vec<(&str, &str)>> {
+    let bytes = raw.as_bytes();
+    let mut members = Vec::new();
+    let mut at = 1;
+    if bytes.first() != Some(&b'{') {
+        return None;
+    }
+    if bytes.get(at) == Some(&b'}') {
+        return (bytes.len() == 2).then_some(members);
+    }
+    loop {
+        if bytes.get(at) != Some(&b'"') {
+            return None;
+        }
+        let key_start = at + 1;
+        let key_end = key_start + bytes.get(key_start..)?.iter().position(|byte| matches!(byte, b'"' | b'\\'))?;
+        if bytes.get(key_end) != Some(&b'"') || bytes.get(key_end + 1) != Some(&b':') {
+            return None;
+        }
+        let value_start = key_end + 2;
+        let value_end = skip_compact_value(bytes, value_start)?;
+        members.push((raw.get(key_start..key_end)?, raw.get(value_start..value_end)?));
+        match bytes.get(value_end) {
+            Some(b',') => at = value_end + 1,
+            Some(b'}') if value_end + 1 == bytes.len() => return Some(members),
+            _ => return None,
+        }
+    }
+}
+
+/// The end of the compact JSON value starting at `at`.
+fn skip_compact_value(bytes: &[u8], mut at: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    loop {
+        match *bytes.get(at)? {
+            b'"' => {
+                at += 1;
+                loop {
+                    match *bytes.get(at)? {
+                        b'\\' => at += 2,
+                        b'"' => break,
+                        _ => at += 1,
+                    }
+                }
+                at += 1;
+            }
+            b'{' | b'[' => {
+                depth += 1;
+                at += 1;
+                continue;
+            }
+            b'}' | b']' => {
+                depth = depth.checked_sub(1)?;
+                at += 1;
+            }
+            b',' | b':' if depth > 0 => {
+                at += 1;
+                continue;
+            }
+            b' ' | b'\n' | b'\r' | b'\t' => return None,
+            _ => {
+                let rest = bytes.get(at..)?;
+                let len = rest.iter().position(|byte| matches!(byte, b',' | b'}' | b']' | b' ' | b'\n' | b'\r' | b'\t')).unwrap_or(rest.len());
+                if len == 0 {
+                    return None;
+                }
+                at += len;
+            }
+        }
+        if depth == 0 {
+            return Some(at);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -172,6 +250,24 @@ mod tests {
         assert_eq!(encode_default(&json!("{\"a\":1}"), "{}").unwrap_or_default(), "{\"a\":1}");
         assert!(encode_default(&json!("{nope"), "{}").is_err());
         assert_eq!(encode_default(&json!({"b": 2}), "{}").unwrap_or_default(), "{\"b\":2}");
+    }
+
+    #[test]
+    fn compact_members_of_written_objects() {
+        let written = json!({"a": 1, "b c": "x,\"}]", "d": {"e": [1, {"f": null}]}, "g": [], "h": -2.5e-7, "i": true}).to_string();
+        let members = compact_members(&written).unwrap_or_default();
+        let keys: Vec<&str> = members.iter().map(|(key, _)| *key).collect();
+        assert_eq!(keys, ["a", "b c", "d", "g", "h", "i"]);
+        for (key, value) in &members {
+            assert_eq!(
+                serde_json::from_str::<Value>(value).ok().as_ref(),
+                json!({"a": 1, "b c": "x,\"}]", "d": {"e": [1, {"f": null}]}, "g": [], "h": -2.5e-7, "i": true}).get(key)
+            );
+        }
+        assert_eq!(compact_members("{}"), Some(Vec::new()));
+        for other in ["", "[]", "{ }", "{\"a\": 1}", "{\"a\":1,}", "{\"a\":1}x", "{\"a\\u0062\":1}", "{\"a\":}", "{\"a\":[1}", "null"] {
+            assert_eq!(compact_members(other), None, "{other}");
+        }
     }
 
     #[test]

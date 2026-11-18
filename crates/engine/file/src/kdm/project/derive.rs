@@ -668,15 +668,22 @@ impl Projector<'_> {
         }
         if changed.is_empty() {
             if created.is_some() {
-                self.out.upserted.insert((table, key.to_owned()));
+                self.out.upserted.push((table, key.to_owned()));
             }
             return Ok(changed);
         }
         let encoded = Value::Object(values).to_string();
         if created == Some(encoded.as_str()) {
-            self.out.upserted.insert((table, key.to_owned()));
+            self.out.upserted.push((table, key.to_owned()));
             return Ok(changed);
         }
+        self.write_values(id, table, key, &encoded)?;
+        Ok(changed)
+    }
+
+    /// Writes a record row's `values_json` (`encoded`), stamped with this projection's actor when
+    /// the record's object changed, and reports the record upserted.
+    pub(super) fn write_values(&mut self, id: i64, table: i64, key: &str, encoded: &str) -> Result<()> {
         if self.touched.contains(&id) {
             self.conn
                 .prepare_cached("UPDATE kition_records SET values_json = ?1, updated_by = ?2, updated_at = ?3 WHERE id = ?4")?
@@ -686,8 +693,8 @@ impl Projector<'_> {
                 .prepare_cached("UPDATE kition_records SET values_json = ?1, updated_at = ?2 WHERE id = ?3")?
                 .execute(params![encoded, self.now, id])?;
         }
-        self.out.upserted.insert((table, key.to_owned()));
-        Ok(changed)
+        self.out.upserted.push((table, key.to_owned()));
+        Ok(())
     }
 }
 

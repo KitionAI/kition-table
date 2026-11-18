@@ -115,7 +115,7 @@ fn base_in(replica: &mut Replica) -> ObjectId {
 
 /// Projects what changed in `replica` since the last call into `file`, in one SQL transaction.
 fn project_into(file: &TableFile, replica: &mut Replica, actor: &str, now: i64) -> TableChange {
-    let changed = replica.take_changed();
+    let changed = replica.take_changes();
     let tx = ok(file.conn().unchecked_transaction());
     let change = ok(project::project_changes(&tx, replica, &changed, actor, now));
     ok(tx.commit());
@@ -1607,7 +1607,7 @@ fn a_merge_projects_like_a_rebuild() {
     let mut changed = imported;
     changed.extend(t.replica.take_changed());
     let tx = ok(t.file.conn().unchecked_transaction());
-    ok(project::project_changes(&tx, &t.replica, &changed, "import", 12));
+    ok(project::project_changes(&tx, &t.replica, &changed.into(), "import", 12));
     ok(tx.commit());
 
     let fresh = new_file(t.dir.path(), "fresh.ktable", true);
@@ -1874,7 +1874,7 @@ fn a_cycle_made_by_concurrent_edits_stays_bounded() {
     let mut changed = imported;
     changed.extend(p.replica.take_changed());
     let tx = ok(p.file.conn().unchecked_transaction());
-    ok(project::project_changes(&tx, &p.replica, &changed, "import", 4));
+    ok(project::project_changes(&tx, &p.replica, &changed.into(), "import", 4));
     ok(tx.commit());
     assert!(largest_values(&p.file) < 4_000);
     project_bounded(p.dir.path(), &p.file, &mut p.replica, 5, "concurrent cycle");
@@ -2032,7 +2032,7 @@ fn an_unrepaired_replica_with_duplicate_names_is_refused() {
     let notes = write(&mut t.replica, |tx| model::create_field(tx, &tasks, &field("Notes", "text")));
     project_into(&t.file, &mut t.replica, "", 11);
     write(&mut t.replica, |tx| tx.set(&notes, "name", json!("title")).map_err(kition_table_file::TableFileError::from));
-    let changed = t.replica.take_changed();
+    let changed = t.replica.take_changes();
     let tx = ok(t.file.conn().unchecked_transaction());
     let failed = project::project_changes(&tx, &t.replica, &changed, "", 12);
     match failed {
@@ -2261,7 +2261,7 @@ fn random_cycles_and_chains_stay_bounded_and_match_rebuilds() {
 
 /// Projects what changed and answers how long the projection took, the commit excluded.
 fn timed_projection(file: &TableFile, replica: &mut Replica, now: i64) -> std::time::Duration {
-    let changed = replica.take_changed();
+    let changed = replica.take_changes();
     let tx = ok(file.conn().unchecked_transaction());
     let started = Instant::now();
     ok(project::project_changes(&tx, replica, &changed, "", now));

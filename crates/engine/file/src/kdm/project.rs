@@ -56,10 +56,10 @@ mod derive;
 mod positions;
 
 use std::cell::Cell;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
-use kition_kdm::{ObjectId, Replica};
+use kition_kdm::{Changes, ObjectId, Replica};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value};
 
@@ -95,13 +95,18 @@ pub struct TableChange {
     pub dashboards: bool,
 }
 
-/// Projects the objects in `changed` (what [`Replica::take_changed`] reported) into the
+/// Projects the objects in `changed` (what [`Replica::take_changes`] reported) into the
 /// relational tables, inside the caller's SQL transaction. `actor` labels the history rows;
 /// `now` (Unix milliseconds) stamps the rows written. Does not record the projected position.
 /// See the module documentation for what the caller must do on failure.
-pub fn project_changes(conn: &Connection, replica: &Replica, changed: &BTreeSet<ObjectId>, actor: &str, now: i64) -> Result<TableChange> {
+///
+/// A record whose only changes are cells (`changed` lists them with their values) is projected
+/// from those values, without reading the replica, when no live table has a derived field: its
+/// row's other values stay as they are.
+pub fn project_changes(conn: &Connection, replica: &Replica, changed: &Changes, actor: &str, now: i64) -> Result<TableChange> {
     let mut projector = Projector::new(conn, replica, actor, now, false)?;
-    let outcome = projector.classify(changed).and_then(|plan| projector.run(plan));
+    projector.changes = Some(changed);
+    let outcome = projector.classify(changed.objects()).and_then(|plan| projector.run(plan));
     LAST_RECOMPUTES.with(|count| count.set(projector.recomputed));
     outcome.map_err(unrepaired)?;
     Ok(projector.out.finish())
@@ -212,7 +217,8 @@ struct Out {
     tables: BTreeSet<i64>,
     schema: BTreeSet<i64>,
     views: BTreeSet<i64>,
-    upserted: BTreeSet<(i64, String)>,
+    /// Sorted and without repeats when finished.
+    upserted: Vec<(i64, String)>,
     deleted: BTreeSet<(i64, String)>,
     reordered: BTreeSet<i64>,
     dashboards: bool,
@@ -224,7 +230,12 @@ impl Out {
             tables: self.tables.into_iter().collect(),
             schema: self.schema.into_iter().collect(),
             views: self.views.into_iter().collect(),
-            records_upserted: self.upserted.into_iter().collect(),
+            records_upserted: {
+                let mut upserted = self.upserted;
+                upserted.sort_unstable();
+                upserted.dedup();
+                upserted
+            },
             records_deleted: self.deleted.into_iter().collect(),
             records_reordered: self.reordered.into_iter().collect(),
             dashboards: self.dashboards,
@@ -260,6 +271,9 @@ pub(crate) struct TableSchema {
     stored: HashMap<String, String>,
     /// Stored fields `(name, id)` in name order, for history.
     stored_by_name: Vec<(String, i64)>,
+    /// Stored fields' names in field object id order, the order a record's stored values are
+    /// written in.
+    stored_in_id_order: Vec<String>,
     /// A formula comes before another derived field, so it may read a value derived after it.
     forward_formulas: bool,
 }
@@ -326,6 +340,8 @@ struct Projector<'a> {
     underived: Option<bool>,
     /// Record recomputations run.
     recomputed: u64,
+    /// What changed, when the projection is of changes: the cells written in records.
+    changes: Option<&'a Changes>,
 }
 
 impl<'a> Projector<'a> {
@@ -359,6 +375,7 @@ impl<'a> Projector<'a> {
             touched: HashSet::new(),
             underived: None,
             recomputed: 0,
+            changes: None,
         })
     }
 
@@ -372,6 +389,11 @@ impl<'a> Projector<'a> {
     fn classify(&self, changed: &BTreeSet<ObjectId>) -> Result<Plan> {
         let mut plan = Plan::default();
         for id in changed {
+            // Only records have cells, and an object whose only changes are cells is still there.
+            if self.written_cells(id).is_some() {
+                plan.records.insert(id.clone());
+                continue;
+            }
             let Ok(ty) = self.replica.object_type(id) else {
                 self.classify_gone(id, &mut plan)?;
                 continue;
@@ -1232,6 +1254,12 @@ impl<'a> Projector<'a> {
                 continue;
             }
             let schema = self.schema(table_id)?;
+            if let Some(written) = self.written_cells(&record)
+                && self.underived()?
+                && self.project_written_cells(id, table_id, &record, &schema, &before, written)?
+            {
+                continue;
+            }
             let cells = self.stored_values(&schema, &record)?;
             let before = json::object(&before);
             let changed = self.write_cell_history(id, table_id, &schema, &before, &cells)?;
@@ -1248,6 +1276,127 @@ impl<'a> Projector<'a> {
             }
         }
         Ok(())
+    }
+
+    /// The cells written in `record` and their values now (`None`: cleared), when they are all
+    /// that changed in it.
+    fn written_cells(&self, record: &ObjectId) -> Option<&'a BTreeMap<String, Option<Value>>> {
+        let fields = self.changes?.map_writes(record)?;
+        match fields.get("cells") {
+            Some(keys) if fields.len() == 1 => Some(keys),
+            _ => None,
+        }
+    }
+
+    /// Projects a record of a document without derived fields whose only changes are the cells
+    /// `written` (field id to value now): writes their history, and patches the row's values
+    /// (`before`): its stored cells by name, in field id order, as `stored_values` gives them and
+    /// `Value::to_string` writes them. The other values' text is kept as it is. Answers `false`,
+    /// writing nothing, for a row not written that way (the whole record is read then).
+    fn project_written_cells(
+        &mut self,
+        id: i64,
+        table_id: i64,
+        record: &ObjectId,
+        schema: &TableSchema,
+        before: &str,
+        written: &BTreeMap<String, Option<Value>>,
+    ) -> Result<bool> {
+        let Some(members) = json::compact_members(before) else {
+            return Ok(false);
+        };
+        // Each member's place among the stored fields in id order: they come in that order.
+        let order = &schema.stored_in_id_order;
+        let mut places = Vec::with_capacity(members.len());
+        let mut next = 0;
+        for (name, _) in &members {
+            let Some(found) = order.get(next..).and_then(|rest| rest.iter().position(|stored| stored == name)) else {
+                return Ok(false);
+            };
+            places.push(next + found);
+            next += found + 1;
+        }
+        // Each changed cell: name, field row id, its text before (`None`: the row lacks it), and
+        // its value after (`None`: the record lacks it).
+        let mut changed: Vec<(&str, i64, Option<&str>, Option<Value>)> = Vec::new();
+        for (key, new) in written {
+            let Some(name) = schema.stored.get(key) else { continue };
+            let text = members.iter().find(|(member, _)| *member == name.as_str()).map(|(_, text)| *text);
+            let old: Value = text.map(serde_json::from_str).transpose()?.unwrap_or(Value::Null);
+            if json::equal(&old, new.as_ref().unwrap_or(&Value::Null)) {
+                continue;
+            }
+            let at = schema.stored_by_name.binary_search_by(|(stored, _)| stored.as_str().cmp(name)).ok();
+            let Some((_, field_id)) = at.and_then(|at| schema.stored_by_name.get(at)) else { continue };
+            changed.push((name.as_str(), *field_id, text, new.clone()));
+        }
+        if changed.is_empty() {
+            return Ok(true);
+        }
+        changed.sort_by(|a, b| a.0.cmp(b.0));
+        if self.history {
+            for (_, field_id, text, new) in &changed {
+                let before: Value = text.map(serde_json::from_str).transpose()?.unwrap_or(Value::Null);
+                let after = new.clone().unwrap_or(Value::Null);
+                insert_history(
+                    self.conn,
+                    &HistoryWrite {
+                        document_id: &self.document_id,
+                        table_id,
+                        record_id: id,
+                        field_id: Some(*field_id),
+                        action: HistoryAction::Update,
+                        before,
+                        after,
+                        actor: self.actor,
+                    },
+                    self.now,
+                )?;
+            }
+        }
+        // New members, in field id order.
+        let mut added: Vec<(usize, &str, String)> = changed
+            .iter()
+            .filter(|(_, _, text, _)| text.is_none())
+            .filter_map(|(name, _, _, new)| Some((order.iter().position(|stored| stored == name)?, *name, new.as_ref()?.to_string())))
+            .collect();
+        added.sort_by_key(|(place, _, _)| *place);
+        let mut added = added.into_iter().peekable();
+        let mut out = String::with_capacity(before.len() + 32);
+        out.push('{');
+        // A new member's key is written escaped; a kept one's needs no escaping (`compact_members`
+        // has none with an escape).
+        let push = |out: &mut String, key: &str, escape: bool, value: &str| {
+            if out.len() > 1 {
+                out.push(',');
+            }
+            if escape {
+                out.push_str(&Value::from(key).to_string());
+            } else {
+                out.push('"');
+                out.push_str(key);
+                out.push('"');
+            }
+            out.push(':');
+            out.push_str(value);
+        };
+        for ((name, text), place) in members.iter().zip(&places) {
+            while let Some((_, key, value)) = added.next_if(|(new_place, _, _)| new_place < place) {
+                push(&mut out, key, true, &value);
+            }
+            match changed.iter().find(|(changed_name, ..)| changed_name == name) {
+                None => push(&mut out, name, false, text),
+                Some((_, _, _, Some(new))) => push(&mut out, name, false, &new.to_string()),
+                Some((_, _, _, None)) => {}
+            }
+        }
+        for (_, key, value) in added {
+            push(&mut out, key, true, &value);
+        }
+        out.push('}');
+        self.recomputed += 1;
+        self.write_values(id, table_id, record.as_str(), &out)?;
+        Ok(true)
     }
 
     /// Inserts, revives, and deletes a table's record rows to match its list, and positions them.
@@ -1286,7 +1435,7 @@ impl<'a> Projector<'a> {
                     let id = self.revive_or_insert_record(record, table_id, position, &values)?;
                     self.created.insert(id);
                     plan.records.insert(record.clone());
-                    self.out.upserted.insert((table_id, record.to_string()));
+                    self.out.upserted.push((table_id, record.to_string()));
                 }
             }
         }
@@ -1470,11 +1619,14 @@ impl<'a> Projector<'a> {
             fields.push(field);
         }
         stored_by_name.sort();
+        let mut by_id: Vec<(&String, &String)> = stored.iter().collect();
+        by_id.sort();
+        let stored_in_id_order = by_id.into_iter().map(|(_, name)| name.clone()).collect();
         let forward_formulas = fields
             .iter()
             .position(|field| field.field_type == "formula")
             .is_some_and(|first| fields.iter().skip(first).any(|field| is_derived_type(&field.field_type)));
-        let schema = Rc::new(TableSchema { fields, stored, stored_by_name, forward_formulas });
+        let schema = Rc::new(TableSchema { fields, stored, stored_by_name, stored_in_id_order, forward_formulas });
         self.schemas.insert(table_id, Rc::clone(&schema));
         Ok(schema)
     }

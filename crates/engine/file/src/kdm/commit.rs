@@ -19,7 +19,7 @@
 
 use std::collections::BTreeSet;
 
-use kition_kdm::{ObjectId, Origin, OriginKind, Replica, Tx, UndoScope, Version};
+use kition_kdm::{Changes, ObjectId, Origin, OriginKind, Replica, Tx, UndoScope, Version};
 use kition_time::now_millis;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
 
@@ -506,18 +506,19 @@ fn write_in<R>(
 ) -> Result<(R, TableChange, bool, store::Head)> {
     // Changes imported by the catch-up were projected by the handle that stored them; projecting
     // them again is harmless and keeps this write's change complete.
-    let mut changed: BTreeSet<ObjectId> = replica.take_changed();
-    index.advance(start, replica, &changed);
+    let mut changed = replica.take_changes();
+    index.advance(start, replica, &structural(&changed));
     let before = if repair_after { Some(index.before(replica)?) } else { None };
     let stepped_from = replica.version();
     let value = step(replica)?;
-    let stepped = replica.take_changed();
-    index.advance(&stepped_from, replica, &stepped);
+    let stepped = replica.take_changes();
+    let stepped_structure = structural(&stepped);
+    index.advance(&stepped_from, replica, &stepped_structure);
     let mut repaired = false;
     if let Some(before) = before {
-        let (wrote, fixed) = repair::run_since(replica, &stepped, &before, index)?;
+        let (wrote, fixed) = repair::run_since(replica, &stepped_structure, &before, index)?;
         repaired = wrote;
-        changed.extend(fixed);
+        changed.extend(Changes::from(fixed));
     }
     changed.extend(stepped);
     if since.includes(&replica.version()) && changed.is_empty() {
@@ -531,6 +532,13 @@ fn write_in<R>(
     let stored = store::stored_position(conn)?;
     store::set_projected_position(conn, stored)?;
     Ok((value, change, repaired, store::head(conn)?))
+}
+
+/// The changed objects a repair looks at: those with changes other than writes to keys of map
+/// fields. Cells, column widths and hidden columns, and dashboard widgets never break a list,
+/// orphan an object, name a base, or decide a link.
+fn structural(changes: &Changes) -> BTreeSet<ObjectId> {
+    changes.objects().iter().filter(|id| changes.map_writes(id).is_none()).cloned().collect()
 }
 
 /// Imports what other handles stored since `head`, and moves `since` and `head` to the store's

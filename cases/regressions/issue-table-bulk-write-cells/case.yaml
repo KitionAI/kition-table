@@ -1,0 +1,24 @@
+format: 1
+id: regressions/issue-table-bulk-write-cells
+feature: table.records
+intent: >-
+  A write of cells reads back no cell of the records it wrote: the projection takes the written
+  cells and their values from the replica's changes and patches each record row's stored values,
+  and leaves every row, to the byte, as a projection of the whole record writes it, whether cells
+  are kept, replaced, cleared or new (in the middle of a row, at its end, or in an empty row), by
+  the writer, by its undo and redo, and by a copy that hears of them. Before, clearing a column
+  of 100,000 records read all 50 cells of every record back and parsed and wrote every row whole.
+layer: gate
+source:
+  kind: issue
+  from: Kition Table grid card tg4c, column clear over 100,000 records (card bulk-write2)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-file, test: bulk_writes, filter: cells_a_write_changes_are_projected_as_the_whole_record_is }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+timeout_s: 60
+since: "2026-11-18"
