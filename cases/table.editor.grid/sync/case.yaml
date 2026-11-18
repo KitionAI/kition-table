@@ -1,0 +1,24 @@
+format: 1
+id: table.editor.grid/sync
+feature: table.editor.grid
+intent: >-
+  After a write that leaves the arrangement as it was, the page fetches again only the bands that
+  show a written record: those bands go stale, are still drawn (and hit tested) until their new
+  lists arrive, and no longer count as held, so the view asks for them; the bands of rows that show
+  none of the written records, and the header strips, stay; a write that does not say which records
+  makes every band of rows stale. A band that leaves the cache forgets it was stale. The active
+  attachment cell's add button sits at the cell's left, centred on its height, as the old grid drew
+  it.
+layer: gate
+source:
+  kind: synthetic
+  from: web/src/editor/table/canvas/gridSync.spec.ts (card tg4c; the grid design, section 3.7)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/canvas/gridSync.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-18"

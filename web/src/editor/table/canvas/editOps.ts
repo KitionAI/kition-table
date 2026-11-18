@@ -119,11 +119,15 @@ export function pastedRowCount(text: string): number {
   return parsePastedTable(text).length
 }
 
+/** Each writable field's empty value (what a clear writes), by field name. */
+export function emptyValues(fields: DataField[]): Record<string, DataRecordValue> {
+  return Object.fromEntries(fields.filter(writable).map((field) => [field.name, coerceValue(field, null)]))
+}
+
 /** Clearing cells: each writable field of each record set to its empty value, as one `cells.set`. */
 export function clearOps(tableId: number, records: GridRecord[], fields: DataField[]): TableOp[] {
-  const writableFields = fields.filter(writable)
-  if (!writableFields.length || !records.length) return []
-  const empty = Object.fromEntries(writableFields.map((field) => [field.name, coerceValue(field, null)]))
+  const empty = emptyValues(fields)
+  if (!Object.keys(empty).length || !records.length) return []
   return [{ op: 'cells.set', tableId, records: records.map((record) => ({ rowKey: record.row_key, values: { ...empty } })) } as TableOp]
 }
 

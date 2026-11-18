@@ -135,8 +135,9 @@ The new grid (the engine's bands played on a canvas, not yet the editor's) has a
 `web/dev/grid.html` (`pnpm dev`, then `/dev/grid.html?file=<a .ktable URL>&view=<id>`; `hud=1`
 shows its frame and band timings), which is not part of `pnpm build`. Its interaction (selection,
 keyboard, hover, the row head controls, menus' entry points) and its editing (the cell editors,
-the clipboard, the drags, attachment pictures, the AI overlay; writes through the engine's
-commands, each logged to `window.__ktableGridWrites`) work there; it stands in for the editor's
+the clipboard, the drags, attachment pictures and uploads, the AI overlay; writes through the
+engine's commands, each logged to `window.__ktableGridWrites`, after which the view follows with
+`gridSync` and fetches again only the written records' bands) work there; it stands in for the editor's
 other handlers and logs each call to `window.__ktableGridEvents`. It draws with the same font
 files the engine shapes with: `pnpm fonts` copies them from `KITION_FONTS_DIR` into
 `web/public/fonts/` and refuses any whose SHA-256 is not in `web/fonts.lock.json`; `pnpm build`
@@ -148,6 +149,7 @@ pnpm run test:grid:interaction   # selection, keyboard, hover and menus, in Chro
 pnpm run test:grid:editing   # editors, clipboard, drags, pictures, AI overlay, in Chromium and WebKit
 pnpm run test:perf    # scrolling 100,000 records (writes target/perf/ on first run; minutes)
 PERF_TIER=strict PERF_HEADED=1 pnpm run test:perf   # the lines themselves, on a maintainer's machine
+node tests/perfEdit.mjs chromium   # 50 edits and a whole-column clear on the same 100,000 records
 ```
 
 The editor depends on the `@kition/*` packages of kition-sdk and Kition Tessera from npm, at the

@@ -1,0 +1,26 @@
+format: 1
+id: table.editor.grid/edit-perf
+feature: table.editor.grid
+intent: >-
+  Editing the grid stays quick on a table of 100,000 records in 50 fields (the grid design, section
+  4.2, scenario g): on the development page, at a device pixel ratio of 2, 50 cells edited one
+  after another (a typed value, then Enter) are each written and redrawn, from the Enter to the
+  first frame that shows the value, within the edit-to-redraw line (p95 50 ms on the owner's
+  machine; the headless run relaxes it by the scroll lines' factor); and a whole number column of
+  the 100,000 records cleared with Delete is written and redrawn, every record cleared.
+layer: corpus
+dimension: performance
+source:
+  kind: synthetic
+  from: bindings/wasm/examples/perf_fixture.rs at its fixed seed (card tg3), web/tests/perfEdit.mjs (card tg4c)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [node, web/tests/perfEdit.mjs, chromium]
+expected:
+  - actual: out:exit
+    compare: exit
+requires: [chromium]
+tags: [browser, large, slow]
+since: "2026-11-18"

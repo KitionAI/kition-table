@@ -10,9 +10,10 @@
  * marker (`[data-ktable-grid-menu]`) at the grid's anchor, closed by Escape or a press elsewhere;
  * every handler call is logged to `window.__ktableGridEvents`. Editing is the grid's own
  * (`GridEditing`: the cell editors, the clipboard, the drags, pictures, the AI overlay) over the
- * engine (`engineData`); every write it sends is logged to `window.__ktableGridWrites`, an
- * attachment preview is a marker (`[data-ktable-grid-preview]`) holding the picture, and an AI
- * cell's regenerate button turns the cell's spinner on.
+ * engine (`engineData`); every write it sends is logged to `window.__ktableGridWrites`, after
+ * each the view follows it as the editor does (`syncAfterWrite`), an attachment preview is a
+ * marker (`[data-ktable-grid-preview]`) holding the picture, files are uploaded into the document
+ * (`attachments.put`), and an AI cell's regenerate button turns the cell's spinner on.
  *
  * Query: `file` (a .ktable URL, default the development sample), `table` and `view` (ids, default
  * the first table's first view), `theme` (`light` or `dark`), `brand` (`#rrggbb`), `hud=1` (a
@@ -29,6 +30,7 @@ import { type EngineSource, engineSource } from './engineSource'
 import { engineData, type GridData } from './gridData'
 import { GridEditing } from './gridEditing'
 import { engineFontUrls } from './gridFonts'
+import { syncAfterWrite } from './gridSync'
 import { GridView } from './gridView'
 import { type ClientRect, type GridHandlers, GridInteraction } from './interaction'
 
@@ -154,6 +156,7 @@ function handlers(engine: KitEngine, tableId: number, view: () => GridView, sour
 /** The engine's data for editing, its writes logged to `window.__ktableGridWrites`. */
 async function loggedData(engine: KitEngine, tableId: number, viewId: number | null): Promise<GridData> {
   const data = await engineData(engine, tableId, viewId)
+  const upload = data.upload
   const writes: Array<{ command: string; params: unknown }> = []
   window.__ktableGridWrites = writes
   return {
@@ -162,6 +165,16 @@ async function loggedData(engine: KitEngine, tableId: number, viewId: number | n
     fields: data.fields,
     records: data.records,
     blob: data.blob,
+    upload: upload
+      ? async (file) => {
+          writes.push({ command: 'attachments.put', params: { name: file.name, mimeType: file.type, size: file.size } })
+          return upload(file)
+        }
+      : undefined,
+    async clear(ids, values) {
+      writes.push({ command: 'gridClear', params: { values, records: ids.length } })
+      await data.clear(ids, values)
+    },
     async transact(ops) {
       writes.push({ command: 'transact', params: { ops } })
       await data.transact(ops)
@@ -242,9 +255,8 @@ start()
         log('regenerate', event)
         editing.setGenerating([event])
       },
-      onWritten: async () => {
-        await view.reopen()
-        log('write:done')
+      onWritten: async (written) => {
+        log('write:done', { written: written.kind, synced: await syncAfterWrite(view, source, written) })
       },
       onError: (error) => log('write:failed', String(error)),
     })

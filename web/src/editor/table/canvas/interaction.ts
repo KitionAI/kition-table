@@ -314,7 +314,7 @@ export class GridInteraction {
   private source(): HitSource | null {
     const axes = this.view.currentAxes
     if (!axes) return null
-    return { axes, rows: this.rows, viewport: this.view.viewport, list: (key) => this.view.cache.peek(key) }
+    return { axes, rows: this.rows, viewport: this.view.viewport, list: (key) => this.view.cache.drawn(key) }
   }
 
   private hitAtViewport(x: number, y: number): GridHit {

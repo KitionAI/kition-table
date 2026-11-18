@@ -16,22 +16,31 @@
  * - **Clipboard.** Copy and cut put the selection's cells on the clipboard as tab-separated text;
  *   paste writes the text from the active cell on, past the last record as new records, in one
  *   `transact`; Delete and Backspace clear the selection's cells in one `transact`.
- * - **Pictures.** The bands name the attachment pictures they show; the pictures held in the
- *   document are read (`attachments.read`) and decoded on the page, then drawn where the engine
- *   placed them. A click on one asks the editor to preview the cell's attachments.
+ * - **Pictures.** The view decodes the pictures the document holds (and `data:` urls) through its
+ *   source; the pictures at web addresses the bands name (and `blob:` urls, or what
+ *   `resolveFileURL` makes of any other url) are loaded here, as the old grid loaded them, and
+ *   drawn where the engine placed them. A click on one asks the editor to preview the cell's
+ *   attachments.
+ * - **Attachments.** When the data can upload (`GridData.upload`), the active attachment cell
+ *   shows an add button at its left (as the old grid did): a click on it picks files, and files
+ *   pasted on an attachment cell are added the same way; each file is uploaded and the cell's
+ *   attachments get them in one `records.update`.
  * - **AI fields.** A hovered AI cell shows a regenerate button at its top right; cells being
  *   generated (`setGenerating`) show a spinner over them.
  *
- * Every write goes through the engine's commands and then `onWritten` (by default the view
- * arranges again), so undo takes back exactly one action.
+ * Every write goes through the engine's commands and then `onWritten` with what it changed (by
+ * default the view arranges again; `syncAfterWrite` moves only what the write touched), so undo
+ * takes back exactly one action. A clear of more than `CLEAR_IN_ENGINE` records is expanded by
+ * the engine (`GridData.clear`), so the page never reads every record of a column to clear it.
  */
 import type { DataAttachment, DataField, DataRecordValue } from '../../types/dataDocument'
-import { coerceValue, displayValue, normalizeAttachmentValue } from '../lib/tableEditorShared'
+import { coerceValue, displayValue, extractClipboardFiles, normalizeAttachmentValue } from '../lib/tableEditorShared'
 import type { Area } from './axes'
 import type { ImageEntry } from './bandBatch'
-import { clearOps, coveredCells, fieldDropIndex, fillOps, moveFieldOps, moveRecordOps, pastedRowCount, pasteOps, recordsFrom, serializeCells, writable } from './editOps'
+import { clearOps, coveredCells, emptyValues, fieldDropIndex, fillOps, moveFieldOps, moveRecordOps, pastedRowCount, pasteOps, recordsFrom, serializeCells, writable } from './editOps'
 import { type DragActions, installDrags } from './gestures'
 import type { GridData, GridRecord, TableOp } from './gridData'
+import type { Written } from './gridSync'
 import { fieldColumnCount, type GridHit, HitKind } from './hitTest'
 import type { ClientRect, GridHandlers, GridInteraction, OverlayFrame } from './interaction'
 import { type CellBounds, type CellRef, cellSelection, type GridSelection, sameSelection } from './selection'
@@ -62,18 +71,34 @@ export type EditingHandlers = {
   onOpenLink?(event: { recordId: number; fieldId: number; index: number }): void
   /** An AI cell's regenerate button. */
   onRegenerate?(event: { recordId: number; fieldId: number }): void
-  /** After a write: by default the view arranges again. */
-  onWritten?(): Promise<void> | void
+  /** After a write, with what it changed: by default the view arranges again. */
+  onWritten?(written: Written): Promise<void> | void
   onError?(error: unknown): void
+  /** A url the page can load for an attachment's stored url (the host's); by default only `http(s):`, `data:` and `blob:` urls load. */
+  resolveFileURL?(url: string): string
 }
 
 /** The cells a selection's copy covers before it is read on demand instead of ahead. */
 const COPY_AHEAD_CELLS = 20_000
+/** The records a clear covers beyond which the engine expands it (`GridData.clear`). */
+export const CLEAR_IN_ENGINE = 1_000
+/** The add button of the active attachment cell: its side and its left inset (the old grid's). */
+export const ADD_BUTTON = 20
+export const ADD_BUTTON_INSET = 6
+/** Urls a picture loads from without the host. */
+const SELF_CONTAINED_URL = /^(https?:|data:|blob:)/i
+/** Pictures the view's source decodes: the document's blobs and `data:` urls. */
+const HELD_URL = /^(kition-blob:|data:)/i
 /** The AI regenerate button: its side and its inset from the cell's top right corner. */
 export const AI_BUTTON = 18
 export const AI_BUTTON_INSET = 4
 
 const TEXT_TYPES = new Set(['text', 'long_text', 'number', 'url', 'document_link'])
+
+/** The attachment add button's area on the viewport, for a cell at `area` (centred on its height). */
+export function addButtonArea(area: Area): Area {
+  return { x: area.x + ADD_BUTTON_INSET, y: area.y + (area.height - ADD_BUTTON) / 2, width: ADD_BUTTON, height: ADD_BUTTON }
+}
 
 /** The AI regenerate button's area on the viewport, for a cell at `area`. */
 export function aiButtonArea(area: Area): Area {
@@ -105,6 +130,10 @@ export class GridEditing {
   private copyRun = 0
   private generating = new Set<string>()
   private overAIButton = false
+  private overAddButton = false
+  /** The file picker of the add button, and the cell it adds to. */
+  private picker: HTMLInputElement | null = null
+  private picking: { recordId: number; field: DataField } | null = null
   private spinFrame = 0
   /** The pictures being loaded or loaded, by image key. */
   private readonly images = new Map<number, 'loading' | 'done'>()
@@ -187,6 +216,24 @@ export class GridEditing {
     this.cleanup.push(view.onImages((images) => this.loadImages(images)))
     this.cleanup.push(installDrags(interaction, this.dragActions()))
     this.cleanup.push(interaction.addPainter((frame) => this.paintAI(frame), 120))
+    this.cleanup.push(interaction.addPainter((frame) => this.paintAdd(frame), 121))
+    this.cleanup.push(
+      interaction.addGesture({
+        down: (hit) => this.addButtonAt(hit) != null,
+        up: (hit) => {
+          const at = this.addButtonAt(hit)
+          if (at) this.pickFiles(at.recordId, at.field)
+        },
+        cursor: (hit) => {
+          const over = this.addButtonAt(hit) != null
+          if (over !== this.overAddButton) {
+            this.overAddButton = over
+            this.interaction.invalidateOverlay()
+          }
+          return over ? 'pointer' : null
+        },
+      }),
+    )
     this.cleanup.push(
       interaction.addGesture({
         down: (hit) => this.aiButtonAt(hit) != null,
@@ -213,6 +260,7 @@ export class GridEditing {
     window.clearTimeout(this.copyTimer)
     for (const undo of this.cleanup) undo()
     this.input.remove()
+    this.picker?.remove()
   }
 
   /** Puts the focus on the grid (its textarea). */
@@ -320,7 +368,7 @@ export class GridEditing {
         if (text === null) void this.toggle(recordId, field)
         return
       case 'rating':
-        if (text && /^[0-9]$/.test(text)) void this.write(() => this.data.update(recordId, { [field.name]: Number(text) || null }))
+        if (text && /^[0-9]$/.test(text)) void this.write(() => this.data.update(recordId, { [field.name]: Number(text) || null }), cells([recordId]))
         return
       case 'date':
       case 'datetime':
@@ -435,7 +483,7 @@ export class GridEditing {
     this.close()
     if (text === original) return
     const value = coerceValue(field, text)
-    void this.write(() => this.data.update(recordId, { [field.name]: value }))
+    void this.write(() => this.data.update(recordId, { [field.name]: value }), cells([recordId]))
   }
 
   /** A popup's value: written when it changed. */
@@ -446,7 +494,7 @@ export class GridEditing {
     this.close()
     const stored = field.type === 'date' || field.type === 'datetime' ? (value === '' ? null : value) : value
     if (JSON.stringify(stored ?? null) === original) return
-    void this.write(() => this.data.update(recordId, { [field.name]: stored }))
+    void this.write(() => this.data.update(recordId, { [field.name]: stored }), cells([recordId]))
   }
 
   /** Closes the open editor without writing. */
@@ -493,11 +541,11 @@ export class GridEditing {
 
   // ---- writes ------------------------------------------------------------------------------
 
-  private async write(run: () => Promise<unknown>) {
+  private async write(run: () => Promise<unknown>, written: Written) {
     this.busy += 1
     try {
       await run()
-      await (this.handlers.onWritten ? this.handlers.onWritten() : this.interaction.view.reopen())
+      await (this.handlers.onWritten ? this.handlers.onWritten(written) : this.interaction.view.reopen())
       this.copy = null
       this.onSelection()
     } catch (error) {
@@ -508,16 +556,16 @@ export class GridEditing {
     }
   }
 
-  private transact(ops: () => Promise<TableOp[]>) {
+  private transact(ops: () => Promise<TableOp[]>, written: Written) {
     return this.write(async () => {
       const made = await ops()
       if (made.length) await this.data.transact(made)
-    })
+    }, written)
   }
 
   private async toggle(recordId: number, field: DataField) {
     const value = await this.value(recordId, field)
-    await this.write(() => this.data.update(recordId, { [field.name]: !value }))
+    await this.write(() => this.data.update(recordId, { [field.name]: !value }), cells([recordId]))
   }
 
   /** The fields of shown columns `cols`. */
@@ -526,7 +574,10 @@ export class GridEditing {
     return cols.map((col) => axes?.columns[col]?.fieldId).map((id) => (id != null ? this.data.field(id) : undefined)).filter((field): field is DataField => field != null)
   }
 
-  /** Delete or Backspace: the selection's cells emptied in one transaction. */
+  /**
+   * Delete or Backspace: the selection's cells emptied in one transaction; past `CLEAR_IN_ENGINE`
+   * records the engine finds the records and writes it.
+   */
   clear(selection: GridSelection) {
     const grid = this.interaction
     const rows = grid.rows
@@ -534,7 +585,12 @@ export class GridEditing {
     const { recordIds, cols } = coveredCells(selection, rows, grid.columnCount)
     const fields = this.fieldsOf(cols)
     if (!recordIds.length || !fields.length) return Promise.resolve()
-    return this.transact(async () => clearOps(this.data.tableId, await this.data.records(recordIds, []), fields))
+    if (recordIds.length > CLEAR_IN_ENGINE) {
+      const values = emptyValues(fields)
+      if (!Object.keys(values).length) return Promise.resolve()
+      return this.write(() => this.data.clear(recordIds, values), cells(recordIds))
+    }
+    return this.transact(async () => clearOps(this.data.tableId, await this.data.records(recordIds, []), fields), cells(recordIds))
   }
 
   // ---- clipboard ---------------------------------------------------------------------------
@@ -596,6 +652,15 @@ export class GridEditing {
 
   private onPaste(event: ClipboardEvent) {
     if (this.session) return
+    // Files pasted on an attachment cell are added to it (as the old grid did); elsewhere the text is pasted.
+    const files = extractClipboardFiles(event.clipboardData)
+    const active = this.grid?.active
+    const at = files.length && active ? this.cellOf(active) : null
+    if (at && at.field.type === 'attachment' && writable(at.field) && this.data.upload) {
+      event.preventDefault()
+      void this.addFiles(at.recordId, at.field, files)
+      return
+    }
     const text = event.clipboardData?.getData('text/plain') ?? ''
     if (!text) return
     event.preventDefault()
@@ -613,7 +678,7 @@ export class GridEditing {
     const ids = recordsFrom(rows, start.row, count)
     const cols = Array.from({ length: Math.max(0, grid.columnCount - start.col) }, (_, index) => start.col + index)
     const fields = this.fieldsOf(cols)
-    return this.transact(async () => pasteOps(this.data.tableId, text, await this.data.records(ids, []), fields))
+    return this.transact(async () => pasteOps(this.data.tableId, text, await this.data.records(ids, []), fields), cells(ids))
   }
 
   // ---- cells' parts ------------------------------------------------------------------------
@@ -632,7 +697,7 @@ export class GridEditing {
         if (!writable(field)) return
         const value = Number(await this.value(recordId, field)) || 0
         const next = part.index + 1
-        await this.write(() => this.data.update(recordId, { [field.name]: value === next ? null : next }))
+        await this.write(() => this.data.update(recordId, { [field.name]: value === next ? null : next }), cells([recordId]))
         return
       }
       case HitKind.Attachment:
@@ -659,8 +724,8 @@ export class GridEditing {
     return {
       // The engine lays out a drag handle only when the view neither sorts nor groups.
       canMoveRows: () => true,
-      resize: (_col, fieldId, width) => void this.write(() => this.data.patchFieldWidth(fieldId, width)),
-      freeze: (count) => void this.write(() => this.data.setFrozen(count)),
+      resize: (_col, fieldId, width) => void this.write(() => this.data.patchFieldWidth(fieldId, width), LAYOUT),
+      freeze: (count) => void this.write(() => this.data.setFrozen(count), LAYOUT),
       moveColumns: (cols, drop) => {
         const axes = grid().view.currentAxes
         if (!axes) return
@@ -669,7 +734,7 @@ export class GridEditing {
         const toIndex = fieldDropIndex(all, shown, cols[0], cols[cols.length - 1], drop)
         if (toIndex == null) return
         const ids = cols.map((col) => shown[col])
-        void this.transact(async () => moveFieldOps(this.data.tableId, ids, toIndex))
+        void this.transact(async () => moveFieldOps(this.data.tableId, ids, toIndex), LAYOUT)
       },
       moveRow: (source, target, after) => {
         const rows = grid().rows
@@ -683,7 +748,7 @@ export class GridEditing {
           const key = (id: number | undefined) => records.find((record) => record.id === id)?.row_key ?? null
           const moving = key(sourceId)
           return moving ? moveRecordOps(this.data.tableId, moving, next == null ? null : key(next)) : []
-        })
+        }, cells([sourceId]))
       },
       fill: (bounds: CellBounds, span) => {
         const rows = grid().rows
@@ -701,7 +766,7 @@ export class GridEditing {
           const byId = new Map(read.map((record) => [record.id, record]))
           const ordered = sources.map((id) => byId.get(id)).filter((record): record is GridRecord => record != null)
           return fillOps(this.data.tableId, ordered, await this.data.records(targets, []), fields, span.down)
-        }).then(() => {
+        }, cells(targets)).then(() => {
           // The range grows over what was filled.
           const g = grid()
           const top = span.down ? bounds.top : span.to
@@ -715,9 +780,11 @@ export class GridEditing {
 
   // ---- pictures ------------------------------------------------------------------------------
 
+  /** Loads the pictures the view's source leaves (not the document's blobs, not `data:` urls). */
   private loadImages(entries: ImageEntry[]) {
     const resources = this.interaction.view.resources
     for (const entry of entries) {
+      if (HELD_URL.test(entry.url.trim())) continue
       // Loading, or loaded and still held (the view may drop its pictures, then they come again).
       if (this.images.get(entry.key) === 'loading' || resources.image(entry.key)) continue
       this.images.set(entry.key, 'loading')
@@ -731,19 +798,101 @@ export class GridEditing {
     }
   }
 
-  /** A picture the document holds (`kition-blob:`) or a `data:` url, decoded; null for anything else. */
+  /**
+   * A picture at the url the page loads it from (the url itself when it is self-contained, else
+   * what `resolveFileURL` makes of it), decoded; null when it cannot be had.
+   */
   private async decode(url: string): Promise<ImageBitmap | null> {
     try {
-      const hash = /^kition-blob:([0-9a-f]{64})$/.exec(url.trim())?.[1]
-      let blob: Blob | null = null
-      if (hash) {
-        const held = await this.data.blob(hash)
-        if (held) blob = new Blob([held.bytes as BlobPart], { type: held.mimeType })
-      } else if (url.startsWith('data:')) blob = await (await fetch(url)).blob()
-      return blob ? await createImageBitmap(blob) : null
+      const src = this.handlers.resolveFileURL ? this.handlers.resolveFileURL(url) : SELF_CONTAINED_URL.test(url.trim()) ? url.trim() : ''
+      return src ? await loadPicture(src) : null
     } catch {
       return null
     }
+  }
+
+  // ---- attachments ---------------------------------------------------------------------------
+
+  /** The active attachment cell whose add button is under `hit`, or null (none without an upload). */
+  private addButtonAt(hit: GridHit): { recordId: number; field: DataField } | null {
+    const grid = this.interaction
+    const active = grid.active
+    if (hit.region !== 'cell' || !this.data.upload || !active || hit.row !== active.row || hit.col !== active.col || this.session) return null
+    const at = this.cellOf(active)
+    if (!at || at.field.type !== 'attachment' || !writable(at.field)) return null
+    const area = grid.cellScreenArea(active)
+    return area && inside(addButtonArea(area), hit.x, hit.y) ? at : null
+  }
+
+  /** Opens the file picker for the attachments of a record's field. */
+  private pickFiles(recordId: number, field: DataField) {
+    let picker = this.picker
+    if (!picker) {
+      picker = document.createElement('input')
+      picker.type = 'file'
+      picker.multiple = true
+      picker.dataset.ktableGridFiles = 'true'
+      picker.style.display = 'none'
+      picker.addEventListener('change', () => {
+        const target = this.picking
+        const files = Array.from(picker?.files ?? [])
+        this.picking = null
+        if (picker) picker.value = ''
+        if (target && files.length) void this.addFiles(target.recordId, target.field, files)
+      })
+      this.interaction.view.element.append(picker)
+      this.picker = picker
+    }
+    this.picking = { recordId, field }
+    picker.click()
+  }
+
+  /** Uploads `files` and adds them to the record's attachments, after the ones it holds, in one `records.update`. */
+  private addFiles(recordId: number, field: DataField, files: File[]) {
+    const data = this.data
+    if (!data.upload || !files.length) return Promise.resolve()
+    return this.write(async () => {
+      const uploaded = await Promise.all(files.map((file) => data.upload?.(file)))
+      const current = normalizeAttachmentValue(await this.value(recordId, field))
+      await data.update(recordId, { [field.name]: [...current, ...uploaded.filter((item): item is DataAttachment => item != null)] })
+    }, cells([recordId]))
+  }
+
+  /** The add button on the active attachment cell, as the old grid drew it (a plus at the cell's left). */
+  private paintAdd(frame: OverlayFrame) {
+    const grid = this.interaction
+    const active = grid.active
+    if (!active || !this.data.upload || this.session) return
+    const at = this.cellOf(active)
+    if (!at || at.field.type !== 'attachment' || !writable(at.field)) return
+    const area = grid.cellScreenArea(active)
+    if (!area) return
+    const { ctx, dpr, style } = frame
+    const zone = addButtonArea(area)
+    ctx.save()
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.beginPath()
+    ctx.rect(area.x, area.y, area.width, area.height)
+    ctx.clip()
+    ctx.fillStyle = style.rowHead
+    ctx.beginPath()
+    ctx.roundRect(zone.x, zone.y, zone.width, zone.height, 4)
+    ctx.fill()
+    ctx.fillStyle = this.overAddButton ? style.selection : style.hover
+    ctx.fill()
+    ctx.strokeStyle = this.overAddButton ? style.border : style.control
+    ctx.lineWidth = 1.5
+    ctx.lineCap = 'round'
+    const cx = zone.x + zone.width / 2
+    const cy = zone.y + zone.height / 2
+    const arm = zone.width / 2 - 5
+    ctx.beginPath()
+    ctx.moveTo(cx - arm, cy)
+    ctx.lineTo(cx + arm, cy)
+    ctx.moveTo(cx, cy - arm)
+    ctx.lineTo(cx, cy + arm)
+    ctx.stroke()
+    ctx.restore()
   }
 
   // ---- AI fields -------------------------------------------------------------------------
@@ -856,6 +1005,32 @@ export class GridEditing {
         ctx.restore()
       }
     }
+  }
+}
+
+/** A write of the cells of the records `ids`. */
+const cells = (ids: number[]): Written => ({ kind: 'cells', records: ids })
+/** A write of the view's columns. */
+const LAYOUT: Written = { kind: 'layout' }
+
+/**
+ * A picture at `src`, decoded: with CORS first, so the canvas it is drawn on stays readable, then
+ * without (a host that sends no CORS headers; the picture still shows, as the old grid showed it).
+ */
+async function loadPicture(src: string): Promise<ImageBitmap> {
+  const load = async (cors: boolean) => {
+    const image = new Image()
+    if (cors) image.crossOrigin = 'anonymous'
+    image.decoding = 'async'
+    image.src = src
+    await image.decode()
+    return createImageBitmap(image)
+  }
+  if (/^(data:|blob:)/i.test(src)) return load(false)
+  try {
+    return await load(true)
+  } catch {
+    return load(false)
   }
 }
 

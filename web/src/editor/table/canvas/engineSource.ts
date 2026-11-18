@@ -4,6 +4,9 @@
  * (`gridAxes`, with the overlay's style and the group headers' ids), what each linear row is (`gridRows`), the bands
  * (`gridBands`), and the pictures the bands show (`attachments.read` for a blob the document holds, or a `data:` url;
  * the kit loads nothing from the network). Typed arrays come back transferred, without a copy.
+ *
+ * After a write, `sync` brings the arrangement up to date (`gridSync`: only the records the write
+ * touched move) and lays it out again only when its axis changed.
  */
 import type { KitEngine } from '@kition/kit-editor'
 import type { AxesInput } from './axes'
@@ -32,11 +35,22 @@ export type GridTarget = {
 
 type AxesAnswer = AxesInput & { skeleton: Skeleton; overlay: OverlayStyle; groups: GridGroup[] }
 
-/** A `GridSource` whose target can change (the search, the collapsed groups); `GridView.reopen` then arranges again. */
-export type EngineSource = GridSource & { readonly target: GridTarget; update(changes: Partial<GridTarget>): void }
+/**
+ * A `GridSource` whose target can change (the search, the collapsed groups); `GridView.reopen` then
+ * arranges again. `sync` answers the new layout after a write when the arrangement's axis changed,
+ * or null when it did not (the bands of the records written are then the only ones to fetch again).
+ */
+export type EngineSource = GridSource & { readonly target: GridTarget; update(changes: Partial<GridTarget>): void; sync(): Promise<GridOpened | null> }
 
 export function engineSource(engine: KitEngine, initial: GridTarget): EngineSource {
   let target = { ...initial }
+  const layout = async (axis: Uint8Array): Promise<GridOpened> => {
+    const view = { tableId: target.tableId, viewId: target.viewId ?? null }
+    const answer = JSON.parse(await engine.invoke<string>('gridAxes', axis, JSON.stringify({ ...view, theme: target.theme ?? 'light', brand: target.brand ?? null }))) as AxesAnswer
+    const rows = GridRows.decode(await engine.invoke<Uint8Array>('gridRows'))
+    const { skeleton, overlay, groups, ...axes } = answer
+    return { axes, skeleton, overlay, rows, groups }
+  }
   return {
     get target() {
       return target
@@ -46,11 +60,11 @@ export function engineSource(engine: KitEngine, initial: GridTarget): EngineSour
     },
     async open(): Promise<GridOpened> {
       const view = { tableId: target.tableId, viewId: target.viewId ?? null }
-      const axis = await engine.invoke<Uint8Array>('gridOpen', JSON.stringify({ ...view, query: target.query ?? '', collapsed: target.collapsed ?? [] }))
-      const answer = JSON.parse(await engine.invoke<string>('gridAxes', axis, JSON.stringify({ ...view, theme: target.theme ?? 'light', brand: target.brand ?? null }))) as AxesAnswer
-      const rows = GridRows.decode(await engine.invoke<Uint8Array>('gridRows'))
-      const { skeleton, overlay, groups, ...axes } = answer
-      return { axes, skeleton, overlay, rows, groups }
+      return layout(await engine.invoke<Uint8Array>('gridOpen', JSON.stringify({ ...view, query: target.query ?? '', collapsed: target.collapsed ?? [] })))
+    },
+    async sync(): Promise<GridOpened | null> {
+      const axis = await engine.invoke<Uint8Array>('gridSync')
+      return axis.byteLength ? layout(axis) : null
     },
     async image(url: string, width: number, height: number): Promise<ImageBitmap | null> {
       const hash = BLOB_URL.exec(url.trim())?.[1]

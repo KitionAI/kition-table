@@ -16,6 +16,13 @@
 // count (flow.mjs:599, useColumnFreeze.spec); an attachment's picture is drawn from the document's
 // blob and a click previews it (imageCellRenderer.spec, AttachmentCell.spec); an AI cell shows a
 // regenerate button on hover and a spinner while it generates (aiActionLayer.spec).
+//
+// Card tg4c, the old grid's features the new one lacked: an edit that leaves the arrangement as it
+// was redraws only its record's bands (gridSync, no new arrangement); a column header that is not
+// selected drags its column (flow.mjs:401); the active attachment cell's add button picks files
+// and adds them in one records.update, and files pasted on an attachment cell are added the same
+// way (TableEditorGridView's picker, useTableClipboard's file paste, imageCellRenderer.spec); a
+// picture at a web address is drawn (the old grid's ImageManager loaded such urls).
 // Prints PASS or FAIL per step; exits 1 on any FAIL.
 import zlib from 'node:zlib'
 import { checkPackage, launch, nodeEngine, openGrid, settled, startServer } from './gridPage.mjs'
@@ -42,7 +49,12 @@ function png(width, height, [r, g, b]) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))])
 }
 
-/** 12 records over one field of each kind the editors cover; one record holds a red picture. */
+const BLUE = [30, 60, 220]
+const { server, origin } = await startServer()
+/** The fixture's picture at a web address (the development server's origin; the test's page serves it). */
+const WEB_PICTURE = `${origin}/__grid/blue.png`
+
+/** 12 records over one field of each kind the editors cover; one record holds a red picture, another a blue one at a web address. */
 async function fixture() {
   const sdk = await nodeEngine()
   const doc = sdk.TableDocument.create('Editing.ktable', 0, 0)
@@ -79,7 +91,7 @@ async function fixture() {
     [done.name]: false,
     [score.name]: 1,
     [due.name]: '2026-07-23T04:14:47Z',
-    [files.name]: i === 0 ? [picture] : [],
+    [files.name]: i === 0 ? [picture] : i === 3 ? [{ name: 'blue.png', url: WEB_PICTURE, mime_type: 'image/png' }] : [],
     [summary.name]: `Summary ${i + 1}`,
   }))
   call('transact', { ops: [{ op: 'records.create', tableId, at: null, records }] })
@@ -98,7 +110,6 @@ const step = (name, ok, detail = '') => {
 }
 
 const made = await fixture()
-const { server, origin } = await startServer()
 const browser = await launch(which)
 const VIEWPORT = { width: 1400, height: 700 }
 const mod = 'ControlOrMeta'
@@ -200,7 +211,7 @@ const brandPixels = (page, x, y, size, rgb) =>
 const near = (a, b, tolerance = 12) => b.every((value, i) => Math.abs(a[i] - value) <= tolerance)
 
 async function open() {
-  const opened = await openGrid(browser, origin, { dpr: 2, viewport: VIEWPORT, files: { 'Editing.ktable': made.bytes }, query: { file: '/__grid/Editing.ktable', view: made.view } })
+  const opened = await openGrid(browser, origin, { dpr: 2, viewport: VIEWPORT, files: { 'Editing.ktable': made.bytes, 'blue.png': png(8, 8, BLUE) }, query: { file: '/__grid/Editing.ktable', view: made.view } })
   await idle(opened.page)
   return opened
 }
@@ -235,6 +246,39 @@ try {
     const made = await waitWrites(page, from)
     const one = made.length === 1 && made[0].command === 'records.update' && made[0].params.values[N.title] === 'Hello'
     step('Enter writes one records.update and moves down', one && (await valueAt(page, 0, N.title)) === 'Hello' && JSON.stringify(await active(page)) === '{"row":1,"col":0}', JSON.stringify(made))
+  })
+
+  await test('an edit that keeps the arrangement redraws only its record\'s bands', async () => {
+    const at = await cell(page, 1, col('notes'))
+    await page.mouse.click(at.x, at.y)
+    await idle(page)
+    const before = await page.evaluate(() => {
+      const { view } = window.__ktableGrid
+      const axes = view.currentAxes
+      const header = view.neededKeys().find((key) => key.layer === 2 || key.layer === 3)
+      const body = view.neededKeys().find((key) => key.layer === 0 && key.rowBand === 0)
+      window.__syncProbe = { header: view.cache.peek(header), body: view.cache.peek(body), headerKey: header, bodyKey: body }
+      return { epoch: axes.epoch }
+    })
+    const from = await writes(page)
+    await page.keyboard.type('Synced')
+    await page.keyboard.press('Enter')
+    const made = await waitWrites(page, from)
+    const after = await page.evaluate(() => {
+      const { view } = window.__ktableGrid
+      const probe = window.__syncProbe
+      const done = window.__ktableGridEvents.filter((event) => event.name === 'write:done').at(-1)?.detail
+      // The header strip's list is the one it had; the record's band is a new one.
+      return { epoch: view.currentAxes.epoch, done, header: view.cache.peek(probe.headerKey) === probe.header, body: view.cache.peek(probe.bodyKey) !== probe.body && view.cache.has(probe.bodyKey) }
+    })
+    step(
+      'an edit that keeps the arrangement redraws only its record\'s bands',
+      made.length === 1 && after.epoch === before.epoch && after.done?.synced === 'bands' && after.header && after.body && (await valueAt(page, 1, N.notes)) === 'Synced',
+      JSON.stringify({ before, after, made }),
+    )
+    await page.keyboard.press('Escape')
+    const back = await cell(page, 1, col('title'))
+    await page.mouse.click(back.x, back.y)
   })
 
   await test('Enter opens the editor with the value; Escape closes it without writing; Tab commits and moves right', async () => {
@@ -486,6 +530,28 @@ try {
     step('a selected column dragged is one fields.move', made.length === 1 && JSON.stringify(ops) === JSON.stringify([{ op: 'fields.move', tableId: made[0].params.ops[0].tableId, fieldIds: [made.length && ops[0].fieldIds[0]], toIndex: 0 }]) && columns[0] === made[0].params.ops[0].fieldIds[0], JSON.stringify({ ops, columns: columns.slice(0, 3) }))
   })
 
+  await test('a column header that is not selected drags its column', async () => {
+    const box = await page.evaluate(() => window.__ktableGrid.view.scroller.getBoundingClientRect().toJSON())
+    const a = await cell(page, 0, 0)
+    await page.mouse.click(a.x, a.y)
+    await idle(page)
+    const columns = await page.evaluate(() => window.__ktableGrid.view.currentAxes.columns.map((column) => ({ x: column.x, width: column.width, fieldId: column.fieldId })))
+    const from = await writes(page)
+    // The third column's header, pressed and dragged at once onto the first column's left half.
+    await page.mouse.move(box.left + columns[2].x + columns[2].width / 2, box.top + 16)
+    await page.mouse.down()
+    await page.mouse.move(box.left + columns[0].x + 10, box.top + 16, { steps: 8 })
+    await page.mouse.up()
+    const made = await waitWrites(page, from)
+    const ops = made[0]?.params.ops ?? []
+    const order = await page.evaluate(() => window.__ktableGrid.view.currentAxes.columns.map((column) => column.fieldId))
+    step(
+      'a column header that is not selected drags its column (one fields.move)',
+      made.length === 1 && ops.length === 1 && ops[0].op === 'fields.move' && ops[0].fieldIds[0] === columns[2].fieldId && ops[0].toIndex === 0 && order[0] === columns[2].fieldId,
+      JSON.stringify({ ops, order: order.slice(0, 3), before: columns.slice(0, 3).map((column) => column.fieldId) }),
+    )
+  })
+
   await test("a column's edge resizes it with views.patchField", async () => {
     const box = await page.evaluate(() => window.__ktableGrid.view.scroller.getBoundingClientRect().toJSON())
     const column = await page.evaluate(() => window.__ktableGrid.view.currentAxes.columns[1])
@@ -532,6 +598,72 @@ try {
     const previewed = await page.evaluate(() => window.__ktableGridEvents.filter((event) => event.name === 'preview').at(-1)?.detail)
     step('a click on a picture previews the cell\'s attachments', previewed?.index === 0 && previewed?.count === 1, JSON.stringify(previewed))
     await page.keyboard.press('Escape')
+  })
+
+  const filesCol = () => page.evaluate((name) => {
+    const { view, data } = window.__ktableGrid
+    const id = data.fields().find((field) => field.name === name).id
+    return view.currentAxes.columns.findIndex((column) => column.fieldId === id)
+  }, N.files)
+  const rowOf = async (title) => (await shown(page)).findIndex((record) => record.values[N.title] === title)
+
+  await test('a picture at a web address is drawn', async () => {
+    const files = await filesCol()
+    // Record 4 (its title is the input method's by now).
+    const row = (await shown(page)).findIndex((record) => (record.values[N.files] ?? []).some((item) => item.url === WEB_PICTURE))
+    await cell(page, row, files)
+    await idle(page)
+    const thumb = await cellPart(page, 2, row, files, 0)
+    let pixel = []
+    for (let i = 0; i < 50 && !near(pixel, [...BLUE, 255]); i += 1) {
+      await page.waitForTimeout(100)
+      pixel = await contentPixel(page, thumb.x, thumb.y)
+    }
+    step('a picture at a web address is drawn', near(pixel, [...BLUE, 255]), JSON.stringify({ pixel, thumb }))
+  })
+
+  await test("the active attachment cell's add button picks files and adds them in one records.update", async () => {
+    const files = await filesCol()
+    const row = await rowOf('Record 5')
+    const at = await cell(page, row, files)
+    // Not active yet: no button, a press only selects the cell.
+    const chooserBefore = page.waitForEvent('filechooser', { timeout: 1000 }).then(() => true, () => false)
+    await page.mouse.click(at.left + 16, at.y)
+    const early = await chooserBefore
+    await idle(page)
+    const from = await writes(page)
+    const chooser = page.waitForEvent('filechooser', { timeout: 5000 })
+    await page.mouse.click(at.left + 16, at.y)
+    await (await chooser).setFiles({ name: 'green.png', mimeType: 'image/png', buffer: png(4, 4, [20, 200, 40]) })
+    const made = await waitWrites(page, from, 2)
+    const value = (await valueAt(page, row, N.files)) ?? []
+    step(
+      "the active attachment cell's add button picks files and adds them in one records.update",
+      !early && made.length === 2 && made[0].command === 'attachments.put' && made[1].command === 'records.update' && value.length === 1 && value[0].name === 'green.png' && String(value[0].url).startsWith('kition-blob:'),
+      JSON.stringify({ early, made: made.map((write) => write.command), value }),
+    )
+  })
+
+  await test('files pasted on an attachment cell are added to it', async () => {
+    const files = await filesCol()
+    const row = await rowOf('Record 5')
+    const at = await cell(page, row, files)
+    // Its right end: neither the add button nor a picture.
+    await page.mouse.click(at.left + at.width - 6, at.y)
+    await idle(page)
+    const from = await writes(page)
+    await page.evaluate((bytes) => {
+      const data = new DataTransfer()
+      data.items.add(new File([new Uint8Array(bytes)], 'pasted.png', { type: 'image/png' }))
+      document.querySelector('[data-ktable-grid-input]').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+    }, [...png(4, 4, [200, 200, 20])])
+    const made = await waitWrites(page, from, 2)
+    const value = (await valueAt(page, row, N.files)) ?? []
+    step(
+      'files pasted on an attachment cell are added to it',
+      made.length === 2 && made[1].command === 'records.update' && value.map((item) => item.name).join() === 'green.png,pasted.png',
+      JSON.stringify({ made: made.map((write) => write.command), value: value.map((item) => item.name) }),
+    )
   })
 
   await test('an AI cell shows a regenerate button on hover and a spinner while it generates', async () => {

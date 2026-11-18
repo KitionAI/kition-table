@@ -1,6 +1,8 @@
 /**
  * The grid's drags (grid plan F3, F11, F12, F13), as gestures of `GridInteraction`: resizing a
- * column at its header's right edge, dragging a selected column to another place, dragging a row
+ * column at its header's right edge, dragging a column by its header to another place (a press on
+ * a header selects that column and a drag moves it, or the selected columns when the press is on
+ * one of them; Shift and a press extends the selection instead), dragging a row
  * by its handle (only when the view neither sorts nor groups: the engine then lays out the
  * handle), dragging the frozen columns' edge, and the fill handle at the corner of a cell range.
  * Each draws its feedback on the overlay (a line, a shadow, the handle) from the engine's axes and
@@ -25,7 +27,7 @@ export const FREEZE_GRAB = 4
 /** The fill handle's side, and how far around it a press grabs it. */
 export const FILL_HANDLE = 8
 export const FILL_GRAB = 4
-/** How far the pointer moves before a press on a selected column becomes a drag. */
+/** How far the pointer moves before a press on a column header becomes a drag. */
 const DRAG_START = 4
 
 /** A column resized by `dx` from `width`. */
@@ -178,14 +180,19 @@ export function installDrags(interaction: GridInteraction, actions: DragActions)
   removers.push(
     interaction.addGesture({
       down(hit, event) {
-        const selection = interaction.selection
-        if (hit.region !== 'header' || hit.col < 0 || event.shiftKey || selection.kind !== 'columns') return false
-        if (hit.part?.kind === HitKind.ColumnMenu || hit.part?.kind === HitKind.ColumnEdge) return false
-        const left = Math.min(selection.anchor, selection.focus)
-        const right = Math.max(selection.anchor, selection.focus)
-        if (hit.col < left || hit.col > right) return false
         const a = axes()
-        if (!a) return false
+        if (hit.region !== 'header' || hit.col < 0 || event.shiftKey || !a || hit.col >= fieldColumnCount(a)) return false
+        if (hit.part?.kind === HitKind.ColumnMenu || hit.part?.kind === HitKind.ColumnEdge) return false
+        const selection = interaction.selection
+        let left = hit.col
+        let right = hit.col
+        if (selection.kind === 'columns' && hit.col >= Math.min(selection.anchor, selection.focus) && hit.col <= Math.max(selection.anchor, selection.focus)) {
+          left = Math.min(selection.anchor, selection.focus)
+          right = Math.max(selection.anchor, selection.focus)
+        } else {
+          // A header not selected: the press selects its column, and a drag moves it (as the old grid did).
+          interaction.setSelection({ kind: 'columns', anchor: hit.col, focus: hit.col }, interaction.active)
+        }
         const cols = Array.from({ length: right - left + 1 }, (_, index) => left + index)
         columns = { cols, startX: event.clientX, grabX: hit.docX - a.columns[left].x, dragging: false, docX: hit.docX }
         set((frame) => {
@@ -218,7 +225,7 @@ export function installDrags(interaction: GridInteraction, actions: DragActions)
         if (!done || !a) return
         // A click (no drag) on one column of several selected selects that column alone.
         if (!done.dragging) {
-          if (hit.col >= 0) interaction.setSelection({ kind: 'columns', anchor: hit.col, focus: hit.col }, interaction.active)
+          if (done.cols.length > 1 && hit.col >= 0) interaction.setSelection({ kind: 'columns', anchor: hit.col, focus: hit.col }, interaction.active)
           return
         }
         actions.moveColumns(done.cols, columnDrop(a, hit.docX))
