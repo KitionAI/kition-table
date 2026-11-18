@@ -276,7 +276,8 @@ fn typed_cells() {
             && cells[5][3].ends_with("'ada'")
     );
     assert_eq!(cells[6][0], "image 34x34", "a picture: {:?}", cells[6]);
-    assert_eq!(&cells[6][1..], ["rrect 34x34 r4 #F6F5F4", "icon paperclip 16 #797772"], "a file");
+    assert!(cells[6][1].starts_with("rrect ") && cells[6][1].ends_with("x20 r6 #F6F5F4"), "a file's chip: {:?}", cells[6]);
+    assert_eq!(&cells[6][2..], ["icon paperclip 14 #797772", "text Sans 400 12 Left #1A1A1A 'brief.pdf'"], "a file");
     assert!(
         cells[7][0].starts_with("rrect") && cells[7][0].contains("x24 r4 #EEF6F5") && cells[7][1] == "text Sans 500 12 Center #0C8375 'Run'",
         "{:?}",
@@ -316,4 +317,31 @@ fn the_list_survives_its_bytes_and_draws() {
     let open: Vec<usize> = pixels.as_chunks::<4>().0.iter().enumerate().filter(|(_, px)| px[3] != 255).map(|(at, _)| at).take(5).collect();
     assert!(open.is_empty(), "the grid covers its area: {open:?} of {}x{}", 900, grid.geometry.height);
     assert!(grid.list.ops.iter().any(|op| matches!(op, Op::Text { align: Align::Left, face: Face::Fallback, .. })));
+}
+
+/// regressions/issue-file-chip: a file that is not a picture is a chip with a paperclip and its
+/// name (cut to the cell), as the picture drew it before the grid moved to the display list.
+#[test]
+fn a_file_is_a_chip_with_its_name() {
+    let files = field(7, "files", "attachment", json!({}));
+    let brief = json!({ "url": "kition-blob:00ff", "name": "brief.pdf", "mimeType": "application/pdf" });
+    let (grid, cells) = one_row(vec![files.clone()], json!({ "files": [brief] }), 40.0);
+    assert_eq!(cells[0].len(), 3, "a chip, a paperclip, the name: {:?}", cells[0]);
+    assert!(cells[0][0].starts_with("rrect ") && cells[0][0].ends_with("x20 r6 #F6F5F4"), "{:?}", cells[0]);
+    assert_eq!(cells[0][1], "icon paperclip 14 #797772");
+    assert_eq!(cells[0][2], "text Sans 400 12 Left #1A1A1A 'brief.pdf'");
+    let hits: Vec<_> = grid.list.hits.iter().filter(|hit| hit.kind == HitKind::Attachment).collect();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].h, 20.0, "the chip is what a click opens");
+
+    // A long name is cut to the cell, with an ellipsis.
+    let long = json!({ "url": "kition-blob:01ff", "name": "the quarterly brief for the board meeting.pdf", "mimeType": "application/pdf" });
+    let (grid, cells) = one_row(vec![files], json!({ "files": [long] }), 40.0);
+    assert!(cells[0][2].ends_with("…'"), "{:?}", cells[0]);
+    let chip = grid.list.ops.iter().find_map(|op| match op {
+        Op::RRect { x, w, h: 20.0, .. } => Some(x + w),
+        _ => None,
+    });
+    let right = grid.geometry.lefts[0] + DEFAULT_WIDTH - 8.0;
+    assert!(chip.is_some_and(|end| end <= right + 0.01), "the chip stays in the cell: {chip:?} > {right}");
 }

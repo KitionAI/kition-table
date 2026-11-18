@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-file-chip
+feature: table.picture
+intent: >-
+  In the grid's picture, an attachment that is not a picture (a PDF, a spreadsheet) is a chip
+  with a paperclip and the file's name, cut to the cell with an ellipsis, as the picture drew it
+  before the grid moved to the display list. Since the grid was laid out by kition-table-grid
+  (tg1), such a file drew as a bare tile with a paperclip and no name, so "brief.pdf" could not be
+  read in the picture.
+layer: gate
+source:
+  kind: issue
+  from: Kition Table grid phase 1 review (card tg-res)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-grid, filter: "a_file_is_a_chip_with_its_name" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-17"

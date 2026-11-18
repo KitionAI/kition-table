@@ -29,6 +29,10 @@ const BUTTON_MIN: f32 = 60.0;
 const BUTTON_MAX: f32 = 126.0;
 const THUMB_GAP: f32 = 4.0;
 const THUMB_INSET: f32 = 3.0;
+/// A file chip: its paperclip, where its name starts, and its width beyond the name.
+const FILE_ICON: f32 = 14.0;
+const FILE_TEXT: f32 = 24.0;
+const FILE_CHIP_EXTRA: f32 = 34.0;
 /// Tessera's icon stroke, in its 24-unit grid.
 const ICON_STROKE: f32 = 1.5;
 
@@ -171,6 +175,19 @@ fn is_picture(item: &Value) -> bool {
     [".png", ".jpg", ".jpeg", ".webp", ".gif"].iter().any(|ext| name.ends_with(ext))
 }
 
+/// A file that is not a picture, in `at`: a chip with a paperclip and the file's name, cut to the
+/// chip. Answers false when there is no room for it.
+fn file_chip(out: &mut Out<'_>, item: &Value, at: Area) -> bool {
+    if at.w < FILE_CHIP_EXTRA + 8.0 {
+        return false;
+    }
+    let theme = out.theme;
+    out.rrect(at, CHIP_RADIUS, theme.chip);
+    out.icon("paperclip", at.x + 6.0, at.middle() - FILE_ICON / 2.0, FILE_ICON, theme.muted, false);
+    out.text(&display(Some(item)), at.x + FILE_TEXT, at.middle(), Align::Left, SMALL, REGULAR, theme.text, at.w - FILE_CHIP_EXTRA);
+    true
+}
+
 /// A stable image key for an attachment item (its id, hash or path, else its name).
 fn image_key(item: &Value) -> u32 {
     let id = ["id", "hash", "path", "url"].iter().find_map(|key| item.get(key).map(Value::to_string)).unwrap_or_else(|| display(Some(item)));
@@ -256,22 +273,26 @@ pub fn cell(out: &mut Out<'_>, field: &Field, value: Option<&Value>, area: Area,
             let side = area.h - 2.0 * THUMB_INSET;
             let mut x = inner.x;
             for (index, item) in items.iter().enumerate() {
-                let at = Area { x, y: area.y + THUMB_INSET, w: side, h: side };
+                let picture = is_picture(item);
+                let at = if picture {
+                    Area { x, y: area.y + THUMB_INSET, w: side, h: side }
+                } else {
+                    let name = display(Some(item));
+                    let width = (out.shaper.width(&name, REGULAR, SMALL) + FILE_CHIP_EXTRA).min(inner.right() - x);
+                    Area { x, y: middle - CHIP_HEIGHT / 2.0, w: width, h: CHIP_HEIGHT }
+                };
                 if index > 0 && at.right() > inner.right() {
                     let more = format!("+{}", items.len() - index);
                     out.text(&more, x, middle, Align::Left, SMALL, MEDIUM, theme.muted, inner.right() - x);
                     break;
                 }
-                if is_picture(item) {
+                if picture {
                     out.list.push(Op::Image { key: image_key(item), x: at.x, y: at.y, w: at.w, h: at.h, fit: Fit::Cover, radius: 4.0 });
-                } else {
-                    // A file: a tile with a paperclip.
-                    out.rrect(at, 4.0, theme.chip);
-                    let icon = (side * 0.5).min(16.0);
-                    out.icon("paperclip", at.x + (side - icon) / 2.0, at.y + (side - icon) / 2.0, icon, theme.muted, false);
+                } else if !file_chip(out, item, at) {
+                    break;
                 }
                 out.hit(HitKind::Attachment, u16::try_from(index).unwrap_or(u16::MAX), col, row, at);
-                x += side + THUMB_GAP;
+                x = at.right() + THUMB_GAP;
             }
         }
         "button" => {
