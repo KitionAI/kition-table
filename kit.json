@@ -103,6 +103,14 @@
       "returns": "string",
       "description": "The records of some ids for the grid to edit ({tableId, ids, fields?}): [{id, row_key, values}] in the order asked, values only of the fields named when some are, ids that name no record left out."
     },
+    "gridClear": {
+      "params": [
+        "paramsJson",
+        "ids"
+      ],
+      "returns": "string",
+      "description": "Clears many records for the grid ({tableId, values}, the records' ids as a Float64Array): values (field name to empty value) set on each record of the table in one transact of one cells.set, the row keys found by the engine; answers { result, change } as JSON, result.cleared the records written."
+    },
     "gridRows": {
       "params": [],
       "returns": "Uint8Array",

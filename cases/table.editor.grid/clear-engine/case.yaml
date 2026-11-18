@@ -1,0 +1,23 @@
+format: 1
+id: table.editor.grid/clear-engine
+feature: table.editor.grid
+intent: >-
+  A clear of many records on the grid (a whole column of a large table) is expanded by the engine,
+  not the page: gridClear takes the cleared fields' empty values and the records' ids, finds their
+  row keys in one read, and writes one transact of one cells.set, so one undo brings every cell
+  back; ids that name no record of the table are left out, nothing to clear writes nothing, and a
+  clear without a table or without a field is refused. The built engine takes the ids as a
+  Float64Array.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, section 3.8 (card tg4c)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: grid_clear, features: [headless] }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

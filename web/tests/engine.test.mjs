@@ -260,3 +260,27 @@ test('gridOpen and gridSync answer the arrangement as axis bytes the editor read
   assert.equal(stats.relocate.count, 1)
   doc.free()
 })
+
+test('gridClear clears many records from their ids in one undo step', () => {
+  const doc = TableDocument.create('Tasks.ktable', 0, 0)
+  const table = firstTable(doc)
+  const primary = table.fields.find((field) => field.id === table.primary_field_id).name
+  const amount = call(doc, 'fields.create', { tableId: table.id, title: 'Amount', type: 'number' }).result
+  const name = (amount.field ?? amount).name
+  const records = Array.from({ length: 1500 }, (_, index) => ({ [primary]: `Row ${index}`, [name]: index }))
+  call(doc, 'transact', { ops: [{ op: 'records.create', tableId: table.id, at: null, records }] })
+  // The made records, by their number (the table starts with records of its own).
+  const made = () => call(doc, 'records.list', { tableId: table.id }).result.items.filter((record) => String(record.values[primary]).startsWith('Row '))
+  const ids = made().map((record) => record.id)
+  assert.equal(ids.length, 1500)
+  const answer = JSON.parse(doc.gridClear(JSON.stringify({ tableId: table.id, values: { [name]: null } }), Float64Array.from([...ids.slice(0, 1200), 999_999])))
+  assert.equal(answer.result.cleared, 1200)
+  assert.equal(answer.change.recordsUpserted.length, 1200)
+  const values = () => made().map((record) => record.values[name] ?? null)
+  const cleared = values()
+  assert.equal(cleared.slice(0, 1200).every((value) => value == null), true)
+  assert.deepEqual(cleared.slice(1200, 1203), [1200, 1201, 1202])
+  assert.equal(call(doc, 'undo').result.done, true)
+  assert.deepEqual(values().slice(0, 3), [0, 1, 2])
+  doc.free()
+})
