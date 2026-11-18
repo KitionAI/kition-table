@@ -8,7 +8,8 @@ intent: >-
   outline icons equal to the tile the page will draw at the box's snapped corner, images by fit
   (a placeholder when undecoded), text from its anchor on its baseline in its one face with the
   baseline on a device pixel row, and emoji equal to the tile the page will draw. A decoded list
-  draws the same pixels as the original.
+  draws the same pixels as the original. A cover-cropped picture keeps its middle: a picture four
+  times as wide as tall, red then blue, covers a square box red left of its centre and blue right.
 layer: gate
 source:
   kind: synthetic

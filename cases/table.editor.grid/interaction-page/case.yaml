@@ -12,7 +12,8 @@ intent: >-
   expand control, a right click on a cell (the record menu, at 145,48), a column's caret (the column
   menu, closed by Escape), the add-field column and the add row reach the editor's handlers; a
   press on a header selects the column; a drag past the bottom edge scrolls and keeps selecting; a
-  group's toggle collapses and expands it.
+  group's toggle collapses and expands it. The horizontal scroll range is the grid's width (the
+  add-field column included) less the view's, so the last column ends at the view's right edge.
 layer: gate
 source:
   kind: synthetic

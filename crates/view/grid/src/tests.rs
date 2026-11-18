@@ -495,3 +495,21 @@ fn pictures_are_known_by_type_or_name() {
     assert!(!is_picture(&json!({ "name": "logo.svg", "mime_type": "application/octet-stream" })), "the type wins");
     assert!(!is_picture(&json!("brief.pdf")));
 }
+
+/// A one-line value centred in its cell is anchored at the cell's horizontal centre, whatever the
+/// column's width (the old grid's alignment spec).
+#[test]
+fn a_centred_value_is_anchored_at_its_cells_centre() {
+    fonts();
+    for width in [120.0, 200.0, 333.0] {
+        let columns = vec![column(field(1, "title", "text", json!({}))), Column { field: field(2, "n", "number", json!({})), width }];
+        let records = vec![record(1, json!({ "title": "Plan", "n": 1250.5 }))];
+        let grid = lay_out(&view(&columns, &records, &[], 40.0), 0.0, 0.0, None, Resources::default());
+        let anchor = grid.list.ops.iter().find_map(|op| match op {
+            Op::Text { x, align: Align::Center, text, .. } if grid.list.text(*text) == "1250.5" => Some(*x),
+            _ => None,
+        });
+        let centre = grid.geometry.lefts[1] + width / 2.0;
+        assert!(anchor.is_some_and(|x| (x - centre).abs() < 0.01), "width {width}: anchored at {anchor:?}, the centre is {centre}");
+    }
+}

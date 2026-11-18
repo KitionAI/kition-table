@@ -8,7 +8,9 @@
 // cell opens the record menu (Kition's e2e/table-kit.spec.ts, at 145,48); Escape closes a column
 // menu (flow.mjs); the row head controls are centred and a checked one is drawn in the brand in
 // both themes (rowControl, baseRenderer, layoutRenderer specs); a group collapses and expands
-// (gridCollapsedGroupStore's purpose). Prints PASS or FAIL per step; exits 1 on any FAIL.
+// (gridCollapsedGroupStore's purpose). The horizontal scroll range is the grid's width less the
+// view's (InfiniteScroller spec; card table-polish). Prints PASS or FAIL per step; exits 1 on any
+// FAIL.
 import { checkPackage, launch, nodeEngine, openGrid, settled, startServer } from './gridPage.mjs'
 
 const which = process.argv[2] ?? 'chromium'
@@ -426,6 +428,24 @@ try {
     const asked = await events(page, 'appendField')
     await page.keyboard.press('Escape')
     step('the add-field column asks for a field', at.visible && asked.length === 1 && asked[0].anchor.width === 100, JSON.stringify({ at, asked }))
+  })
+
+  // The old grid's InfiniteScroller spec: the horizontal range is exactly the grid's width (the
+  // add-field column included) less the view's, so the last column ends at the view's right edge.
+  await test("the horizontal scroll range is the grid's width less the view's", async () => {
+    await page.evaluate(() => window.__ktableGrid.view.scrollTo(100_000, 0))
+    await idle(page)
+    const range = await page.evaluate(() => {
+      const { view } = window.__ktableGrid
+      const axes = view.currentAxes
+      const last = axes.columns[axes.columns.length - 1]
+      return { maximum: view.scroller.scrollWidth - view.scroller.clientWidth, width: axes.width, view: view.scroller.clientWidth, scrollX: view.viewport.scrollX, right: last.x + last.width }
+    })
+    step(
+      "the horizontal scroll range is the grid's width less the view's",
+      range.maximum > 0 && Math.abs(range.maximum - (range.width - range.view)) <= 1 && Math.abs(range.scrollX - range.maximum) <= 1 && Math.abs(range.right - range.width) < 0.5,
+      JSON.stringify(range),
+    )
   })
 
   await test('the add row adds a record', async () => {

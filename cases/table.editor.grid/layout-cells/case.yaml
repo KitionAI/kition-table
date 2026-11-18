@@ -13,7 +13,8 @@ intent: >-
   in their tones, rating symbols, people, attachments (pictures and files) and buttons, with
   their hit parts; and the focus outline. A cut is the longest prefix that fits (as halving the
   text finds it), a draft shaper cuts to its room too and leaves emoji out, and the shaping cache
-  keeps what was used lately. Checked as structure, not pixels.
+  keeps what was used lately. A centred one-line value is anchored at its cell's horizontal centre
+  at every column width. Checked as structure, not pixels.
 layer: gate
 source:
   kind: synthetic

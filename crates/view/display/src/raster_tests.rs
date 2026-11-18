@@ -197,6 +197,27 @@ fn images_fill_their_box_or_show_a_placeholder() {
     assert_eq!(missing.at(10, 10), [240, 240, 240, 255]);
 }
 
+/// Cover-cropping keeps the picture's middle (the old grid's imageCellRenderer spec): a picture
+/// four times as wide as tall, its left half red and its right half blue, covers a square box with
+/// its middle quarter, so the box is red to the left of its centre and blue to the right.
+#[test]
+fn cover_crops_around_the_pictures_middle() {
+    use vello_cpu::peniko::color::PremulRgba8;
+    let (red, blue) = (PremulRgba8 { r: 255, g: 0, b: 0, a: 255 }, PremulRgba8 { r: 0, g: 0, b: 255, a: 255 });
+    let pixels: Vec<PremulRgba8> = (0..100).flat_map(|_| (0..400).map(move |x| if x < 200 { red } else { blue })).collect();
+    let mut resources = Resources::default();
+    resources.set_image(3, vello_cpu::Pixmap::from_parts(pixels, 400, 100));
+    for dpr in [1.0, 2.0] {
+        let size = (20.0 * dpr) as u32;
+        let canvas = one(|_, _| Op::Image { key: 3, x: 0.0, y: 0.0, w: 20.0, h: 20.0, fit: Fit::Cover, radius: 0.0 }, &resources, dpr, size);
+        let middle = size / 2;
+        for y in [0, middle, size - 1] {
+            assert_eq!((canvas.at(0, y), canvas.at(middle - 2, y)), ([255, 0, 0, 255], [255, 0, 0, 255]), "dpr {dpr}: red left of the centre");
+            assert_eq!((canvas.at(middle + 1, y), canvas.at(size - 1, y)), ([0, 0, 255, 255], [0, 0, 255, 255]), "dpr {dpr}: blue right of it");
+        }
+    }
+}
+
 #[test]
 fn text_lands_on_its_baseline_from_its_anchor() {
     assert!(fonts());
