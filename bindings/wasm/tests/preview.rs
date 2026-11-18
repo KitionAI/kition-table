@@ -74,21 +74,22 @@ fn ids(doc: &mut TableDocument) -> (i64, i64, i64) {
 fn the_preview_is_real_and_framed_to_the_table() {
     let mut doc = basic();
     let (_, image, _) = render(&mut doc, json!({}));
-    // Three fields and two records: the row numbers (56), three columns of 200 and the add column
-    // (44); the tab and view bars (44, 52), the header row (36), two rows of 40 and the footer (36).
-    assert_eq!((image.width, image.height), (700, 248));
-    assert_eq!((doc.width(), doc.height()), (700, 248));
+    // Three fields and two records: the row heads (72), three columns of 200 and the add column
+    // (100); the tab and view bars (44, 52), the header row (32), two rows of 40, the add row (32)
+    // and the footer (36).
+    assert_eq!((image.width, image.height), (772, 276));
+    assert_eq!((doc.width(), doc.height()), (772, 276));
     assert!(colours(&image).len() > 4, "a uniform preview: {:?}", colours(&image));
     doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "Ship the plan" } })).unwrap();
     let (_, grown, _) = render(&mut doc, json!({}));
-    assert_eq!((grown.width, grown.height), (700, 288));
+    assert_eq!((grown.width, grown.height), (772, 316));
 }
 
 #[test]
 fn scale_and_size_budget() {
     let mut doc = basic();
     let (answer, image, _) = render(&mut doc, json!({ "scale": 2 }));
-    assert_eq!((image.width, image.height, answer["scale"].as_f64().unwrap()), (1400, 496, 2.0));
+    assert_eq!((image.width, image.height, answer["scale"].as_f64().unwrap()), (1544, 552, 2.0));
     let (_, small, _) = render(&mut doc, json!({ "scale": 2, "maxSize": 120 }));
     assert_eq!((small.width, small.height), (120, 43));
     for bad in [json!({ "scale": 3 }), json!({ "scale": 0 }), json!({ "maxSize": 5000 }), json!({ "target": "tables/1" })] {
@@ -103,10 +104,10 @@ fn a_target_moves_the_preview_to_it() {
     let (_, whole, _) = render(&mut doc, json!({}));
     let (_, cell, _) = render(&mut doc, json!({ "target": { "path": format!("tables/{table}/records/{record}/fields/{status}") } }));
     assert_ne!(whole.rgba, cell.rgba);
-    // The cell is outlined in the primary colour: column 2 (after the row numbers and one column
+    // The cell is outlined in the primary colour: column 2 (after the row heads and one column
     // of 200), row 2 (below the bars, the header row and the first record): its left edge.
     let at = |image: &Image, x: u32, y: u32| image.rgba[((y * image.width + x) * 4) as usize..][..4].to_vec();
-    assert_eq!(at(&cell, 257, 182), vec![12, 131, 117, 255]);
+    assert_eq!(at(&cell, 273, 188), vec![12, 131, 117, 255]);
     let sheet = title(&mut doc);
     let (_, by_title, _) = render(&mut doc, json!({ "target": { "sheet": sheet } }));
     assert_eq!(by_title.rgba, whole.rgba);

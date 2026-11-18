@@ -8,8 +8,12 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 /// The same list as `CHECKOUT_FILES` in `src/lib.rs` (a test keeps them equal).
-const FILES: &[&str] =
-    &["fonts/inter/Inter-Variable.ttf", "fonts/droid-sans-fallback/DroidSansFallbackFull.ttf", "fonts/noto-color-emoji/Noto-COLRv1.ttf"];
+const FILES: &[&str] = &[
+    "fonts/inter/Inter-Variable.ttf",
+    "fonts/droid-sans-fallback/DroidSansFallbackFull.ttf",
+    "fonts/nanum-gothic/NanumGothic-Regular.ttf",
+    "fonts/noto-color-emoji/Noto-COLRv1.ttf",
+];
 
 fn main() {
     println!("cargo::rerun-if-env-changed=KITION_FONTS_DIR");

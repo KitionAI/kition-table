@@ -10,6 +10,8 @@ use crate::theme::*;
 
 pub const TAB_BAR: f64 = 44.0;
 pub const VIEW_BAR: f64 = 52.0;
+/// The footer below a grid.
+pub const FOOTER: f64 = 36.0;
 const TAB_HEIGHT: f64 = 28.0;
 const TAB_MAX: f64 = 192.0;
 const VIEW_TAB_HEIGHT: f64 = 32.0;
@@ -123,6 +125,22 @@ pub fn view_bar(scene: Option<&mut Scene>, shown: &TableShown, width: f64) -> Vi
     scene.text_mid(line, count_x, middle, MUTED);
     scene.hline(0.0, width, top + VIEW_BAR - 1.0, BORDER);
     ViewBar { width: needed }
+}
+
+/// The editor's footer below a grid: how many records the view shows (and which, for a range of
+/// rows), at `top` across `width`; answers its height.
+pub fn footer(scene: &mut Scene, shown: &TableShown, top: f64, width: f64) -> f64 {
+    scene.rect(Rect::new(0.0, top, width, top + FOOTER), PAPER);
+    let count = if shown.windowed {
+        format!("{}\u{2013}{} of {}", shown.first, shown.first + shown.records.len().saturating_sub(1), plural(shown.shown, "record", "records"))
+    } else if shown.records.len() < shown.shown {
+        format!("{} of {}", shown.records.len(), plural(shown.shown, "record", "records"))
+    } else {
+        plural(shown.shown, "record", "records")
+    };
+    let line = shape(&count, SMALL, REGULAR, f64::INFINITY);
+    scene.text_mid(line, 16.0, top + FOOTER / 2.0, MUTED);
+    FOOTER
 }
 
 /// `--surface-soft`: the add-view button.

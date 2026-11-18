@@ -1,5 +1,5 @@
-//! The editor's light theme, as the picture draws it (`web/src/styles/theme.css` and the grid's
-//! `gridTheme.ts`).
+//! The editor's light theme, as the picture's bars and cards draw them (`web/src/styles/theme.css`);
+//! the grid's colors are `kition-table-grid`'s.
 
 use crate::scene::{Rgba, hex};
 
@@ -24,7 +24,6 @@ pub const PRIMARY_LINE: Rgba = hex(0xCEE6E3);
 /// The grid: cell text, lines, the header row, row numbers, icons.
 pub const CELL_TEXT: Rgba = hex(0x18181B);
 pub const CELL_LINE: Rgba = hex(0xE4E4E7);
-pub const HEADER_BG: Rgba = hex(0xFAFAFA);
 pub const ROW_NUMBER: Rgba = hex(0x71717A);
 pub const ICON: Rgba = hex(0x6B7280);
 /// Links between records: the highlight text colour.
@@ -37,8 +36,6 @@ pub const AVATAR_BG: Rgba = hex(0xF3F4F6);
 /// Rating stars.
 pub const STAR: Rgba = hex(0xF59E0B);
 pub const STAR_OFF: Rgba = hex(0xE4E4E7);
-/// Group header rows, outermost last.
-pub const GROUP_BG: [Rgba; 3] = [hex(0xFAFAFA), hex(0xF4F4F5), hex(0xEAEAEB)];
 /// A kanban column (`--secondary` at 70 %).
 pub const COLUMN_BG: Rgba = hex(0xF7F6F5);
 /// The chart colours of dashboards.

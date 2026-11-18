@@ -1,0 +1,22 @@
+format: 1
+id: table.editor.grid/shaping-as-canvas
+feature: table.editor.grid
+intent: >-
+  The faces shape text as a browser Canvas does, so the engine's widths are the page's: the
+  default features stay on (kerning, ligatures, contextual alternates: "->" shapes as Inter's
+  arrow), Inter's optical size follows the font size within its axis (12 and 14 px alike, 20 px
+  tighter), Korean shapes in Nanum Gothic, and a character no face covers is a tofu run of
+  0.6 em boxes instead of a glyph the page would set in a system font.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid spike TG-0a findings (card tg1)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-fonts, filter: "tests::" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-17"

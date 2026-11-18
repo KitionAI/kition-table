@@ -1,0 +1,20 @@
+[package]
+name = "kition-table-grid"
+description = "The Table grid's layout: geometry, row and column heads, group headers and typed cells laid out as a display list (kition-table-display) in the faces of kition-table-fonts, for the editor's grid and the headless picture."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kition-table-file = { workspace = true }
+kition-table-fonts = { workspace = true }
+kition-table-display = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+unicode-linebreak = { workspace = true }
+
+[lints]
+workspace = true

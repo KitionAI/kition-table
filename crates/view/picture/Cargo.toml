@@ -11,6 +11,8 @@ publish.workspace = true
 [dependencies]
 kition-table-file = { workspace = true }
 kition-table-fonts = { workspace = true }
+kition-table-display = { workspace = true }
+kition-table-grid = { workspace = true }
 kition-tessera-icons = { workspace = true }
 chrono = { workspace = true }
 kurbo = { workspace = true }

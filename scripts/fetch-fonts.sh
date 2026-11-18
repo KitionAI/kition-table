@@ -20,6 +20,8 @@ files=(
   "fonts/inter/OFL.txt 5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57 $google/ofl/inter/OFL.txt"
   "fonts/droid-sans-fallback/DroidSansFallbackFull.ttf acb6440a713d880a13a21b468ba7cd43f5a2b2934972e51be791c880730777b8 $android/DroidSansFallbackFull.ttf?format=TEXT base64"
   "fonts/droid-sans-fallback/NOTICE 38751245389e1e23f73e6f5384b5cbe7fa972cc4410c5adc9c04b082a0b9561a $android/NOTICE?format=TEXT base64"
+  "fonts/nanum-gothic/NanumGothic-Regular.ttf 76f45ef4a6bcff344c837c95a7dcc26e017e38b5846d5ae0cdcb5b86be2e2d31 $google/ofl/nanumgothic/NanumGothic-Regular.ttf"
+  "fonts/nanum-gothic/OFL.txt eeacf16032901d0ed0456876ec77b8f0fda6b3fecec7d972f8543eb602e6c30f $google/ofl/nanumgothic/OFL.txt"
   "fonts/noto-color-emoji/Noto-COLRv1.ttf b8e25ea68db82f9e4d0aee921f4420be2be39887bd5c893a2ad98710531f9d0c $emoji/2D/fonts/Noto-COLRv1.ttf"
   "fonts/noto-color-emoji/OFL.txt 6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2 $emoji/2D/fonts/LICENSE"
 )

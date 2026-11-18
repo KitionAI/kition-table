@@ -1,26 +1,17 @@
 //! The picture as a list of things to draw, in document pixels (CSS pixels of the editor), and
 //! their drawing with vello_cpu at any scale: rectangles, borders, soft shadows, lines, paths,
-//! Tessera icons and shaped text.
+//! Tessera icons, shaped text, and display lists (a grid view, which `kition-table-display`
+//! draws).
 
 use std::sync::Arc;
 
+use kition_table_display::{DisplayList, Resources};
 use kition_table_fonts::{FaceId, Family};
 use kurbo::{Affine, BezPath, Point, Rect, RoundedRect, Shape, Stroke};
 use vello_cpu::peniko::Color;
-use vello_cpu::{PixmapMut, RenderContext, Resources};
+use vello_cpu::{PixmapMut, RenderContext};
 
-/// Straight (not premultiplied) RGBA.
-pub type Rgba = [u8; 4];
-
-/// A colour from `0xRRGGBB`.
-pub const fn hex(rgb: u32) -> Rgba {
-    [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, 255]
-}
-
-/// `color` at `alpha` (0..=255).
-pub const fn alpha(color: Rgba, alpha: u8) -> Rgba {
-    [color[0], color[1], color[2], alpha]
-}
+pub use kition_table_grid::theme::{Rgba, alpha, hex};
 
 fn paint(rgba: Rgba) -> Color {
     Color::from_rgba8(rgba[0], rgba[1], rgba[2], rgba[3])
@@ -36,6 +27,8 @@ pub struct Glyph {
     pub advance: f64,
     /// Font units to pixels.
     pub scale: f64,
+    /// A character no face covers: a box.
+    pub tofu: bool,
 }
 
 /// A shaped line of text.
@@ -82,7 +75,7 @@ pub fn shape(text: &str, size: f64, weight: u16, max: f64) -> Line {
 fn shape_all(text: &str, size: f64, weight: u16) -> Line {
     let mut glyphs = Vec::new();
     let mut x = 0.0;
-    for run in kition_table_fonts::shape(text, Family::Sans, weight) {
+    for run in kition_table_fonts::shape(text, Family::Sans, weight, size as f32) {
         let scale = size / f64::from(run.upem);
         for glyph in &run.glyphs {
             let advance = f64::from(glyph.advance) * scale;
@@ -93,6 +86,7 @@ fn shape_all(text: &str, size: f64, weight: u16) -> Line {
                 y: -f64::from(glyph.y_offset) * scale,
                 advance,
                 scale,
+                tofu: run.tofu,
             });
             x += advance;
         }
@@ -110,12 +104,40 @@ pub fn baseline_below_middle(size: f64) -> f64 {
 /// One thing to draw.
 #[derive(Clone, Debug)]
 pub enum Item {
-    Fill { shape: BezPath, color: Rgba },
-    Stroke { shape: BezPath, width: f64, color: Rgba },
-    Shadow { area: Rect, radius: f64, blur: f64, color: Rgba },
-    Icon { icon: &'static kition_tessera_icons::Icon, at: Point, size: f64, color: Rgba, stroke: f64 },
-    Text { line: Arc<Line>, origin: Point, color: Rgba },
-    Clip { area: Rect },
+    Fill {
+        shape: BezPath,
+        color: Rgba,
+    },
+    Stroke {
+        shape: BezPath,
+        width: f64,
+        color: Rgba,
+    },
+    Shadow {
+        area: Rect,
+        radius: f64,
+        blur: f64,
+        color: Rgba,
+    },
+    Icon {
+        icon: &'static kition_tessera_icons::Icon,
+        at: Point,
+        size: f64,
+        color: Rgba,
+        stroke: f64,
+    },
+    Text {
+        line: Arc<Line>,
+        origin: Point,
+        color: Rgba,
+    },
+    /// A display list and its resources.
+    List {
+        list: Arc<(DisplayList, Resources)>,
+    },
+    Clip {
+        area: Rect,
+    },
     Unclip,
 }
 
@@ -196,6 +218,11 @@ impl Scene {
         self.text(line, Point::new(x, middle + below), color);
     }
 
+    /// A display list covering `area`.
+    pub fn list(&mut self, area: Rect, list: DisplayList, resources: Resources) {
+        self.push(area, Item::List { list: Arc::new((list, resources)) });
+    }
+
     /// Clips what follows to `area` until [`Scene::unclip`].
     pub fn clip(&mut self, area: Rect) {
         self.push(area, Item::Clip { area });
@@ -236,6 +263,10 @@ impl Scene {
             if !bounds.overlaps(visible) {
                 continue;
             }
+            if let Item::List { list } = item {
+                kition_table_display::draw(&mut ctx, &list.0, &list.1, x, y, scale);
+                continue;
+            }
             draw(&mut ctx, item, to_screen);
         }
         while clips > 0 {
@@ -244,7 +275,7 @@ impl Scene {
         }
         ctx.flush();
         let mut pixels = vec![0u8; usize::from(width) * usize::from(height) * 4];
-        let mut resources = Resources::new();
+        let mut resources = vello_cpu::Resources::new();
         if let Some(target) = PixmapMut::new(width, height, &mut pixels) {
             ctx.render(target, &mut resources);
         }
@@ -292,17 +323,27 @@ fn draw(ctx: &mut RenderContext, item: &Item, to_screen: Affine) {
             ctx.set_paint(paint(*color));
             for glyph in &line.glyphs {
                 let at = to_screen * Affine::translate((origin.x + glyph.x, origin.y + glyph.y));
+                if glyph.tofu {
+                    // The box a grid draws for a character no face covers, in outline.
+                    let size = line.size;
+                    let (w, h) = (glyph.advance * 0.75, size * 0.72);
+                    let area = Rect::new((glyph.advance - w) / 2.0, -h, (glyph.advance + w) / 2.0, 0.0);
+                    ctx.set_transform(at);
+                    ctx.set_stroke(Stroke::new(1.0));
+                    ctx.stroke_path(&area.inset(-0.5).to_path(0.1));
+                    continue;
+                }
                 if let Some(steps) = kition_table_fonts::color_steps(glyph.face, glyph.id) {
-                    crate::emoji::paint(ctx, at * Affine::scale_non_uniform(glyph.scale, -glyph.scale), &steps, *color);
+                    kition_table_display::emoji::paint(ctx, at * Affine::scale_non_uniform(glyph.scale, -glyph.scale), &steps, *color);
                     ctx.set_paint(paint(*color));
                     continue;
                 }
-                let path = kition_table_fonts::outline(glyph.face, line.weight, glyph.id);
+                let path = kition_table_fonts::outline(glyph.face, line.weight, line.size as f32, glyph.id);
                 ctx.set_transform(at * Affine::scale(glyph.scale));
                 ctx.fill_path(&path);
             }
         }
-        Item::Clip { .. } | Item::Unclip => {}
+        Item::Clip { .. } | Item::Unclip | Item::List { .. } => {}
     }
 }
 

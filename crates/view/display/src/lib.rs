@@ -43,8 +43,13 @@
 //! position and antialiased.
 
 mod codec;
+pub mod emoji;
+mod raster;
+mod resources;
 
 pub use codec::{DecodeError, decode, encode};
+pub use raster::{Tile, draw, emoji_tile, raster};
+pub use resources::Resources;
 
 /// The first four bytes of every list.
 pub const MAGIC: [u8; 4] = *b"KTDL";
@@ -254,9 +259,10 @@ pub enum Op {
     /// `0x07` (20 B): op, 0, 0 u16, atlas id u32, x y size. An emoji the engine rasterizes: its
     /// pen position on the baseline and its font size.
     Emoji { atlas: u32, x: f32, y: f32, size: f32 },
-    /// `0x08` (24 B): op, 0, paint u16, icon id u16, 0 u16, x y size stroke. A Tessera icon,
-    /// `size` px square from its top left, its strokes `stroke` wide in the icon's 24-unit grid.
-    Icon { icon: u16, x: f32, y: f32, size: f32, stroke: f32, paint: u16 },
+    /// `0x08` (24 B): op, flags (bit 0 solid), paint u16, icon id u16, 0 u16, x y size stroke. A
+    /// Tessera icon, `size` px square from its top left, its strokes `stroke` wide in the icon's
+    /// 24-unit grid; a solid icon's stroked shapes are filled too (a rating's stars).
+    Icon { icon: u16, x: f32, y: f32, size: f32, stroke: f32, paint: u16, solid: bool },
     /// `0x09` (28 B): op, fit u8, 0 u16, image key u32, x y w h radius. An attachment's picture,
     /// decoded by the player.
     Image { key: u32, x: f32, y: f32, w: f32, h: f32, fit: Fit, radius: f32 },
@@ -444,3 +450,6 @@ pub fn line_pixel(pos: f64, origin: f64, dpr: f64) -> f64 {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod raster_tests;

@@ -1,0 +1,21 @@
+format: 1
+id: regressions/issue-emoji-cuts-cell
+feature: table.picture
+intent: >-
+  An emoji drawn over a cell leaves the cell opaque: a color glyph's layers are composed as one
+  group, which then goes over what is below. Before, a glyph layer with a composite mode such as
+  Src or DestIn acted on the cell under it, so the picture had see-through pixels inside an
+  emoji's box (found by the grid's layout test drawing "季度 plan" with a rocket).
+layer: gate
+source:
+  kind: issue
+  from: Kition Table grid phase 1 (card tg1)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-display, filter: "an_emoji_over_a_cell_leaves_it_opaque" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-17"

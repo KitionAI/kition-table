@@ -1,0 +1,27 @@
+format: 1
+id: table.editor.grid/layout-cells
+feature: table.editor.grid
+intent: >-
+  The grid is laid out in Rust in the editor's geometry: a row head of its controls (72 px with a
+  drag handle, 48 px when the view sorts or groups), a 32 px header row with each field's lock,
+  type icon, title and menu caret, rows of 32, 40, 56 or 88 px, 48 px group headers with their
+  toggle, title and value, a 32 px add row after the records or after each group (numbers
+  restart in each group), a 100 px add-field column, and the frozen columns' divider. Each cell
+  kind lays out as the editor's: text centred, wrapped to the row's lines and cut with an
+  ellipsis 1 px short of its room; runs of one face each (Inter, Droid Sans Fallback, Nanum
+  Gothic), emoji as EMOJI ops, characters no face covers as TOFU boxes; checkboxes, choice chips
+  in their tones, rating symbols, people, attachments (pictures and files) and buttons, with
+  their hit parts; and the focus outline. Checked as structure, not pixels.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, phase 1 (card tg1)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-grid, filter: "tests::" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-17"

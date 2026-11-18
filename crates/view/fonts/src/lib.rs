@@ -6,13 +6,21 @@
 //! and tests register the same files ([`register_dir`]). The headless executable embeds them at
 //! build time (feature `embed`, [`register_embedded`]), so its previews have text wherever it runs.
 //! Without a face the picture draws no text. Inter sets the table, Droid Sans Fallback the characters Inter lacks (Chinese and
-//! Japanese first), chosen per character, so a mixed line shapes as runs of one face each.
+//! Japanese first), Nanum Gothic Korean, chosen per character, so a mixed line shapes as runs of one face each. A character no
+//! face covers is a tofu run ([`Run::tofu`]): a box of [`TOFU_ADVANCE`] em that every player draws the same, never a system
+//! font's glyph.
+//!
+//! Shaping keeps the browsers' default features (kerning, ligatures, contextual alternates): a
+//! Canvas cannot turn them off, and the grid's runs must measure as the page's `measureText`
+//! does. Inter's optical size axis follows the font size (clamped to the axis), as a Canvas sets
+//! it.
 //!
 //! Emoji draw in color from Noto Color Emoji (COLRv1): a character with emoji presentation, or one
 //! an emoji variation selector follows, and the joiners and modifiers of an emoji sequence shape
 //! in it; [`color_steps`] reads its glyphs' layers and gradients for the picture to paint.
 //!
-//! Weight comes from a variable face's `wght` axis. Outlines are cached per face, weight, and glyph.
+//! Weight comes from a variable face's `wght` axis, optical size from its `opsz` axis. Outlines are
+//! cached per face, weight, optical size and glyph.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -20,7 +28,7 @@ use std::sync::{Arc, Mutex, RwLock};
 mod color;
 pub use color::{Brush, CompositeMode, Extend, Paint, Step};
 
-use harfrust::{Direction, Feature, ShapeOptions, Tag, UnicodeBuffer};
+use harfrust::{Direction, ShapeOptions, Tag, UnicodeBuffer};
 use kurbo::BezPath;
 use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
@@ -42,16 +50,28 @@ pub const SEMIBOLD: u16 = 600;
 pub const BOLD: u16 = 700;
 
 /// Which role a registered face plays, from its family name.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Role {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Role {
+    /// Inter.
     Sans,
+    /// A monospace face.
     Mono,
+    /// Droid Sans Fallback: Chinese and Japanese.
     Fallback,
+    /// Nanum Gothic: Korean.
+    Hangul,
+    /// Noto Color Emoji.
     Emoji,
 }
 
-/// A face's shaper instance and design-space location at one weight.
+/// A tofu box's advance, in em.
+pub const TOFU_ADVANCE: f32 = 0.6;
+
+/// A face's shaper instance and design-space location at one weight and optical size.
 type Instance = (Option<Arc<harfrust::ShaperInstance>>, Arc<Location>);
+
+/// A variable instance: the weight, and the optical size's bits (0 for a face without `opsz`).
+type InstanceKey = (u16, u32);
 
 /// One registered font file.
 struct Face {
@@ -62,16 +82,18 @@ struct Face {
     descent: f32,
     /// Whether the face has a `wght` axis.
     variable: bool,
+    /// The range of its `opsz` axis, if it has one.
+    opsz: Option<(f32, f32)>,
     shaper: harfrust::ShaperData,
-    /// Shaper instances and design-space locations per weight, made on first use.
-    instances: Mutex<HashMap<u16, Instance>>,
+    /// Shaper instances and design-space locations per weight and optical size, made on first use.
+    instances: Mutex<HashMap<InstanceKey, Instance>>,
     /// Shape plans by weight, script, and language, made on first use: making one per run took
     /// most of a large table's first picture.
     plans: Mutex<HashMap<PlanKey, Arc<harfrust::ShapePlan>>>,
 }
 
-/// What a shape plan is for (the direction is always left to right, the features fixed by role).
-type PlanKey = (u16, Option<harfrust::Script>, Option<harfrust::Language>);
+/// What a shape plan is for (the direction is always left to right, the features the defaults).
+type PlanKey = (InstanceKey, Option<harfrust::Script>, Option<harfrust::Language>);
 
 impl Face {
     fn skrifa(&self) -> Option<skrifa::FontRef<'_>> {
@@ -86,21 +108,39 @@ impl Face {
         self.skrifa().is_some_and(|font| font.charmap().map(c).is_some())
     }
 
-    /// The shaper instance and location for `weight` (the default instance for a static face).
-    fn at(&self, weight: u16) -> Instance {
-        if !self.variable {
+    /// The instance key for `weight` at `size` px: the optical size is the font size clamped to
+    /// the face's `opsz` axis, as a browser sets it.
+    fn key(&self, weight: u16, size: f32) -> InstanceKey {
+        let opsz = self.opsz.map_or(0.0, |(min, max)| size.clamp(min, max));
+        (if self.variable { weight } else { 0 }, opsz.to_bits())
+    }
+
+    /// The shaper instance and location for `key` (the default instance for a static face).
+    fn at(&self, key: InstanceKey) -> Instance {
+        if !self.variable && self.opsz.is_none() {
             return (None, Arc::new(Location::default()));
         }
         let mut cache = self.instances.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(found) = cache.get(&weight) {
+        if let Some(found) = cache.get(&key) {
             return found.clone();
         }
-        let wght = Tag::new(b"wght");
-        let value = f32::from(weight);
-        let location = self.skrifa().map(|font| font.axes().location([("wght", value)])).unwrap_or_default();
-        let instance = self.hb().map(|hb| Arc::new(harfrust::ShaperInstance::from_variations(&hb, [harfrust::Variation { tag: wght, value }])));
+        let mut settings: Vec<(&[u8; 4], f32)> = Vec::new();
+        if self.variable {
+            settings.push((b"wght", f32::from(key.0)));
+        }
+        if self.opsz.is_some() {
+            settings.push((b"opsz", f32::from_bits(key.1)));
+        }
+        let location =
+            self.skrifa().map(|font| font.axes().location(settings.iter().map(|(tag, value)| (skrifa::Tag::new(tag), *value)))).unwrap_or_default();
+        let instance = self.hb().map(|hb| {
+            Arc::new(harfrust::ShaperInstance::from_variations(
+                &hb,
+                settings.iter().map(|(tag, value)| harfrust::Variation { tag: Tag::new(tag), value: *value }),
+            ))
+        });
         let made = (instance, Arc::new(location));
-        cache.insert(weight, made.clone());
+        cache.insert(key, made.clone());
         made
     }
 }
@@ -109,7 +149,7 @@ impl Face {
 #[derive(Default)]
 struct Store {
     faces: RwLock<Vec<Arc<Face>>>,
-    outlines: Mutex<HashMap<(usize, u16, u32), Arc<BezPath>>>,
+    outlines: Mutex<HashMap<(usize, InstanceKey, u32), Arc<BezPath>>>,
 }
 
 /// The cache drops everything past this many outlines (a long CJK table reaches thousands).
@@ -136,6 +176,8 @@ fn role_of(family: &str) -> Role {
     let family = family.to_ascii_lowercase();
     if family.contains("emoji") {
         Role::Emoji
+    } else if family.contains("nanum") {
+        Role::Hangul
     } else if family.contains("mono") || family.contains("cousine") || family.contains("courier") {
         Role::Mono
     } else if family.contains("fallback") || family.contains("cjk") {
@@ -148,11 +190,12 @@ fn role_of(family: &str) -> Role {
 /// Registers a font file (TrueType or OpenType). Answers the family name, or an error for bytes
 /// that are not a font. Registering the same family again keeps the first.
 pub fn add_font(bytes: Vec<u8>) -> Result<String, String> {
-    let (family, upem, ascent, descent, variable) = {
+    let (family, upem, ascent, descent, variable, opsz) = {
         let font = skrifa::FontRef::new(&bytes).map_err(|error| format!("not a font: {error}"))?;
         let metrics = font.metrics(Size::unscaled(), LocationRef::default());
         let variable = font.axes().iter().any(|axis| axis.tag() == skrifa::Tag::new(b"wght"));
-        (family_name(&font), f32::from(metrics.units_per_em), metrics.ascent, -metrics.descent, variable)
+        let opsz = font.axes().iter().find(|axis| axis.tag() == skrifa::Tag::new(b"opsz")).map(|axis| (axis.min_value(), axis.max_value()));
+        (family_name(&font), f32::from(metrics.units_per_em), metrics.ascent, -metrics.descent, variable, opsz)
     };
     let shaper = {
         let hb = harfrust::FontRef::new(&bytes).map_err(|error| format!("not a font: {error:?}"))?;
@@ -169,6 +212,7 @@ pub fn add_font(bytes: Vec<u8>) -> Result<String, String> {
             ascent,
             descent,
             variable,
+            opsz,
             shaper,
             instances: Mutex::new(HashMap::new()),
             plans: Mutex::new(HashMap::new()),
@@ -178,8 +222,12 @@ pub fn add_font(bytes: Vec<u8>) -> Result<String, String> {
 }
 
 /// The families Kition's font checkout holds for a table, relative to its root.
-pub const CHECKOUT_FILES: &[&str] =
-    &["fonts/inter/Inter-Variable.ttf", "fonts/droid-sans-fallback/DroidSansFallbackFull.ttf", "fonts/noto-color-emoji/Noto-COLRv1.ttf"];
+pub const CHECKOUT_FILES: &[&str] = &[
+    "fonts/inter/Inter-Variable.ttf",
+    "fonts/droid-sans-fallback/DroidSansFallbackFull.ttf",
+    "fonts/nanum-gothic/NanumGothic-Regular.ttf",
+    "fonts/noto-color-emoji/Noto-COLRv1.ttf",
+];
 
 /// Registers the table's faces from a `kition-fonts` checkout; answers how many it found.
 pub fn register_dir(root: &std::path::Path) -> usize {
@@ -217,10 +265,12 @@ pub struct Glyph {
     pub y_offset: f32,
 }
 
-/// A run of text shaped in one face.
+/// A run of text shaped in one face, or a tofu run: characters no face covers, one glyph (id 0,
+/// [`TOFU_ADVANCE`] em) each, in a run whose `face` is the family's first face.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Run {
     pub face: FaceId,
+    pub tofu: bool,
     /// Font units per em of `face`: a glyph's advance times `size / upem` is its width.
     pub upem: f32,
     pub glyphs: Vec<Glyph>,
@@ -240,24 +290,43 @@ pub struct Metrics {
 }
 
 /// The order faces are tried in for `family`.
-fn preference(family: Family) -> [Role; 3] {
+fn preference(family: Family) -> [Role; 4] {
     match family {
-        Family::Sans => [Role::Sans, Role::Fallback, Role::Mono],
-        Family::Mono => [Role::Mono, Role::Sans, Role::Fallback],
+        Family::Sans => [Role::Sans, Role::Fallback, Role::Hangul, Role::Mono],
+        Family::Mono => [Role::Mono, Role::Sans, Role::Fallback, Role::Hangul],
     }
 }
 
 /// The face that draws `c` in `family`, if any face covers it (the emoji face last, for a symbol
-/// only it has); otherwise the family's first face.
+/// only it has).
 fn face_for(faces: &[Arc<Face>], family: Family, c: char) -> Option<usize> {
-    let order = preference(family);
     let ranked = |role: Role| faces.iter().position(|face| face.role == role);
-    order
+    preference(family)
         .iter()
         .filter_map(|role| ranked(*role))
         .chain(ranked(Role::Emoji))
         .find(|index| faces.get(*index).is_some_and(|face| face.covers(c)))
-        .or_else(|| order.iter().find_map(|role| ranked(*role)))
+}
+
+/// The family's first registered face.
+fn first_face(faces: &[Arc<Face>], family: Family) -> Option<usize> {
+    preference(family).iter().find_map(|role| faces.iter().position(|face| face.role == *role))
+}
+
+/// Whether `c` is a default-ignorable character that shapes to nothing (joiners, variation
+/// selectors, zero-width spaces, the byte order mark): it stays in the run it is in.
+fn ignorable(c: char) -> bool {
+    matches!(u32::from(c), 0x00AD | 0x034F | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x206F | 0xFE00..=0xFE0F | 0xFEFF | 0xE0100..=0xE01EF)
+}
+
+/// The registered face of `role`, if any.
+pub fn face(role: Role) -> Option<FaceId> {
+    faces().iter().position(|face| face.role == role).map(FaceId)
+}
+
+/// The role of a registered face.
+pub fn role(face: FaceId) -> Option<Role> {
+    faces().get(face.0).map(|face| face.role)
 }
 
 /// Whether `c` shows as an emoji: emoji presentation by default (Unicode's Emoji_Presentation,
@@ -359,53 +428,80 @@ pub fn metrics(family: Family) -> Metrics {
     )
 }
 
-/// Shapes `text` in `family` at `weight`: runs of one face each, in text order, with clusters as
-/// byte offsets into `text`. Without a face the result is empty.
-pub fn shape(text: &str, family: Family, weight: u16) -> Vec<Run> {
+/// What a character is set in while a line is split into runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Slot {
+    Face(usize),
+    Tofu,
+}
+
+/// Shapes `text` in `family` at `weight` and `size` px: runs of one face each (or tofu runs), in
+/// text order, with clusters as byte offsets into `text`. Without a face the result is empty.
+pub fn shape(text: &str, family: Family, weight: u16, size: f32) -> Vec<Run> {
     let faces = faces();
+    let Some(first) = first_face(&faces, family).or_else(|| emoji_face(&faces)) else { return Vec::new() };
     let mut runs = Vec::new();
     let mut start = 0;
-    let mut current: Option<usize> = None;
+    let mut current: Option<Slot> = None;
     let emoji = emoji_face(&faces);
     let mut chars = text.char_indices().peekable();
+    let flush = |runs: &mut Vec<Run>, slot: Option<Slot>, range: std::ops::Range<usize>| match slot {
+        Some(Slot::Face(index)) if !range.is_empty() => runs.push(shape_run(&faces, index, text, range, weight, size)),
+        Some(Slot::Tofu) if !range.is_empty() => runs.push(tofu_run(first, text, range)),
+        _ => {}
+    };
     while let Some((at, c)) = chars.next() {
         let next = chars.peek().map(|(_, next)| *next);
-        let in_emoji = emoji.is_some() && current == emoji;
+        let in_emoji = emoji.is_some() && current == emoji.map(Slot::Face);
         // Spaces and marks stay in the run they are in, so a run breaks only at a real change; an
         // emoji sequence's joiners and modifiers stay with its emoji, but a space after an emoji is
         // the text's (the emoji face's space is an emoji wide).
-        let face = if in_emoji && joins_emoji(c) {
+        let slot = if in_emoji && joins_emoji(c) {
             current
         } else if let Some(index) = emoji.filter(|index| is_emoji(c, next) && faces.get(*index).is_some_and(|face| face.covers(c))) {
-            Some(index)
-        } else if c.is_whitespace() && !in_emoji {
-            current.or_else(|| face_for(&faces, family, c))
+            Some(Slot::Face(index))
+        } else if (c.is_whitespace() && !in_emoji && current != Some(Slot::Tofu)) || (ignorable(c) && current.is_some()) {
+            current.or_else(|| face_for(&faces, family, c).map(Slot::Face))
         } else {
-            face_for(&faces, family, c)
+            Some(face_for(&faces, family, c).map_or(Slot::Tofu, Slot::Face))
         };
-        if face != current {
-            if let Some(index) = current
-                && at > start
-            {
-                runs.push(shape_run(&faces, index, text, start..at, weight));
-            }
+        if slot != current {
+            flush(&mut runs, current, start..at);
             start = at;
-            current = face;
+            current = slot;
         }
     }
-    if let Some(index) = current
-        && text.len() > start
-    {
-        runs.push(shape_run(&faces, index, text, start..text.len(), weight));
-    }
+    flush(&mut runs, current, start..text.len());
     runs
 }
 
-fn shape_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Range<usize>, weight: u16) -> Run {
-    let Some(face) = faces.get(index) else { return Run { face: FaceId(index), upem: 1000.0, glyphs: Vec::new() } };
+/// Shapes `text` in one face only (a display list's text run, whose face the engine chose), at
+/// `weight` and `size` px.
+pub fn shape_in(face: FaceId, text: &str, weight: u16, size: f32) -> Run {
+    shape_run(&faces(), face.0, text, 0..text.len(), weight, size)
+}
+
+/// Whether a registered face covers `c`.
+pub fn covers(face: FaceId, c: char) -> bool {
+    faces().get(face.0).is_some_and(|found| found.covers(c))
+}
+
+fn tofu_run(face: usize, text: &str, range: std::ops::Range<usize>) -> Run {
+    let glyphs = text
+        .get(range.clone())
+        .unwrap_or_default()
+        .char_indices()
+        .map(|(at, _)| Glyph { id: 0, cluster: range.start + at, advance: TOFU_ADVANCE * 1000.0, x_offset: 0.0, y_offset: 0.0 })
+        .collect();
+    Run { face: FaceId(face), tofu: true, upem: 1000.0, glyphs }
+}
+
+fn shape_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Range<usize>, weight: u16, size: f32) -> Run {
+    let Some(face) = faces.get(index) else { return Run { face: FaceId(index), tofu: false, upem: 1000.0, glyphs: Vec::new() } };
     let mut glyphs = Vec::new();
     if let (Some(hb), Some(part)) = (face.hb(), text.get(range.clone())) {
-        let (instance, _) = face.at(weight);
+        let instance_key = face.key(weight, size);
+        let (instance, _) = face.at(instance_key);
         let shaper = face.shaper.shaper(&hb).instance(instance.as_deref()).build();
         let mut buffer = UnicodeBuffer::new();
         for (at, c) in part.char_indices() {
@@ -413,29 +509,20 @@ fn shape_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Ran
         }
         buffer.guess_segment_properties();
         buffer.set_direction(Direction::LeftToRight);
-        // No ligatures: an editor keeps every character drawn as itself (`-->` in code, `fi` in prose),
-        // so the caret never falls inside a glyph. The emoji face keeps them: its sequences (a family,
-        // a flag, a skin tone) are ligatures of one grapheme, which the caret never splits.
-        let features = [
-            Feature::new(Tag::new(b"liga"), 0, ..),
-            Feature::new(Tag::new(b"clig"), 0, ..),
-            Feature::new(Tag::new(b"calt"), 0, ..),
-            Feature::new(Tag::new(b"dlig"), 0, ..),
-        ];
-        let features: &[Feature] = if face.role == Role::Emoji { &[] } else { &features };
+        // The default features, as a browser shapes (a Canvas cannot turn ligatures or kerning off).
         // The script the buffer guessed (none for text of common characters only).
         let script = Some(buffer.script()).filter(|script| *script != harfrust::script::UNKNOWN);
-        let key: PlanKey = (weight, script, buffer.language());
+        let key: PlanKey = (instance_key, script, buffer.language());
         let plan = {
             let mut plans = face.plans.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             plans
                 .entry(key)
                 .or_insert_with_key(|(_, script, language)| {
-                    Arc::new(harfrust::ShapePlan::new(&shaper, Direction::LeftToRight, *script, language.as_ref(), features))
+                    Arc::new(harfrust::ShapePlan::new(&shaper, Direction::LeftToRight, *script, language.as_ref(), &[]))
                 })
                 .clone()
         };
-        let shaped = shaper.shape(buffer, ShapeOptions::new().features(features).plan(Some(&plan)));
+        let shaped = shaper.shape(buffer, ShapeOptions::new().plan(Some(&plan)));
         for (info, position) in shaped.glyph_infos().iter().zip(shaped.glyph_positions()) {
             glyphs.push(Glyph {
                 id: info.glyph_id,
@@ -446,12 +533,14 @@ fn shape_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Ran
             });
         }
     }
-    Run { face: FaceId(index), upem: face.upem, glyphs }
+    Run { face: FaceId(index), tofu: false, upem: face.upem, glyphs }
 }
 
-/// The outline of glyph `id` in `face` at `weight`, in font units with y pointing down.
-pub fn outline(face: FaceId, weight: u16, id: u32) -> Arc<BezPath> {
-    let key = (face.0, weight, id);
+/// The outline of glyph `id` in `face` at `weight` and `size` px (the optical size), in font
+/// units with y pointing down.
+pub fn outline(face: FaceId, weight: u16, size: f32, id: u32) -> Arc<BezPath> {
+    let instance_key = faces().get(face.0).map_or((weight, 0), |found| found.key(weight, size));
+    let key = (face.0, instance_key, id);
     let cache = &store().outlines;
     if let Some(found) = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(&key) {
         return found.clone();
@@ -461,7 +550,7 @@ pub fn outline(face: FaceId, weight: u16, id: u32) -> Arc<BezPath> {
         && let Some(font) = face.skrifa()
         && let Some(glyph) = font.outline_glyphs().get(GlyphId::new(id))
     {
-        let (_, location) = face.at(weight);
+        let (_, location) = face.at(instance_key);
         let location: LocationRef<'_> = location.as_ref().into();
         let _ = glyph.draw(DrawSettings::unhinted(Size::unscaled(), location), &mut pen);
     }

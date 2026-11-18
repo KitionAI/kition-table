@@ -75,6 +75,8 @@ pub struct TableShown {
     pub filters: usize,
     /// Rows' height in pixels.
     pub row_height: f64,
+    /// How many columns the grid freezes at its left.
+    pub frozen: usize,
     /// A kanban view's column field.
     pub board_field: Option<Field>,
     /// A gallery view's cover field.
@@ -298,12 +300,9 @@ fn arrange(file: &TableFile, table: &Table, view: Option<View>, records: Vec<Rec
     };
     records.truncate(MAX_RECORDS);
 
-    let row_height = match config.get("row_height").and_then(Value::as_str) {
-        Some("short") => 32.0,
-        Some("tall") => 56.0,
-        Some("extra_tall") => 88.0,
-        _ => 40.0,
-    };
+    let row_height = f64::from(kition_table_grid::row_height(config.get("row_height").and_then(Value::as_str)));
+    // The editor freezes the first column unless the view says otherwise.
+    let frozen = config.get("frozen_column_count").and_then(Value::as_u64).map_or(1, |count| count as usize);
     let primary = fields.iter().find(|field| field.is_primary).or_else(|| fields.first());
     let board_field = groups
         .first()
@@ -332,6 +331,7 @@ fn arrange(file: &TableFile, table: &Table, view: Option<View>, records: Vec<Rec
         sorts: sorts.into_iter().cloned().collect(),
         filters,
         row_height,
+        frozen,
         board_field,
         cover_field,
         fields,
@@ -339,7 +339,7 @@ fn arrange(file: &TableFile, table: &Table, view: Option<View>, records: Vec<Rec
 }
 
 /// A column's width when the view sets none, as the editor's grid draws it.
-pub const DEFAULT_WIDTH: f64 = 200.0;
+pub const DEFAULT_WIDTH: f64 = kition_table_grid::DEFAULT_WIDTH as f64;
 
 fn count_conditions(tree: &FilterTree) -> usize {
     tree.children

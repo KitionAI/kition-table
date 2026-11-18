@@ -19,6 +19,7 @@ kition-table-ai = { path = "crates/engine/ai-field" }
 kition-table-import = { path = "crates/formats/import" }
 kition-table-fonts = { path = "crates/view/fonts" }
 kition-table-display = { path = "crates/view/display" }
+kition-table-grid = { path = "crates/view/grid" }
 kition-table-picture = { path = "crates/view/picture" }
 
 # kition-sdk, pinned by commit (one revision for every crate of it): the kit contract, the headless
@@ -60,6 +61,8 @@ tempfile = "3"
 thiserror = "2"
 tracing = "0.1"
 url = "2"
+# Line breaks (UAX #14) of the grid's wrapped text, as kition-note and kition-doc break.
+unicode-linebreak = "0.1"
 uuid = { version = "1", features = ["v4", "v7"] }
 
 [workspace.lints.rust]

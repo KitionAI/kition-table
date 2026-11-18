@@ -174,7 +174,7 @@ features:
     status: has
     commands: [table.file.render, table.preview.show]
     paths: [crates/view/fonts/**, crates/view/picture/**, bindings/wasm/src/preview.rs, bindings/wasm/tests/picture.rs, bindings/wasm/tests/preview.rs, apps/kition-table/src/main.rs, apps/kition-table/tests/render.rs, conformance/golden/**]
-    cases: [regressions/issue-4, regressions/issue-render-command]
+    cases: [regressions/issue-4, regressions/issue-render-command, regressions/issue-emoji-cuts-cell]
     since: "2026-11-16"
   - id: table.attachments
     title: "Attachments stored in the file"
@@ -215,7 +215,7 @@ features:
     dimension: [function, fidelity]
     priority: P1
     status: partial
-    paths: [crates/view/display/**]
+    paths: [crates/view/display/**, crates/view/grid/**]
     gap: "Phase 1 of the grid moving to a Rust layout: the display list and the picture. The editor still draws its own grid; the page player, bands, fonts in the package and the parity tests come in later phases."
-    cases: [table.editor.grid/display-format]
+    cases: [table.editor.grid/display-format, table.editor.grid/display-raster, table.editor.grid/layout-cells, table.editor.grid/shaping-as-canvas]
     since: "2026-11-17"

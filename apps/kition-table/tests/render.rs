@@ -135,7 +135,7 @@ fn the_render_command_draws_the_goldens_with_the_embedded_faces() {
 fn scale_size_and_parts() {
     let mut k = open("parts");
     let whole = k.render(json!({}));
-    assert_eq!((whole.width, whole.height), (700, 248));
+    assert_eq!((whole.width, whole.height), (772, 276));
     let small = k.render(json!({ "scale": 2, "maxSize": 120 }));
     assert_eq!((small.width, small.height), (120, 43));
     assert_eq!(k.render(json!({ "slide": 0 })).rgba, whole.rgba, "a host's part preview: the first table");
@@ -149,16 +149,16 @@ fn scale_size_and_parts() {
     )
     .unwrap();
     let open_work = k.render(json!({ "target": { "path": format!("tables/1/views/{view}") } }));
-    assert_eq!((open_work.width, open_work.height), (700, 208), "one row of 40 fewer");
+    assert_eq!((open_work.width, open_work.height), (772, 236), "one row of 40 fewer");
 
     // A range of rows, counted from 1: rows 3 to 5 of 12.
     for n in 0..10 {
         k.run("table.records.create", json!({ "tableId": 1, "values": { "title": format!("Task {n}") } })).unwrap();
     }
     let all = k.render(json!({}));
-    assert_eq!(all.height, 248 + 10 * 40);
+    assert_eq!(all.height, 276 + 10 * 40);
     let range = k.render(json!({ "target": { "path": "tables/1", "rows": [3, 5] } }));
-    assert_eq!((range.width, range.height), (700, 248 + 40), "three rows");
+    assert_eq!((range.width, range.height), (772, 276 + 40), "three rows");
     assert_ne!(range.rgba, k.render(json!({ "target": { "path": "tables/1", "rows": [1, 3] } })).rgba);
 
     for (bad, says) in [

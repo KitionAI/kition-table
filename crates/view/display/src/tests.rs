@@ -40,7 +40,7 @@ pub(crate) fn every_op() -> DisplayList {
     list.push(Op::Text { x: 8.0, y: 1304.5, align: Align::Right, face: Face::Fallback, weight: 400, size: 13.0, paint: ink, text: cjk, width: 52.0 });
     list.push(Op::Tofu { x: 60.0, y: 1294.0, w: 7.8, h: 10.0, paint: ink });
     list.push(Op::Emoji { atlas: 12, x: 70.0, y: 1304.5, size: 13.0 });
-    list.push(Op::Icon { icon: 4, x: 8.0, y: 1288.0, size: 16.0, stroke: 1.5, paint: ink });
+    list.push(Op::Icon { icon: 4, x: 8.0, y: 1288.0, size: 16.0, stroke: 1.5, paint: ink, solid: true });
     list.push(Op::Image { key: 0xDEAD_BEEF, x: 210.0, y: 1284.0, w: 32.0, h: 32.0, fit: Fit::Contain, radius: 4.0 });
     list.push(Op::Shadow { x: 199.0, y: 1280.0, w: 4.0, h: 40.0, r: 0.0, blur: 3.0, paint: line });
     list.push(Op::Clip { x: 0.0, y: 1280.0, w: 2048.0, h: 1280.0 });

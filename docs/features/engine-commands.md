@@ -195,11 +195,13 @@ document's picture, what `render` draws, as PNG. Like `table.file.export` it ans
 level, not as `{ "result", "change" }`, since the kits server reads `png` there. The picture is
 what the editor shows (`crates/view/picture`): the tab bar (the tables and dashboards), the shown
 table's view bar (its views, and what the shown view filters, sorts and groups by), then the view:
-a grid (each field's type icon and title, the values drawn by type: choice chips in their tones,
-checkboxes, rating stars, links, people, dates in the field's format, group header rows), a kanban
-board, a gallery or a calendar list; or a dashboard's widgets (numbers, bar, line and pie charts,
-tables). Text is drawn in the faces the host registers with `addFont` (Inter, Droid Sans Fallback
-and Noto Color Emoji; see [development.md](../development.md#fonts)); the headless executable embeds
+a grid in the editor's geometry (each field's type icon and title, the values drawn by type: choice
+chips in their tones, checkboxes, rating stars, links, people, dates in the field's format, group
+header rows, add rows), laid out by `crates/view/grid` as a display list and rasterized by
+`crates/view/display`; a kanban board, a gallery or a calendar list; or a dashboard's widgets
+(numbers, bar, line and pie charts, tables). Text is drawn in the faces the host registers with
+`addFont` (Inter, Droid Sans Fallback, Nanum Gothic and Noto Color Emoji; see
+[development.md](../development.md#fonts)); a character none of them covers is a box. The headless executable embeds
 them at build time (`kition-table-fonts` feature `embed`, from `KITION_FONTS_DIR`). Without them
 the picture has no text.
 

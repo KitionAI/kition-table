@@ -141,8 +141,8 @@ pub fn encode(list: &DisplayList) -> Vec<u8> {
                 w.u32(*atlas);
                 w.f32s(&[*x, *y, *size]);
             }
-            Op::Icon { icon, x, y, size, stroke, paint } => {
-                w.head(code, 0, *paint);
+            Op::Icon { icon, x, y, size, stroke, paint, solid } => {
+                w.head(code, u8::from(*solid), *paint);
                 w.u16(*icon);
                 w.u16(0);
                 w.f32s(&[*x, *y, *size, *stroke]);
@@ -315,7 +315,7 @@ pub fn decode(bytes: &[u8]) -> Result<DisplayList, DecodeError> {
                 let icon = r.u16()?;
                 r.skip(2)?;
                 let [x, y, size, stroke] = r.f32s()?;
-                Op::Icon { icon, x, y, size, stroke, paint }
+                Op::Icon { icon, x, y, size, stroke, paint, solid: arg & 1 == 1 }
             }
             0x09 => {
                 let fit = Fit::from_u8(arg).ok_or(DecodeError::Invalid("fit"))?;

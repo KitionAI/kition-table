@@ -7,7 +7,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use kition_table_file::Field;
 use serde_json::Value;
 
-use crate::scene::{Rgba, hex};
+use crate::theme::{Rgba, hex};
 
 /// A value's text, as the editor's `displayValue`: lists joined with commas, objects by their
 /// name, title, display, url, href or row key.

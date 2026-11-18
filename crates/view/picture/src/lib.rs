@@ -7,15 +7,16 @@
 //! kanban board, a gallery or a calendar list; or a dashboard's widgets. It shows what the editor
 //! opens (the first table and its first view) unless [`Shown`] names another. Text is drawn with
 //! the faces the host registers (`kition-table-fonts`); without them the picture has no text.
+//!
+//! A grid view is laid out by `kition-table-grid` as the same display list the editor plays, in
+//! the editor's geometry, and rasterized by `kition-table-display`; the bars around it, the
+//! footer, and the other views are drawn here.
 
 mod cards;
 mod cell;
 mod chrome;
 mod dashboard;
 mod data;
-mod emoji;
-mod format;
-mod grid;
 mod scene;
 mod theme;
 
@@ -23,8 +24,10 @@ use kition_table_file::TableFile;
 use kurbo::Rect;
 use serde_json::{Value, json};
 
+pub(crate) use kition_table_grid::format;
+
 pub use data::{Arrangement, MAX_RECORDS, Shown, view_records};
-pub use grid::Focus;
+pub use kition_table_grid::Focus;
 pub use scene::Scene;
 
 use data::Content;
@@ -60,7 +63,7 @@ pub fn draw(file: &TableFile, shown: &Shown, focus: Option<Focus>) -> Result<Pic
                 "kanban" => cards::board_width(table),
                 "gallery" => cards::gallery_width(table),
                 "calendar" => cards::CALENDAR_WIDTH,
-                _ => grid::width(table),
+                _ => f64::from(kition_table_grid::width(&grid_columns(table), reorderable(table))),
             };
             let width = bar.max(body_width).max(480.0);
             chrome::view_bar(Some(&mut content), table, width);
@@ -69,9 +72,9 @@ pub fn draw(file: &TableFile, shown: &Shown, focus: Option<Focus>) -> Result<Pic
                 "gallery" => cards::gallery(&mut content, table, body_top),
                 "calendar" => cards::calendar(&mut content, table, body_top, width),
                 _ => {
-                    let (height, area) = grid::draw(&mut content, table, body_top, width, focus);
+                    let (height, area) = grid(&mut content, table, body_top, width, focus);
                     focused = area;
-                    height
+                    height + chrome::footer(&mut content, table, body_top + height, width)
                 }
             };
             let about = json!({
@@ -100,6 +103,38 @@ pub fn draw(file: &TableFile, shown: &Shown, focus: Option<Focus>) -> Result<Pic
     scene.width = width;
     scene.height = height.ceil();
     Ok(Picture { scene, focus: focused, shown: about })
+}
+
+/// The shown columns as the grid takes them.
+fn grid_columns(table: &data::TableShown) -> Vec<kition_table_grid::Column> {
+    table.columns.iter().map(|column| kition_table_grid::Column { field: column.field.clone(), width: column.width as f32 }).collect()
+}
+
+/// Whether the view's rows can be dragged in the editor (no sort, no groups): its row heads have
+/// a drag handle.
+fn reorderable(table: &data::TableShown) -> bool {
+    table.sorts.is_empty() && table.groups.is_empty()
+}
+
+/// The grid of `table` from `top`, `width` wide, laid out by `kition-table-grid`; answers its
+/// height and the focused cell's area.
+fn grid(scene: &mut Scene, table: &data::TableShown, top: f64, width: f64, focus: Option<Focus>) -> (f64, Option<Rect>) {
+    let columns = grid_columns(table);
+    let view = kition_table_grid::View {
+        columns: &columns,
+        records: &table.records,
+        groups: &table.groups,
+        first: table.first,
+        row_height: table.row_height as f32,
+        frozen: table.frozen,
+        reorderable: reorderable(table),
+        theme: kition_table_grid::theme::Theme::LIGHT,
+    };
+    let grid = kition_table_grid::lay_out(&view, top as f32, width as f32, focus);
+    let height = f64::from(grid.geometry.height);
+    let focused = grid.focus.map(|area| Rect::new(f64::from(area.x), f64::from(area.y), f64::from(area.right()), f64::from(area.bottom())));
+    scene.list(Rect::new(0.0, top, f64::from(grid.width), top + height), grid.list, grid.resources);
+    (height, focused)
 }
 
 impl Picture {

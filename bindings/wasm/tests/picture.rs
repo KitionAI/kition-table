@@ -70,10 +70,11 @@ fn the_picture_shows_the_first_view_with_every_field_and_record() {
     assert_eq!(shown["viewId"], view["id"]);
     assert_eq!(shown["viewType"], json!("grid"));
     assert_eq!(shown["records"], json!(25));
-    // Ten columns of 200 px beside the row numbers, and 25 rows of 40 px below the bars.
+    // Ten columns of 200 px beside the row heads, and 25 rows of 40 px below the bars and the
+    // header row.
     let (width, height) = (doc.width(), doc.height());
-    assert!(width >= 56 + 10 * 200, "{width}");
-    assert!(height >= 44 + 52 + 36 + 25 * 40, "{height}");
+    assert!(width >= 72 + 10 * 200, "{width}");
+    assert!(height >= 44 + 52 + 32 + 25 * 40, "{height}");
     // A column's width in the view is the picture's.
     call(&mut doc, "views.patchField", json!({ "tableId": table, "viewId": view["id"], "fieldId": fields[0]["id"], "width": 320 }));
     assert_eq!(doc.width(), width + 120);
@@ -84,16 +85,16 @@ fn titles_and_values_are_drawn_as_text() {
     // Two titles of one length: bars as long as the text could not tell them apart.
     let (alpha, _, _) = deals("Alpha");
     let (omega, _, _) = deals("Omega");
-    let header = [56, 96, 256, 132];
+    let header = [72, 96, 272, 128];
     assert_ne!(pixels(&alpha, header), pixels(&omega, header), "the title's letters are drawn");
     // The rest of the picture is the same.
-    assert_eq!(pixels(&alpha, [256, 96, 1200, 400]), pixels(&omega, [256, 96, 1200, 400]));
+    assert_eq!(pixels(&alpha, [272, 96, 1200, 400]), pixels(&omega, [272, 96, 1200, 400]));
     // A cell's text: its value's letters, in the cell.
     let (mut doc, table, _) = deals("Deal");
-    let before = pixels(&doc, [56, 132, 256, 172]);
+    let before = pixels(&doc, [72, 128, 272, 168]);
     let first = call(&mut doc, "records.list", json!({ "tableId": table, "limit": 1 }))["items"][0]["id"].clone();
     call(&mut doc, "records.update", json!({ "tableId": table, "recordId": first, "values": { "deal": "Deal 9" } }));
-    assert_ne!(pixels(&doc, [56, 132, 256, 172]), before);
+    assert_ne!(pixels(&doc, [72, 128, 272, 168]), before);
 }
 
 #[test]

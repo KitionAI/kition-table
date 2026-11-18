@@ -1,5 +1,5 @@
 //! Color glyphs (emoji) painted with vello_cpu from the fonts' drawing steps (ported from
-//! kition-note's view): layers clipped to glyph outlines, filled with palette colors and linear,
+//! kition-note's view, by way of the picture): layers clipped to glyph outlines, filled with palette colors and linear,
 //! radial, or sweep gradients.
 
 use kition_table_fonts::{Brush, CompositeMode, Extend, Paint, Step};
@@ -11,6 +11,14 @@ use vello_cpu::peniko::{self, BlendMode, Compose, Gradient, Mix};
 /// Paints a color glyph's `steps` (font units, y up) with `base` taking them to the screen;
 /// `foreground` is the text's color, for the palette's foreground entries.
 pub fn paint(ctx: &mut RenderContext, base: Affine, steps: &[Step], foreground: [u8; 4]) {
+    // The glyph is one group: its layers' composite modes act on the glyph's own pixels, and the
+    // group then goes over what is below (a Src or DestIn layer would otherwise cut into the cell).
+    ctx.push_layer(None, None, None, None, None);
+    paint_steps(ctx, base, steps, foreground);
+    ctx.pop_layer();
+}
+
+fn paint_steps(ctx: &mut RenderContext, base: Affine, steps: &[Step], foreground: [u8; 4]) {
     let mut transforms = vec![base];
     // What the next `Fill` fills: the innermost clip's shape, in its own transform.
     let mut clips: Vec<(Affine, BezPath)> = Vec::new();

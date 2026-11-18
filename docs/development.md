@@ -72,6 +72,7 @@ without them.
 |---|---|---|---|
 | `fonts/inter/Inter-Variable.ttf` | Inter | OFL-1.1, `fonts/inter/OFL.txt` | <https://github.com/google/fonts/raw/45e3d5269e4a17d823f6d84470bc084dc5ae46f6/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf>, license `ofl/inter/OFL.txt` at the same commit |
 | `fonts/droid-sans-fallback/DroidSansFallbackFull.ttf` | Droid Sans Fallback (Chinese and Japanese) | Apache-2.0, `fonts/droid-sans-fallback/NOTICE` | <https://android.googlesource.com/platform/frameworks/base/+/cac6285b48e88e118f69992d5c97d56163b6274c/data/fonts/DroidSansFallbackFull.ttf>, license: the `NOTICE` file in the same folder |
+| `fonts/nanum-gothic/NanumGothic-Regular.ttf` | Nanum Gothic (Korean) | OFL-1.1, `fonts/nanum-gothic/OFL.txt` | <https://github.com/google/fonts/raw/45e3d5269e4a17d823f6d84470bc084dc5ae46f6/ofl/nanumgothic/NanumGothic-Regular.ttf>, license `ofl/nanumgothic/OFL.txt` at the same commit |
 | `fonts/noto-color-emoji/Noto-COLRv1.ttf` | Noto Color Emoji (emoji, COLRv1) | OFL-1.1, `fonts/noto-color-emoji/OFL.txt` | <https://github.com/googlefonts/noto-emoji/raw/1ffdd21391dd1f25c081fa93a9dea0c7c029442b/2D/fonts/Noto-COLRv1.ttf>, license `2D/fonts/LICENSE` at the same commit |
 
 The files are renamed to the paths in the first column (googlesource serves a file's raw bytes
@@ -81,6 +82,7 @@ sums:
 ```text
 29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031  fonts/inter/Inter-Variable.ttf
 acb6440a713d880a13a21b468ba7cd43f5a2b2934972e51be791c880730777b8  fonts/droid-sans-fallback/DroidSansFallbackFull.ttf
+76f45ef4a6bcff344c837c95a7dcc26e017e38b5846d5ae0cdcb5b86be2e2d31  fonts/nanum-gothic/NanumGothic-Regular.ttf
 b8e25ea68db82f9e4d0aee921f4420be2be39887bd5c893a2ad98710531f9d0c  fonts/noto-color-emoji/Noto-COLRv1.ttf
 ```
 
@@ -172,7 +174,7 @@ let bytes = document.save(None)?;
 | `crates/engine/time` | `kition-time`: millisecond timestamps that build for wasm32 |
 | `crates/engine/ai-field` | `kition-table-ai`: AI fields' prompts and results; the host runs the model (`host/generate`) |
 | `crates/formats/import` | `kition-table-import`: CSV, TSV and XLSX import with type inference |
-| `crates/view/*` | The picture: fonts and drawing |
+| `crates/view/*` | The picture and the grid: fonts (`fonts`), the grid's layout (`grid`), its display list and rasterizer (`display`), the whole picture (`picture`) |
 | `bindings/wasm` | `kition-table-kit`: `TableDocument` (`KitDocument`, engine contract 2, extras) |
 | `apps/kition-table` | `kition-table`: the engine served headless over the Kit Protocol, with the object model |
 | `web/` | The editor on `@kition/kit-editor`: the table editor, its UI primitives, theme, strings (`web/locales/<locale>/`) and starter templates |

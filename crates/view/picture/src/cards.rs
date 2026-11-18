@@ -6,7 +6,7 @@ use kition_table_file::{Field, Record};
 use kurbo::{Point, Rect};
 use serde_json::Value;
 
-use crate::cell::{self, Align};
+use crate::cell;
 use crate::data::TableShown;
 use crate::format::{self, display, tone};
 use crate::scene::{Scene, shape};
@@ -41,7 +41,7 @@ fn meta_rows(scene: &mut Scene, fields: &[&Field], record: &Record, left: f64, r
         let label = shape(title_of(field), SMALL, REGULAR, 84.0);
         scene.text_mid(label, left, middle, MUTED);
         let area = Rect::new(left + 92.0 - cell::PAD, y, right + cell::PAD, y + META_ROW);
-        cell::draw(scene, field, record.values.get(&field.name), area, Align::Left);
+        cell::draw(scene, field, record.values.get(&field.name), area);
         y += META_ROW;
     }
     y
@@ -249,7 +249,7 @@ pub fn calendar(scene: &mut Scene, shown: &TableShown, top: f64, width: f64) -> 
                 continue;
             }
             let area = Rect::new(x - cell::PAD, card.y0 + 26.0, (x + 200.0).min(card.x1 - 4.0) + cell::PAD, card.y1 - 2.0);
-            cell::draw(scene, field, value, area, Align::Left);
+            cell::draw(scene, field, value, area);
             x += 210.0;
         }
         y += AGENDA_ROW;
