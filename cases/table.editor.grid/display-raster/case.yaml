@@ -5,9 +5,10 @@ intent: >-
   The headless player of the display list (vello_cpu) draws every op where the format puts it:
   snapped rectangles and tofu boxes on whole device pixels, hairlines one device pixel thick at
   device pixel ratios 1, 1.5 and 2, rounded boxes, inside borders, shadows, clips, solid and
-  outline icons, images by fit (a placeholder when undecoded), text from its anchor on its
-  baseline in its one face, and emoji equal to the tile the page will draw. A decoded list draws
-  the same pixels as the original.
+  outline icons equal to the tile the page will draw at the box's snapped corner, images by fit
+  (a placeholder when undecoded), text from its anchor on its baseline in its one face with the
+  baseline on a device pixel row, and emoji equal to the tile the page will draw. A decoded list
+  draws the same pixels as the original.
 layer: gate
 source:
   kind: synthetic

@@ -10,7 +10,12 @@ fn every_entry() -> ResourceTable {
     let photo = resources.image("kition-blob:0123abcd");
     resources.set_image_size(photo, 640, 480);
     let unknown = resources.image("https://example.com/a picture.png");
-    let mut entries: Vec<Entry> = [star, clip].iter().filter_map(|id| resources.icon_entry(*id)).collect();
+    let mut entries: Vec<Entry> = [(star, true, 2.0), (clip, false, 1.5)]
+        .iter()
+        .filter_map(|(id, solid, dpr)| {
+            resources.icon_entry(*id, IconStyle { size: 16.0, stroke: 1.5, solid: *solid, paint: [245, 158, 11, 255] }, *dpr)
+        })
+        .collect();
     entries.push(Entry::Emoji { atlas: 3, size: 13.0, dpr: 1.5, tile: Tile { width: 2, height: 3, left: 0, top: -21, rgba: (0..24).collect() } });
     entries.extend([photo, unknown].iter().filter_map(|key| resources.image_entry(*key)));
     ResourceTable { version: resources.version, entries }
@@ -34,20 +39,22 @@ fn a_table_round_trips_through_its_bytes() {
 fn entries_sit_where_the_format_says() {
     let mut resources = Resources::default();
     let star = resources.icon("star").expect("star");
-    let icon = kition_tessera_icons::icon("star").expect("star");
-    let table = ResourceTable { version: 9, entries: vec![resources.icon_entry(star).expect("entry")] };
+    let style = IconStyle { size: 16.0, stroke: 1.5, solid: true, paint: [1, 2, 3, 255] };
+    let table = ResourceTable { version: 9, entries: vec![resources.icon_entry(star, style, 2.0).expect("entry")] };
+    let tile = icon_tile(&resources, star, style, 2.0).expect("a tile");
     let bytes = encode_resources(&table);
     // The entry's head: kind 1, length of the payload.
     assert_eq!(bytes[12], 1);
     let length = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]) as usize;
     let payload = &bytes[20..20 + length];
     assert_eq!(u16::from_le_bytes([payload[0], payload[1]]), star);
-    assert_eq!(usize::from(u16::from_le_bytes([payload[2], payload[3]])), icon.paths.len());
-    assert_eq!(usize::from(u16::from_le_bytes([payload[4], payload[5]])), icon.fills.len());
-    assert_eq!(f32::from_le_bytes([payload[8], payload[9], payload[10], payload[11]]), kition_tessera_icons::GRID);
-    let first = u32::from_le_bytes([payload[12], payload[13], payload[14], payload[15]]) as usize;
-    let data = 12 + 4 * (icon.paths.len() + icon.fills.len());
-    assert_eq!(&payload[data..data + first], icon.paths[0].as_bytes());
+    assert_eq!(payload[2], 1, "solid");
+    let floats: Vec<f32> = payload[4..16].as_chunks::<4>().0.iter().map(|word| f32::from_le_bytes(*word)).collect();
+    assert_eq!(floats, [16.0, 1.5, 2.0], "size, stroke, dpr");
+    assert_eq!(&payload[16..20], &[1, 2, 3, 255], "the color");
+    let words: Vec<u32> = payload[20..36].as_chunks::<4>().0.iter().map(|word| u32::from_le_bytes(*word)).collect();
+    assert_eq!(words, [tile.width, tile.height, tile.left as u32, tile.top as u32]);
+    assert_eq!(&payload[36..], tile.rgba.as_slice());
     assert_eq!(bytes.len(), 20 + length.next_multiple_of(4));
 
     // An image: key, size, url.

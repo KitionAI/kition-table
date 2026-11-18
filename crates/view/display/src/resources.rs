@@ -1,5 +1,6 @@
-//! The resource table a list's ids refer to: Tessera icons by id, emoji by atlas id (a glyph of
-//! the emoji face the engine rasterizes), and attachment pictures by key (the attachment they
+//! The resource table a list's ids refer to: Tessera icons by id (the page gets each as a tile the
+//! engine rasterizes, as an emoji), emoji by atlas id (a glyph of the emoji face the engine
+//! rasterizes), and attachment pictures by key (the attachment they
 //! show, their size, and their pixels where the engine decoded them).
 //!
 //! The page gets what it lacks as [`Entry`] records in a [`ResourceTable`] (bytes: see
@@ -11,7 +12,7 @@ use std::sync::Arc;
 use kition_table_fonts::FaceId;
 use vello_cpu::Pixmap;
 
-use crate::raster::{Tile, emoji_tile};
+use crate::raster::{IconStyle, Tile, emoji_tile, icon_tile};
 
 /// One attachment picture: what it shows, its size, and its pixels where they were decoded.
 #[derive(Clone, Debug, Default)]
@@ -36,9 +37,8 @@ pub struct Resources {
 /// One resource as the page receives it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Entry {
-    /// A Tessera icon: SVG path data on a `grid` units square; `paths` are stroked, `fills` are
-    /// filled and stroked.
-    Icon { id: u16, grid: f32, paths: Vec<String>, fills: Vec<String> },
+    /// A Tessera icon's tile drawn with one style at one device pixel ratio (straight RGBA).
+    Icon { id: u16, style: IconStyle, dpr: f32, tile: Tile },
     /// An emoji's tile at one font size and device pixel ratio (straight RGBA).
     Emoji { atlas: u32, size: f32, dpr: f32, tile: Tile },
     /// An attachment picture: the attachment's url (`kition-blob:<sha256>` for one held in the
@@ -154,11 +154,10 @@ impl Resources {
         self.images.get(&key).and_then(|picture| picture.pixels.as_ref())
     }
 
-    /// Icon `id` as the page receives it.
-    pub fn icon_entry(&self, id: u16) -> Option<Entry> {
-        let icon = self.icon_of(id)?;
-        let owned = |paths: &[&str]| paths.iter().map(|path| (*path).to_owned()).collect();
-        Some(Entry::Icon { id, grid: kition_tessera_icons::GRID, paths: owned(icon.paths), fills: owned(icon.fills) })
+    /// Icon `id`'s tile drawn with `style` at `dpr` as the page receives it.
+    pub fn icon_entry(&self, id: u16, style: IconStyle, dpr: f64) -> Option<Entry> {
+        let tile = icon_tile(self, id, style, dpr)?;
+        Some(Entry::Icon { id, style, dpr: dpr as f32, tile })
     }
 
     /// Emoji `atlas`'s tile at font size `size` and `dpr` as the page receives it.

@@ -136,6 +136,55 @@ fn icons_draw_in_their_box_and_solid_ones_are_filled() {
 }
 
 #[test]
+fn an_icon_is_its_tile_at_a_snapped_box() {
+    let mut resources = Resources::default();
+    let star = resources.icon("star").expect("Tessera has a star");
+    for solid in [false, true] {
+        let style = IconStyle { size: 16.0, stroke: 1.5, solid, paint: INK };
+        for dpr in [1.0, 1.5, 2.0] {
+            let canvas = one(|_, ink| Op::Icon { icon: star, x: 4.3, y: 6.6, size: 16.0, stroke: 1.5, paint: ink, solid }, &resources, dpr, 60);
+            let tile = icon_tile(&resources, star, style, dpr).expect("a tile");
+            let (left, top) = (snap(4.3, 0.0, dpr) as i32 + tile.left, snap(6.6, 0.0, dpr) as i32 + tile.top);
+            let mut worst = 0u8;
+            for ty in 0..tile.height {
+                for tx in 0..tile.width {
+                    let at = ((ty * tile.width + tx) * 4) as usize;
+                    let got = canvas.at((left + tx as i32) as u32, (top + ty as i32) as u32);
+                    worst = worst.max(tile.rgba[at..at + 4].iter().zip(got).map(|(a, b)| a.abs_diff(b)).max().unwrap_or(0));
+                }
+            }
+            assert!(worst <= 2, "solid {solid}, dpr {dpr}: the canvas differs from the tile by {worst}");
+            let (x0, y0, x1, y1) = canvas.ink().expect("ink");
+            assert!(x0 as i32 > left && y0 as i32 > top, "solid {solid}, dpr {dpr}: the tile has room around the ink");
+            assert!((x1 as i32) < left + tile.width as i32 - 1 && (y1 as i32) < top + tile.height as i32 - 1, "solid {solid}, dpr {dpr}");
+        }
+    }
+    assert_eq!(icon_tile(&resources, star + 1, IconStyle { size: 16.0, stroke: 1.5, solid: false, paint: INK }, 1.0), None);
+}
+
+#[test]
+fn a_text_baseline_sits_on_a_device_pixel_row() {
+    assert!(fonts());
+    let none = Resources::default();
+    // The same run at baselines a fraction of a device pixel apart draws the same pixels.
+    let at = |y: f32, dpr: f64| {
+        one(
+            |list, ink| {
+                let text = list.string("Hamburg");
+                Op::Text { x: 4.0, y, align: Align::Left, face: Face::Sans, weight: 400, size: 13.0, paint: ink, text, width: 50.0 }
+            },
+            &none,
+            dpr,
+            80,
+        )
+        .rgba
+    };
+    assert_eq!(at(20.0, 2.0), at(20.2, 2.0), "dpr 2: 20.2 rounds to the row of 20");
+    assert_eq!(at(20.0, 1.0), at(19.6, 1.0), "dpr 1: 19.6 rounds to the row of 20");
+    assert_ne!(at(20.0, 2.0), at(20.3, 2.0), "dpr 2: 20.3 is the next row");
+}
+
+#[test]
 fn images_fill_their_box_or_show_a_placeholder() {
     let mut resources = Resources::default();
     let red = vello_cpu::Pixmap::from_parts(vec![vello_cpu::peniko::color::PremulRgba8 { r: 255, g: 0, b: 0, a: 255 }; 4 * 2], 4, 2);

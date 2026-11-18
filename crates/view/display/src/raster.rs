@@ -4,8 +4,11 @@
 
 use kition_table_fonts::{FaceId, Role};
 use kurbo::{Affine, BezPath, Rect, RoundedRect, Shape, Stroke};
+use std::sync::Arc;
+use vello_cpu::peniko::color::PremulRgba8;
 use vello_cpu::peniko::{Color, ImageSampler};
-use vello_cpu::{Image, ImageSource, PixmapMut, RenderContext, Resources as VelloResources};
+
+use vello_cpu::{Image, ImageSource, Pixmap, PixmapMut, RenderContext, Resources as VelloResources};
 
 use crate::{Axis, DisplayList, Face, Fit, Op, Resources, line_pixel, snap};
 
@@ -55,6 +58,8 @@ pub fn draw(ctx: &mut RenderContext, list: &DisplayList, resources: &Resources, 
     let at = At { x, y, dpr };
     let screen = at.screen();
     let mut clips = 0usize;
+    // The icons' tiles this list draws, made once each.
+    let mut tiles: std::collections::HashMap<IconTileKey, (Arc<Pixmap>, i32)> = std::collections::HashMap::new();
     for op in &list.ops {
         match op {
             Op::Rect { x, y, w, h, paint: index, snap } => {
@@ -108,9 +113,11 @@ pub fn draw(ctx: &mut RenderContext, list: &DisplayList, resources: &Resources, 
                 let run = kition_table_fonts::shape_in(face, list.text(*text), *weight, *size);
                 let scale = f64::from(*size) / f64::from(run.upem);
                 let mut pen = f64::from(align.left(*x, *width));
+                // The baseline on a device pixel row, as browsers put it.
+                let baseline = at.y + snap(f64::from(*y), at.y, dpr) / dpr;
                 ctx.set_paint(paint(list.color(*index)));
                 for glyph in &run.glyphs {
-                    let origin = (pen + f64::from(glyph.x_offset) * scale, f64::from(*y) - f64::from(glyph.y_offset) * scale);
+                    let origin = (pen + f64::from(glyph.x_offset) * scale, baseline - f64::from(glyph.y_offset) * scale);
                     let outline = kition_table_fonts::outline(face, *weight, *size, glyph.id);
                     ctx.set_transform(screen * Affine::translate(origin) * Affine::scale(scale));
                     ctx.fill_path(&outline);
@@ -128,25 +135,23 @@ pub fn draw(ctx: &mut RenderContext, list: &DisplayList, resources: &Resources, 
                 emoji(ctx, face, glyph, Affine::translate(pen), f64::from(*size) * dpr);
             }
             Op::Icon { icon, x, y, size, stroke, paint: index, solid } => {
-                let Some(icon) = resources.icon_of(*icon) else { continue };
-                let grid = f64::from(kition_tessera_icons::GRID);
-                ctx.set_transform(screen * Affine::translate((f64::from(*x), f64::from(*y))) * Affine::scale(f64::from(*size) / grid));
-                ctx.set_paint(paint(list.color(*index)));
-                ctx.set_stroke(Stroke::new(f64::from(*stroke)).with_caps(kurbo::Cap::Round).with_join(kurbo::Join::Round));
-                for data in icon.paths {
-                    if let Ok(path) = BezPath::from_svg(data) {
-                        if *solid {
-                            ctx.fill_path(&path);
-                        }
-                        ctx.stroke_path(&path);
+                // The icon's tile, as the page draws it, put at its box's snapped top left.
+                let style = IconStyle { size: *size, stroke: *stroke, solid: *solid, paint: list.color(*index) };
+                let key = (*icon, size.to_bits(), stroke.to_bits(), *solid, style.paint);
+                let tile = match tiles.get(&key) {
+                    Some(tile) => tile.clone(),
+                    None => {
+                        let Some(made) = icon_pixmap(resources, *icon, style, dpr) else { continue };
+                        tiles.entry(key).or_insert(made).clone()
                     }
-                }
-                for data in icon.fills {
-                    if let Ok(path) = BezPath::from_svg(data) {
-                        ctx.fill_path(&path);
-                        ctx.stroke_path(&path);
-                    }
-                }
+                };
+                let (left, top) = (snap(f64::from(*x), at.x, dpr) - f64::from(tile.1), snap(f64::from(*y), at.y, dpr) - f64::from(tile.1));
+                let area = Rect::new(left, top, left + f64::from(tile.0.width()), top + f64::from(tile.0.height()));
+                ctx.set_transform(Affine::IDENTITY);
+                ctx.set_paint(Image { image: ImageSource::Pixmap(tile.0), sampler: ImageSampler::default() });
+                ctx.set_paint_transform(Affine::translate((left, top)));
+                ctx.fill_rect(&area);
+                ctx.reset_paint_transform();
             }
             Op::Image { key, x, y, w, h, fit, radius } => {
                 let area = rect(*x, *y, *w, *h);
@@ -219,6 +224,66 @@ fn tofu(ctx: &mut RenderContext, area: Rect) {
     }
 }
 
+/// An icon tile's identity in one list: the icon, its size and stroke (as bits), whether it is
+/// solid, and its color.
+type IconTileKey = (u16, u32, u32, bool, [u8; 4]);
+
+/// How an icon is drawn: its box's size (document pixels), its stroke width (on the icon's grid),
+/// whether its outline is filled too, and its color.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct IconStyle {
+    pub size: f32,
+    pub stroke: f32,
+    pub solid: bool,
+    pub paint: [u8; 4],
+}
+
+/// A Tessera icon with its box's top left at `origin` (device pixels).
+fn draw_icon(ctx: &mut RenderContext, icon: &kition_tessera_icons::Icon, origin: Affine, style: IconStyle, dpr: f64) {
+    let grid = f64::from(kition_tessera_icons::GRID);
+    ctx.set_transform(origin * Affine::scale(f64::from(style.size) * dpr / grid));
+    ctx.set_paint(paint(style.paint));
+    ctx.set_stroke(Stroke::new(f64::from(style.stroke)).with_caps(kurbo::Cap::Round).with_join(kurbo::Join::Round));
+    for data in icon.paths {
+        if let Ok(path) = BezPath::from_svg(data) {
+            if style.solid {
+                ctx.fill_path(&path);
+            }
+            ctx.stroke_path(&path);
+        }
+    }
+    for data in icon.fills {
+        if let Ok(path) = BezPath::from_svg(data) {
+            ctx.fill_path(&path);
+            ctx.stroke_path(&path);
+        }
+    }
+}
+
+/// Icon `id` drawn with `style` at `dpr` on its own square (premultiplied), and how far the square
+/// reaches past the icon's box on every side: the stroke's half width and a pixel of antialiasing.
+fn icon_pixmap(resources: &Resources, id: u16, style: IconStyle, dpr: f64) -> Option<(Arc<Pixmap>, i32)> {
+    let icon = resources.icon_of(id)?;
+    let device = f64::from(style.size) * dpr;
+    let margin = (f64::from(style.stroke) * device / f64::from(kition_tessera_icons::GRID) / 2.0).ceil() as i32 + 1;
+    let side = u16::try_from(device.ceil() as i32 + 2 * margin).ok()?.max(1);
+    let mut ctx = RenderContext::new(side, side);
+    draw_icon(&mut ctx, icon, Affine::translate((f64::from(margin), f64::from(margin))), style, dpr);
+    let pixels = premultiplied(ctx, u32::from(side), u32::from(side));
+    let premul = pixels.as_chunks::<4>().0.iter().map(|px| PremulRgba8 { r: px[0], g: px[1], b: px[2], a: px[3] }).collect();
+    Some((Arc::new(Pixmap::from_parts(premul, side, side)), margin))
+}
+
+/// The tile of icon `id` drawn with `style` at `dpr` (straight RGBA): the pixels the rasterizer
+/// puts for an [`Op::Icon`], its top left `left`, `top` device pixels from the box's snapped top
+/// left.
+pub fn icon_tile(resources: &Resources, id: u16, style: IconStyle, dpr: f64) -> Option<Tile> {
+    let (pixmap, margin) = icon_pixmap(resources, id, style, dpr)?;
+    let mut rgba: Vec<u8> = pixmap.data().iter().flat_map(|px| [px.r, px.g, px.b, px.a]).collect();
+    straight(&mut rgba);
+    Some(Tile { width: u32::from(pixmap.width()), height: u32::from(pixmap.height()), left: -margin, top: -margin, rgba })
+}
+
 /// An emoji glyph with its pen position at `pen` (device pixels) and `size` device pixels its
 /// font size.
 fn emoji(ctx: &mut RenderContext, face: FaceId, glyph: u32, pen: Affine, size: f64) {
@@ -258,7 +323,8 @@ pub fn emoji_tile(resources: &Resources, atlas: u32, size: f32, dpr: f64) -> Opt
     Some(Tile { width, height, left, top, rgba: finish(ctx, width, height) })
 }
 
-fn finish(mut ctx: RenderContext, width: u32, height: u32) -> Vec<u8> {
+/// What `ctx` drew, `width` x `height` premultiplied RGBA8.
+fn premultiplied(mut ctx: RenderContext, width: u32, height: u32) -> Vec<u8> {
     ctx.flush();
     let (w, h) = (u16::try_from(width).unwrap_or(u16::MAX), u16::try_from(height).unwrap_or(u16::MAX));
     let mut pixels = vec![0u8; usize::from(w) * usize::from(h) * 4];
@@ -266,6 +332,11 @@ fn finish(mut ctx: RenderContext, width: u32, height: u32) -> Vec<u8> {
     if let Some(target) = PixmapMut::new(w, h, &mut pixels) {
         ctx.render(target, &mut resources);
     }
+    pixels
+}
+
+fn finish(ctx: RenderContext, width: u32, height: u32) -> Vec<u8> {
+    let mut pixels = premultiplied(ctx, width, height);
     straight(&mut pixels);
     pixels
 }

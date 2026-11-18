@@ -5,8 +5,9 @@ intent: >-
   The resources a display list names by id travel to the page as a resource table, apart from the
   lists: one little-endian, 4-byte aligned buffer with a 12-byte header (magic KTRS, version 1,
   the resources version it brings the page to, an entry count) and entries of a kind and a
-  length: Tessera icons (id, grid, stroked paths and filled paths as SVG path data), emoji tiles
-  (atlas id, font size, device pixel ratio, the rasterizer's own tile in straight RGBA) and
+  length: icon tiles (id, size, stroke, solid, color, device pixel ratio, the rasterizer's own tile
+  in straight RGBA), emoji tiles (atlas id, font size, device pixel ratio, the rasterizer's own
+  tile in straight RGBA) and
   attachment pictures (key, size as shown or zero, the attachment's url). Every entry survives
   encode and decode unchanged, the bytes sit where the format says, an image key stays the same
   for the same url, and a table of another version, cut short, too long, of an unknown kind, with

@@ -13,7 +13,7 @@
 //! little endian, every section starting on a 4-byte boundary:
 //!
 //! ```text
-//! header   56 B   magic "KTDL" | version u16 = 1 | flags u16
+//! header   56 B   magic "KTDL" | version u16 = 1 | flags u16 (bit 0: a draft, [`DRAFT`])
 //!                 epoch u32 | theme u16 | resources u16
 //!                 layer u8 | col_band u8 | pad u16 | row_band u32
 //!                 origin x, y f32 | size w, h f32
@@ -36,11 +36,14 @@
 //!   ends of a line goes to the device pixel edge `round((v - o) * dpr)` ([`snap`]);
 //! - a line of [`Op::Lines`] at `pos` is the one device pixel row (or column) `floor((pos - o) *
 //!   dpr)` ([`line_pixel`]), one device pixel thick at every ratio;
-//! - an [`Op::Emoji`] is drawn with its pen position snapped as a coordinate is, so its tile
-//!   (rasterized once by the engine) lands on whole device pixels.
+//! - an [`Op::Emoji`] is drawn with its pen position snapped as a coordinate is, and an
+//!   [`Op::Icon`] with its box's top left snapped, so their tiles (rasterized once by the engine)
+//!   land on whole device pixels;
+//! - a [`Op::Text`] run's baseline `y` goes to the device pixel row `round((y - o) * dpr)`, where
+//!   browsers put it; its `x` stays exact.
 //!
-//! Everything else (text, rounded rectangles, icons, shadows, images) is drawn at its exact
-//! position and antialiased.
+//! Everything else (rounded rectangles, shadows, images) is drawn at its exact position and
+//! antialiased.
 //!
 //! # Resource table
 //!
@@ -52,15 +55,18 @@
 //! ```text
 //! header   12 B   magic "KTRS" | version u16 = 1 | resources u16 | entry count u32
 //! entry           kind u8 | 0 u8 | 0 u16 | payload length u32 | payload, padded with zeros to 4 B
-//!   1 icon        id u16 | path count u16 | fill count u16 | 0 u16 | grid f32
-//!                 | (path count + fill count) x byte length u32 | UTF-8 SVG path data back to back
-//!                 (paths are stroked; fills are filled and stroked)
+//!   1 icon        id u16 | solid u8 | 0 u8 | size f32 | stroke f32 | dpr f32 | paint RGBA u32
+//!                 | width u32 | height u32 | left i32 | top i32
+//!                 | straight RGBA8, width x height x 4 B (the tile of `icon_tile`)
 //!   2 emoji       atlas u32 | size f32 | dpr f32 | width u32 | height u32 | left i32 | top i32
 //!                 | straight RGBA8, width x height x 4 B (the tile of `emoji_tile`)
 //!   3 image       key u32 | width u32 | height u32 | url byte length u32 | UTF-8 url
 //! ```
 //!
-//! `resources` is the version the entries bring the page to. An image's url is the attachment's
+//! `resources` is the version the entries bring the page to. A tile goes with its top left
+//! `left`, `top` device pixels from the snapped position (an icon's box, an emoji's pen); an
+//! icon's tile is one style of it (size, stroke, fill, color: the `Op::Icon`'s, its palette entry
+//! as straight RGBA, R in the lowest byte), so the page never strokes a path. An image's url is the attachment's
 //! (`kition-blob:<sha256>` for a file held in the document); the page loads and decodes it, and
 //! applies the picture's orientation as the engine does. Its width and height are the picture's
 //! as shown (after orientation), or 0 when the engine does not know them; the grid's layout uses
@@ -76,7 +82,7 @@ mod resources;
 mod table;
 
 pub use codec::{DecodeError, decode, encode};
-pub use raster::{Tile, draw, emoji_tile, raster};
+pub use raster::{IconStyle, Tile, draw, emoji_tile, icon_tile, raster};
 pub use resources::{Entry, ResourceTable, Resources};
 pub use table::{decode_resources, encode_resources};
 
@@ -88,6 +94,10 @@ pub const VERSION: u16 = 1;
 pub const HEADER_BYTES: usize = 56;
 /// A hit record's size in bytes.
 pub const HIT_BYTES: usize = 28;
+/// A header flag: the list is a draft, made while the view jumps (its text measured from the
+/// characters' advances, without kerning, ligatures or emoji); it draws as any list, and the page
+/// asks for the exact list once the view rests.
+pub const DRAFT: u16 = 1;
 /// The first four bytes of every resource table.
 pub const RESOURCE_MAGIC: [u8; 4] = *b"KTRS";
 /// The resource table format version this crate writes and reads.
@@ -137,7 +147,7 @@ pub struct Key {
 /// A list's header (the counts are the sections' own lengths).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Header {
-    /// Reserved, zero in v1.
+    /// [`DRAFT`], or zero.
     pub flags: u16,
     /// The arrangement the list was laid out for.
     pub epoch: u32,
@@ -294,7 +304,8 @@ pub enum Op {
     Emoji { atlas: u32, x: f32, y: f32, size: f32 },
     /// `0x08` (24 B): op, flags (bit 0 solid), paint u16, icon id u16, 0 u16, x y size stroke. A
     /// Tessera icon, `size` px square from its top left, its strokes `stroke` wide in the icon's
-    /// 24-unit grid; a solid icon's stroked shapes are filled too (a rating's stars).
+    /// 24-unit grid; a solid icon's stroked shapes are filled too (a rating's stars). Both
+    /// players draw the engine's tile of it ([`icon_tile`]) at its box's snapped top left.
     Icon { icon: u16, x: f32, y: f32, size: f32, stroke: f32, paint: u16, solid: bool },
     /// `0x09` (28 B): op, fit u8, 0 u16, image key u32, x y w h radius. An attachment's picture,
     /// decoded by the player.
