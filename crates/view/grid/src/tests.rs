@@ -242,6 +242,17 @@ fn mixed_scripts_split_into_runs_of_one_face() {
     assert_eq!(cells[0], vec!["text Sans 400 13 Left #1A1A1A 'a '", "tofu", "tofu"]);
 }
 
+/// A rating field whose icon is `thumbs` (the editor's and the agent's name for it) draws thumbs,
+/// filled up to its value (case regressions/issue-rating-thumbs).
+#[test]
+fn a_thumbs_rating_draws_thumbs() {
+    let fields = vec![field(1, "likes", "rating", json!({ "max": 3, "icon": "thumbs" }))];
+    let (_, cells) = one_row(fields, json!({ "likes": 2 }), 40.0);
+    assert_eq!(cells[0].len(), 3, "{:?}", cells[0]);
+    assert!(cells[0].iter().all(|op| op.starts_with("icon thumbs-up 16 solid")), "{:?}", cells[0]);
+    assert_eq!(cells[0].iter().filter(|op| op.ends_with("#F59E0B")).count(), 2, "{:?}", cells[0]);
+}
+
 #[test]
 fn typed_cells() {
     let fields = vec![

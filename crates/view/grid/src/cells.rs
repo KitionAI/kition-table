@@ -337,7 +337,7 @@ pub fn cell(out: &mut Out<'_>, field: &Field, value: Option<&Value>, area: Area,
             let rated = value.and_then(Value::as_f64).unwrap_or(0.0).clamp(0.0, max as f64).round() as usize;
             let symbol = match field.options.get("icon").and_then(Value::as_str) {
                 Some("heart") => "heart",
-                Some("thumb" | "thumbs-up" | "thumbsUp") => "thumbs-up",
+                Some("thumbs" | "thumb" | "thumbs-up" | "thumbsUp") => "thumbs-up",
                 _ => "star",
             };
             let width = max as f32 * RATING + (max as f32 - 1.0) * RATING_GAP;

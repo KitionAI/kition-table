@@ -1,0 +1,21 @@
+format: 1
+id: regressions/issue-rating-thumbs
+feature: table.editor.grid
+intent: >-
+  A rating field whose icon is `thumbs` (the name the editor's field settings and the agent's
+  schema write) draws thumbs in the grid, one per step, filled up to the value. Before, the grid's
+  layout knew only `thumb`, `thumbs-up` and `thumbsUp`, so such a field drew stars on the new grid
+  and in the headless picture, while the old grid drew thumbs.
+layer: gate
+source:
+  kind: probe
+  from: the old grid's ratingCellRenderer spec, checked against the new grid (card tg5)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-grid, filter: "tests::a_thumbs_rating_draws_thumbs" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"
