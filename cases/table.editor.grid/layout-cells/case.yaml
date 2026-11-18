@@ -11,7 +11,9 @@ intent: >-
   ellipsis 1 px short of its room; runs of one face each (Inter, Droid Sans Fallback, Nanum
   Gothic), emoji as EMOJI ops, characters no face covers as TOFU boxes; checkboxes, choice chips
   in their tones, rating symbols, people, attachments (pictures and files) and buttons, with
-  their hit parts; and the focus outline. Checked as structure, not pixels.
+  their hit parts; and the focus outline. A cut is the longest prefix that fits (as halving the
+  text finds it), a draft shaper cuts to its room too and leaves emoji out, and the shaping cache
+  keeps what was used lately. Checked as structure, not pixels.
 layer: gate
 source:
   kind: synthetic

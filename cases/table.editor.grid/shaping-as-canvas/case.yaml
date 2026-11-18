@@ -6,7 +6,8 @@ intent: >-
   default features stay on (kerning, ligatures, contextual alternates: "->" shapes as Inter's
   arrow), Inter's optical size follows the font size within its axis (12 and 14 px alike, 20 px
   tighter), Korean shapes in Nanum Gothic, and a character no face covers is a tofu run of
-  0.6 em boxes instead of a glyph the page would set in a system font.
+  0.6 em boxes instead of a glyph the page would set in a system font. A face's coverage of the
+  basic plane is its character map, and a draft's runs split as shaping splits them.
 layer: gate
 source:
   kind: synthetic

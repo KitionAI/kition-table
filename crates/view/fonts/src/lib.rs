@@ -90,6 +90,9 @@ struct Face {
     /// Shape plans by weight, script, and language, made on first use: making one per run took
     /// most of a large table's first picture.
     plans: Mutex<HashMap<PlanKey, Arc<harfrust::ShapePlan>>>,
+    /// Which characters of the Basic Multilingual Plane the face maps, one bit each: choosing a
+    /// face per character read the character map each time, a quarter of a band's layout.
+    bmp: Box<[u64; 1024]>,
 }
 
 /// What a shape plan is for (the direction is always left to right, the features the defaults).
@@ -105,6 +108,10 @@ impl Face {
     }
 
     fn covers(&self, c: char) -> bool {
+        let code = u32::from(c) as usize;
+        if code < 0x1_0000 {
+            return self.bmp[code / 64] & (1 << (code % 64)) != 0;
+        }
         self.skrifa().is_some_and(|font| font.charmap().map(c).is_some())
     }
 
@@ -190,12 +197,20 @@ fn role_of(family: &str) -> Role {
 /// Registers a font file (TrueType or OpenType). Answers the family name, or an error for bytes
 /// that are not a font. Registering the same family again keeps the first.
 pub fn add_font(bytes: Vec<u8>) -> Result<String, String> {
-    let (family, upem, ascent, descent, variable, opsz) = {
+    let (family, upem, ascent, descent, variable, opsz, bmp) = {
         let font = skrifa::FontRef::new(&bytes).map_err(|error| format!("not a font: {error}"))?;
         let metrics = font.metrics(Size::unscaled(), LocationRef::default());
         let variable = font.axes().iter().any(|axis| axis.tag() == skrifa::Tag::new(b"wght"));
         let opsz = font.axes().iter().find(|axis| axis.tag() == skrifa::Tag::new(b"opsz")).map(|axis| (axis.min_value(), axis.max_value()));
-        (family_name(&font), f32::from(metrics.units_per_em), metrics.ascent, -metrics.descent, variable, opsz)
+        let charmap = font.charmap();
+        let mut bmp = Box::new([0u64; 1024]);
+        for (code, _) in charmap.mappings() {
+            let code = code as usize;
+            if code < 0x1_0000 && char::from_u32(code as u32).is_some_and(|c| charmap.map(c).is_some()) {
+                bmp[code / 64] |= 1 << (code % 64);
+            }
+        }
+        (family_name(&font), f32::from(metrics.units_per_em), metrics.ascent, -metrics.descent, variable, opsz, bmp)
     };
     let shaper = {
         let hb = harfrust::FontRef::new(&bytes).map_err(|error| format!("not a font: {error:?}"))?;
@@ -216,6 +231,7 @@ pub fn add_font(bytes: Vec<u8>) -> Result<String, String> {
             shaper,
             instances: Mutex::new(HashMap::new()),
             plans: Mutex::new(HashMap::new()),
+            bmp,
         }));
     }
     Ok(family)
@@ -438,6 +454,22 @@ enum Slot {
 /// Shapes `text` in `family` at `weight` and `size` px: runs of one face each (or tofu runs), in
 /// text order, with clusters as byte offsets into `text`. Without a face the result is empty.
 pub fn shape(text: &str, family: Family, weight: u16, size: f32) -> Vec<Run> {
+    runs(text, family, weight, size, shape_run)
+}
+
+/// `text` split into runs as [`shape`] splits it, each glyph the character's own (its character
+/// map's glyph and its advance at `weight` and `size`), without shaping: no kerning, ligatures or
+/// marks placed. Several times cheaper than shaping, for a draft of a layout (the grid while its
+/// view jumps); a run's width is near its shaped width, not equal to it.
+pub fn advances(text: &str, family: Family, weight: u16, size: f32) -> Vec<Run> {
+    runs(text, family, weight, size, advance_run)
+}
+
+/// What makes one run: the faces, the run's face, the text and the run's range of it, the weight
+/// and the size.
+type RunMaker = fn(&[Arc<Face>], usize, &str, std::ops::Range<usize>, u16, f32) -> Run;
+
+fn runs(text: &str, family: Family, weight: u16, size: f32, make: RunMaker) -> Vec<Run> {
     let faces = faces();
     let Some(first) = first_face(&faces, family).or_else(|| emoji_face(&faces)) else { return Vec::new() };
     let mut runs = Vec::new();
@@ -446,7 +478,7 @@ pub fn shape(text: &str, family: Family, weight: u16, size: f32) -> Vec<Run> {
     let emoji = emoji_face(&faces);
     let mut chars = text.char_indices().peekable();
     let flush = |runs: &mut Vec<Run>, slot: Option<Slot>, range: std::ops::Range<usize>| match slot {
-        Some(Slot::Face(index)) if !range.is_empty() => runs.push(shape_run(&faces, index, text, range, weight, size)),
+        Some(Slot::Face(index)) if !range.is_empty() => runs.push(make(&faces, index, text, range, weight, size)),
         Some(Slot::Tofu) if !range.is_empty() => runs.push(tofu_run(first, text, range)),
         _ => {}
     };
@@ -494,6 +526,28 @@ fn tofu_run(face: usize, text: &str, range: std::ops::Range<usize>) -> Run {
         .map(|(at, _)| Glyph { id: 0, cluster: range.start + at, advance: TOFU_ADVANCE * 1000.0, x_offset: 0.0, y_offset: 0.0 })
         .collect();
     Run { face: FaceId(face), tofu: true, upem: 1000.0, glyphs }
+}
+
+fn advance_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Range<usize>, weight: u16, size: f32) -> Run {
+    let Some(face) = faces.get(index) else { return Run { face: FaceId(index), tofu: false, upem: 1000.0, glyphs: Vec::new() } };
+    let mut glyphs = Vec::new();
+    if let (Some(font), Some(part)) = (face.skrifa(), text.get(range.clone())) {
+        let (_, location) = face.at(face.key(weight, size));
+        let location: LocationRef<'_> = location.as_ref().into();
+        let metrics = font.glyph_metrics(Size::unscaled(), location);
+        let charmap = font.charmap();
+        for (at, c) in part.char_indices() {
+            let id = charmap.map(c).unwrap_or_default();
+            glyphs.push(Glyph {
+                id: id.to_u32(),
+                cluster: range.start + at,
+                advance: metrics.advance_width(id).unwrap_or_default(),
+                x_offset: 0.0,
+                y_offset: 0.0,
+            });
+        }
+    }
+    Run { face: FaceId(index), tofu: false, upem: face.upem, glyphs }
 }
 
 fn shape_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Range<usize>, weight: u16, size: f32) -> Run {

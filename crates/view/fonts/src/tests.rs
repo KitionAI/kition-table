@@ -141,3 +141,33 @@ fn the_build_embeds_the_checkout_files() {
         assert!(build.contains(&format!("{file:?}")), "build.rs embeds {file}");
     }
 }
+
+#[test]
+fn a_faces_coverage_of_the_basic_plane_is_its_character_map() {
+    if !registered() {
+        return;
+    }
+    for face in faces().iter() {
+        let font = face.skrifa().expect("a font");
+        let charmap = font.charmap();
+        for code in 0..0x1_0000u32 {
+            let Some(c) = char::from_u32(code) else { continue };
+            assert_eq!(face.covers(c), charmap.map(c).is_some(), "{:?} U+{code:04X}", face.role);
+        }
+    }
+}
+
+#[test]
+fn advances_split_as_shaping_does_and_measure_near_it() {
+    if !registered() {
+        return;
+    }
+    for text in ["Quarterly planning WAVE", "Hello 世界 again", "서울 지사 회의록", "Typography -> => != office"] {
+        let (shaped, drafted) = (shape(text, Family::Sans, REGULAR, 13.0), advances(text, Family::Sans, REGULAR, 13.0));
+        let faces = |runs: &[Run]| runs.iter().map(|run| (run.face, run.tofu)).collect::<Vec<_>>();
+        assert_eq!(faces(&shaped), faces(&drafted), "{text}: the same runs in the same faces");
+        let (exact, near) = (width(&shaped, 13.0), width(&drafted, 13.0));
+        assert!((exact - near).abs() <= 0.05 * exact + 6.0, "{text}: {near} near {exact}");
+        assert!(drafted.iter().all(|run| run.glyphs.iter().all(|glyph| glyph.id != 0)), "{text}: every character's own glyph");
+    }
+}

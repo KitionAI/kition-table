@@ -28,14 +28,15 @@ pub enum Kind {
 }
 
 /// A run of a shaped line: its bytes of the line's text, where it starts and how wide it is, and
-/// its glyphs' ids and pen positions (for emoji and tofu).
+/// its glyphs: id, pen position and advance (for emoji and tofu) and the byte of the line's text
+/// the glyph's cluster starts at (for cutting).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Piece {
     pub kind: Kind,
     pub range: Range<usize>,
     pub x: f32,
     pub width: f32,
-    pub glyphs: Vec<(u32, f32, f32)>,
+    pub glyphs: Vec<(u32, f32, f32, usize)>,
 }
 
 /// One line of text, shaped and measured.
@@ -65,51 +66,105 @@ fn kind(role: Option<Role>, face: FaceId, tofu: bool) -> Kind {
     }
 }
 
-/// Shapes and measures text, remembering what it shaped (one table's cells repeat a lot).
-#[derive(Default)]
-pub struct Shaper {
-    lines: HashMap<(String, u16, u32), Arc<Line>>,
+/// A bounded cache that keeps what was used lately: two generations, the current one and the one
+/// before it. A hit in the older one moves the entry to the current one; when the current one is
+/// full it becomes the older one and the older one goes. So an entry used once in the last
+/// `GENERATION` insertions is always kept, and memory stays under three times that. The
+/// generation that goes is freed a few entries per insertion, not at once (freeing tens of
+/// thousands of lines at once stalled a band by tens of milliseconds).
+struct Recent<K, V> {
+    current: HashMap<K, V>,
+    older: HashMap<K, V>,
+    retiring: std::collections::hash_map::IntoIter<K, V>,
 }
 
-/// The cache keeps at most this many lines before it starts again.
-const CACHE_MAX: usize = 50_000;
+impl<K, V> Default for Recent<K, V> {
+    fn default() -> Self {
+        Self { current: HashMap::new(), older: HashMap::new(), retiring: HashMap::new().into_iter() }
+    }
+}
+
+/// How many entries of a generation that went are freed per insertion.
+const RETIRE_STEP: usize = 64;
+
+/// The narrowest a character's advance is taken to be, in em: a text longer than a line could hold
+/// at this width is cut without shaping all of it.
+const NARROWEST: f32 = 0.15;
+
+/// How far past its room (in em) the advances may put a prefix that still fits once shaped
+/// (kerning and ligatures at the cut): a prefix further out is taken not to fit.
+const CUT_MARGIN: f32 = 0.25;
+
+/// How many entries a generation holds.
+const GENERATION: usize = 64 * 1024;
+
+impl<K: std::hash::Hash + Eq, V: Clone> Recent<K, V> {
+    fn get(&mut self, key: &K) -> Option<V> {
+        if let Some(found) = self.current.get(key) {
+            return Some(found.clone());
+        }
+        let (key, value) = self.older.remove_entry(key)?;
+        self.insert(key, value.clone());
+        Some(value)
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        for _ in 0..RETIRE_STEP {
+            if self.retiring.next().is_none() {
+                break;
+            }
+        }
+        if self.current.len() >= GENERATION {
+            let older = std::mem::replace(&mut self.older, std::mem::take(&mut self.current));
+            // What is left of the generation before (none, at this pace) goes now.
+            self.retiring = older.into_iter();
+        }
+        self.current.insert(key, value);
+    }
+}
+
+/// Shapes and measures text, remembering what it shaped and how it cut it (one table's cells
+/// repeat a lot, and a person scrolls back and forth).
+///
+/// A draft shaper ([`Shaper::draft`]) measures from the characters' advances only
+/// (`kition_table_fonts::advances`: no kerning or ligatures) and leaves emoji out, several times
+/// faster: for the grid's low-detail bands while its view jumps, which exact bands replace. It
+/// remembers nothing (a jumping view rarely shows a text twice).
+#[derive(Default)]
+pub struct Shaper {
+    draft: bool,
+    lines: Recent<(String, u16, u32), Arc<Line>>,
+    /// Lines cut to a width: (text, weight, size, width) to the line [`Shaper::line`] answered.
+    cuts: Recent<(String, u16, u32, u32), Arc<Line>>,
+}
 
 impl Shaper {
+    /// A shaper of drafts (see the type's documentation).
+    pub fn draft() -> Self {
+        Self { draft: true, ..Self::default() }
+    }
+
+    /// `text` on one line, measured as this shaper measures (shaped, or from advances).
+    fn measure(&self, text: &str, weight: u16, size: f32) -> Line {
+        let mut line = shaped(text, weight, size, self.draft);
+        if self.draft {
+            for piece in line.pieces.iter_mut().filter(|piece| matches!(piece.kind, Kind::Emoji(_))) {
+                piece.glyphs.clear();
+            }
+        }
+        line
+    }
+
     /// `text` on one line, as it is (line breaks and tabs as spaces).
     pub fn shape(&mut self, text: &str, weight: u16, size: f32) -> Arc<Line> {
+        if self.draft {
+            return Arc::new(self.measure(text, weight, size));
+        }
         let key = (text.to_owned(), weight, size.to_bits());
         if let Some(found) = self.lines.get(&key) {
-            return found.clone();
+            return found;
         }
-        let flat = text.replace(['\n', '\r', '\t'], " ");
-        let runs = kition_table_fonts::shape(&flat, Family::Sans, weight, size);
-        let mut pieces: Vec<Piece> = Vec::with_capacity(runs.len());
-        let mut x = 0.0;
-        for (index, run) in runs.iter().enumerate() {
-            let start = run.glyphs.iter().map(|glyph| glyph.cluster).min().unwrap_or(0);
-            let end = runs.get(index + 1).and_then(|next| next.glyphs.iter().map(|glyph| glyph.cluster).min()).unwrap_or(flat.len());
-            let scale = size / run.upem;
-            let mut pen = 0.0;
-            let mut glyphs = Vec::with_capacity(run.glyphs.len());
-            for glyph in &run.glyphs {
-                if glyph.advance > 0.0 || run.tofu {
-                    glyphs.push((glyph.id, pen + glyph.x_offset * scale, glyph.advance * scale));
-                }
-                pen += glyph.advance * scale;
-            }
-            pieces.push(Piece {
-                kind: kind(kition_table_fonts::role(run.face), run.face, run.tofu),
-                range: start..end.max(start),
-                x,
-                width: pen,
-                glyphs,
-            });
-            x += pen;
-        }
-        let line = Arc::new(Line { text: flat, pieces, width: x });
-        if self.lines.len() >= CACHE_MAX {
-            self.lines.clear();
-        }
+        let line = Arc::new(self.measure(text, weight, size));
         self.lines.insert(key, line.clone());
         line
     }
@@ -121,29 +176,111 @@ impl Shaper {
     /// `text` on one line, cut with an ellipsis to fit `max` px ([`SLACK`] short of it when cut;
     /// `f32::INFINITY`: no limit).
     pub fn line(&mut self, text: &str, weight: u16, size: f32, max: f32) -> Arc<Line> {
+        // A text longer than any line `max` wide can hold is cut: only its head is shaped.
+        let most = if max.is_finite() { (max / (size * NARROWEST)).ceil() as usize + 8 } else { usize::MAX };
+        if let Some((at, _)) = text.char_indices().nth(most) {
+            let key = (text.to_owned(), weight, size.to_bits(), max.to_bits());
+            if let Some(found) = self.cuts.get(&key) {
+                return found;
+            }
+            let head = self.measure(&text[..at], weight, size);
+            if head.width > max {
+                let line = self.cut_to(&head, weight, size, max);
+                self.remember(key, &line);
+                return line;
+            }
+        }
         let whole = self.shape(text, weight, size);
         if whole.width <= max {
             return whole;
         }
+        let key = (text.to_owned(), weight, size.to_bits(), max.to_bits());
+        if let Some(found) = self.cuts.get(&key) {
+            return found;
+        }
+        let line = self.cut_to(&whole, weight, size, max);
+        self.remember(key, &line);
+        line
+    }
+
+    /// Keeps a cut (a draft shaper keeps nothing).
+    fn remember(&mut self, key: (String, u16, u32, u32), line: &Arc<Line>) {
+        if !self.draft {
+            self.lines.insert((line.text.clone(), key.1, key.2), line.clone());
+            self.cuts.insert(key, line.clone());
+        }
+    }
+
+    /// `whole` (wider than `max`; a whole line, or the head of a longer one) cut with an ellipsis
+    /// to fit: the longest prefix that fits with its ellipsis. The glyphs' advances say about
+    /// where the cut is; the candidates around it are shaped as they are drawn, and a candidate
+    /// the advances put clearly past the room ([`CUT_MARGIN`]) is not shaped at all.
+    fn cut_to(&mut self, whole: &Line, weight: u16, size: f32, max: f32) -> Arc<Line> {
         let room = max - SLACK;
         let flat = whole.text.clone();
-        let ends: Vec<usize> = flat.char_indices().map(|(at, _)| at).skip(1).chain([flat.len()]).collect();
-        // The longest prefix that fits with its ellipsis (widths grow with the prefix).
-        let fits = |shaper: &mut Self, end: usize| shaper.width(&cut(&flat, end), weight, size) <= room;
-        let (mut low, mut high) = (0usize, ends.len());
-        while low < high {
-            let mid = (low + high).div_ceil(2);
-            if fits(self, ends[mid - 1]) {
-                low = mid;
+        let chars: Vec<(usize, char)> = flat.char_indices().collect();
+        let end = |count: usize| chars.get(count).map_or(flat.len(), |(at, _)| *at);
+        let ellipsis = self.width(ELLIPSIS, weight, size);
+        // How wide each prefix is with its ellipsis, near enough: the glyphs whose clusters start
+        // in it (a ligature across the cut counts for neither side), trailing spaces left out as
+        // the cut leaves them out.
+        let mut stops: Vec<(usize, f32)> = whole
+            .pieces
+            .iter()
+            .flat_map(|piece| piece.glyphs.iter().map(move |(_, x, advance, cluster)| (*cluster, piece.x + x + advance)))
+            .collect();
+        // Each glyph's cluster's end: where the next cluster starts (glyphs of one cluster share it).
+        let (mut cluster_end, mut following) = (flat.len(), flat.len());
+        for stop in stops.iter_mut().rev() {
+            if stop.0 < following {
+                cluster_end = following;
+                following = stop.0;
+            }
+            stop.0 = cluster_end;
+        }
+        let mut wide = vec![ellipsis; chars.len() + 1];
+        let (mut glyph, mut reach) = (0usize, 0.0f32);
+        for count in 1..=chars.len() {
+            while let Some(&(cluster_end, right)) = stops.get(glyph)
+                && cluster_end <= end(count)
+            {
+                reach = right;
+                glyph += 1;
+            }
+            wide[count] = if chars[count - 1].1.is_whitespace() { wide[count - 1] } else { reach + ellipsis };
+        }
+        let margin = CUT_MARGIN * size;
+        let mut count = wide.iter().skip(1).take_while(|width| **width <= room).count();
+        let mut kept: Option<Line> = None;
+        // Longer while the next prefix may fit.
+        while count < chars.len() && wide[count + 1] <= room + margin {
+            let line = self.measure(&cut(&flat, end(count + 1)), weight, size);
+            if line.width > room {
+                break;
+            }
+            count += 1;
+            kept = Some(line);
+        }
+        // Shorter until the prefix fits.
+        while kept.is_none() && count > 0 {
+            let line = self.measure(&cut(&flat, end(count)), weight, size);
+            if line.width <= room {
+                kept = Some(line);
             } else {
-                high = mid - 1;
+                count -= 1;
             }
         }
-        let end = if low == 0 { 0 } else { ends[low - 1] };
-        if end == 0 && !fits(self, 0) {
-            return Arc::new(Line::default());
-        }
-        self.shape(&cut(&flat, end), weight, size)
+        let line = match kept {
+            Some(line) => line,
+            None => {
+                let alone = self.measure(ELLIPSIS, weight, size);
+                if alone.width > room {
+                    return Arc::new(Line::default());
+                }
+                alone
+            }
+        };
+        Arc::new(line)
     }
 
     /// `text` broken into at most `max_lines` lines of at most `max` px each, at line break
@@ -202,6 +339,41 @@ impl Shaper {
     }
 }
 
+/// `text` on one line (line breaks and tabs as spaces), shaped run by run in the face each
+/// character falls to (or, for a draft, measured from the characters' advances).
+fn shaped(text: &str, weight: u16, size: f32, draft: bool) -> Line {
+    let flat = text.replace(['\n', '\r', '\t'], " ");
+    let runs = if draft {
+        kition_table_fonts::advances(&flat, Family::Sans, weight, size)
+    } else {
+        kition_table_fonts::shape(&flat, Family::Sans, weight, size)
+    };
+    let mut pieces: Vec<Piece> = Vec::with_capacity(runs.len());
+    let mut x = 0.0;
+    for (index, run) in runs.iter().enumerate() {
+        let start = run.glyphs.iter().map(|glyph| glyph.cluster).min().unwrap_or(0);
+        let end = runs.get(index + 1).and_then(|next| next.glyphs.iter().map(|glyph| glyph.cluster).min()).unwrap_or(flat.len());
+        let scale = size / run.upem;
+        let mut pen = 0.0;
+        let mut glyphs = Vec::with_capacity(run.glyphs.len());
+        for glyph in &run.glyphs {
+            if glyph.advance > 0.0 || run.tofu {
+                glyphs.push((glyph.id, pen + glyph.x_offset * scale, glyph.advance * scale, glyph.cluster));
+            }
+            pen += glyph.advance * scale;
+        }
+        pieces.push(Piece {
+            kind: kind(kition_table_fonts::role(run.face), run.face, run.tofu),
+            range: start..end.max(start),
+            x,
+            width: pen,
+            glyphs,
+        });
+        x += pen;
+    }
+    Line { text: flat, pieces, width: x }
+}
+
 /// The first `end` bytes of `text` without trailing spaces, and an ellipsis.
 fn cut(text: &str, end: usize) -> String {
     let mut out = text.get(..end).unwrap_or_default().trim_end().to_owned();
@@ -241,13 +413,13 @@ pub fn emit(list: &mut DisplayList, resources: &mut Resources, line: &Line, plac
                 list.push(Op::Text { x: at, y: baseline, align: Align::Left, face, weight, size, paint, text, width: piece.width });
             }
             Kind::Emoji(face) => {
-                for (glyph, gx, _) in &piece.glyphs {
+                for (glyph, gx, _, _) in &piece.glyphs {
                     let atlas = resources.emoji(face, *glyph);
                     list.push(Op::Emoji { atlas, x: at + gx, y: baseline, size });
                 }
             }
             Kind::Tofu => {
-                for (_, gx, advance) in &piece.glyphs {
+                for (_, gx, advance, _) in &piece.glyphs {
                     let (w, h) = (advance * 0.75, size * 0.72);
                     list.push(Op::Tofu { x: at + gx + (advance - w) / 2.0, y: baseline - h, w, h, paint });
                 }
@@ -261,4 +433,104 @@ pub fn emit(list: &mut DisplayList, resources: &mut Resources, line: &Line, plac
 pub fn baseline_below_middle(size: f32) -> f32 {
     let metrics = kition_table_fonts::metrics(Family::Sans);
     (metrics.ascent - metrics.descent) / 2.0 * size / metrics.upem
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The longest prefix that fits, found by halving (what the cut searched before it started
+    /// from the measured prefix).
+    fn halving(shaper: &mut Shaper, text: &str, weight: u16, size: f32, max: f32) -> Arc<Line> {
+        let whole = shaper.shape(text, weight, size);
+        if whole.width <= max {
+            return whole;
+        }
+        let (room, flat) = (max - SLACK, whole.text.clone());
+        let ends: Vec<usize> = flat.char_indices().map(|(at, _)| at).skip(1).chain([flat.len()]).collect();
+        let fits = |end: usize| shaped(&cut(&flat, end), weight, size, false).width <= room;
+        let (mut low, mut high) = (0usize, ends.len());
+        while low < high {
+            let mid = (low + high).div_ceil(2);
+            if fits(ends[mid - 1]) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        let end = if low == 0 { 0 } else { ends[low - 1] };
+        if end == 0 && !fits(0) {
+            return Arc::new(Line::default());
+        }
+        shaper.shape(&cut(&flat, end), weight, size)
+    }
+
+    #[test]
+    fn a_cut_is_the_longest_prefix_that_fits() {
+        crate::tests::fonts();
+        let texts = [
+            "A long title that does not fit into its column at all",
+            "Typography -> => != 1/2 x2 office WAVE AVATAR",
+            "季度计划 Q3 客户反馈 and more words after it",
+            "서울 지사 회의록 with Latin after",
+            "Launch day \u{1F680} \u{2705} with emoji in the middle of it",
+            "iiiiiiiiiiiiiiiiiiii WWWWWWWWWWWWWWWWWWWW",
+            "    spaces    between    words    ",
+            "A note long enough to run far past any column: alpha beta gamma delta review shipping invoice customer launch budget design roadmap meeting draft final update report sprint backlog release vendor contract quarter region pipeline.\nSecond line.",
+            "\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301} marks, then words that are wide",
+        ];
+        let mut shaper = Shaper::default();
+        let mut reference = Shaper::default();
+        for text in texts.iter().chain(&[
+            "The office's fluffy affidavit, finally efficient",
+            "Family \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467} and \u{1F44D}\u{1F3FD} together again",
+            "1234567.89 + 98765.43 = 1333333.32 (USD)",
+            "Mixed 中文 English 한국어 text, Ethiopic \u{1230}\u{120B}\u{121D} too",
+        ]) {
+            for (weight, size) in [(400, 13.0), (600, 13.0), (500, 12.0), (400, 14.0)] {
+                for max in (4..260).step_by(3) {
+                    let max = max as f32 + 0.25;
+                    assert_eq!(
+                        shaper.line(text, weight, size, max),
+                        halving(&mut reference, text, weight, size, max),
+                        "{text:?} {weight} {size} at {max} px"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_draft_cuts_to_its_room_and_leaves_emoji_out() {
+        crate::tests::fonts();
+        let mut draft = Shaper::draft();
+        let line = draft.line("Launch day \u{1F680} with a long tail of words after it", 400, 13.0, 80.0);
+        assert!(line.width <= 80.0 - SLACK && line.text.ends_with(ELLIPSIS), "{line:?}");
+        let emoji = draft.line("\u{1F680} go", 400, 13.0, f32::INFINITY);
+        assert!(emoji.pieces.iter().any(|piece| matches!(piece.kind, Kind::Emoji(_)) && piece.glyphs.is_empty() && piece.width > 0.0), "{emoji:?}");
+        let mut list = DisplayList::default();
+        emit(&mut list, &mut Resources::default(), &emoji, Place { x: 0.0, baseline: 10.0, align: Align::Left, size: 13.0, weight: 400, paint: 0 });
+        assert!(list.ops.iter().all(|op| !matches!(op, Op::Emoji { .. })), "no emoji in a draft");
+    }
+
+    #[test]
+    fn the_cache_keeps_what_was_used_lately() {
+        let mut recent: Recent<u32, u32> = Recent::default();
+        for key in 0..GENERATION as u32 {
+            recent.insert(key, key);
+        }
+        // Used now, so it survives the next generation's turn.
+        assert_eq!(recent.get(&7), Some(7));
+        for key in 0..GENERATION as u32 {
+            recent.insert(1_000_000 + key, key);
+        }
+        assert_eq!(recent.get(&7), Some(7), "used lately");
+        assert_eq!(recent.get(&8), None, "not used for a generation");
+        assert!(recent.current.len() + recent.older.len() <= 2 * GENERATION);
+        // The generation that went is freed a step per insertion, not at once.
+        let retiring = recent.retiring.len();
+        assert!(retiring > RETIRE_STEP, "{retiring}");
+        recent.insert(2_000_000, 0);
+        assert_eq!(recent.retiring.len(), retiring - RETIRE_STEP);
+    }
 }

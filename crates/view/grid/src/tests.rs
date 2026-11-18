@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 use super::*;
 use crate::theme::Theme;
 
-fn fonts() {
+pub(crate) fn fonts() {
     let dir = std::env::var_os("KITION_FONTS_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../kition-fonts"));
