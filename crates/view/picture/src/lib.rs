@@ -20,7 +20,8 @@ mod data;
 mod scene;
 mod theme;
 
-use kition_table_file::TableFile;
+use kition_table_display::Resources;
+use kition_table_file::{TableFile, blobs};
 use kurbo::Rect;
 use serde_json::{Value, json};
 
@@ -72,7 +73,7 @@ pub fn draw(file: &TableFile, shown: &Shown, focus: Option<Focus>) -> Result<Pic
                 "gallery" => cards::gallery(&mut content, table, body_top),
                 "calendar" => cards::calendar(&mut content, table, body_top, width),
                 _ => {
-                    let (height, area) = grid(&mut content, table, body_top, width, focus);
+                    let (height, area) = grid(&mut content, file, table, body_top, width, focus);
                     focused = area;
                     height + chrome::footer(&mut content, table, body_top + height, width)
                 }
@@ -116,9 +117,45 @@ fn reorderable(table: &data::TableShown) -> bool {
     table.sorts.is_empty() && table.groups.is_empty()
 }
 
-/// The grid of `table` from `top`, `width` wide, laid out by `kition-table-grid`; answers its
-/// height and the focused cell's area.
-fn grid(scene: &mut Scene, table: &data::TableShown, top: f64, width: f64, focus: Option<Focus>) -> (f64, Option<Rect>) {
+/// The longest side of an attachment's thumbnail, in pixels: a tall row's thumbnail drawn at
+/// twice the size, with room for a wide picture.
+const THUMBNAIL: u32 = 384;
+
+/// The pictures the shown records attach that the file holds, decoded into thumbnails: the
+/// resources the grid is laid out with (their sizes set the thumbnails' proportions). A picture
+/// the file does not hold (a web address) or that is not a PNG, JPEG or WebP stays a placeholder.
+fn pictures(file: &TableFile, table: &data::TableShown) -> Resources {
+    let mut resources = Resources::default();
+    for column in table.columns.iter().filter(|column| column.field.field_type == "attachment") {
+        for record in &table.records {
+            let items = match record.values.get(&column.field.name) {
+                Some(Value::Array(items)) => items.iter().collect(),
+                Some(Value::Null) | None => Vec::new(),
+                Some(item) => vec![item],
+            };
+            for item in items.into_iter().filter(|item| kition_table_grid::is_picture(item)) {
+                let Some(url) = kition_table_grid::attachment_url(item) else { continue };
+                let key = resources.image(&url);
+                if resources.pixels(key).is_some() {
+                    continue;
+                }
+                let Some(hash) = blobs::blob_hash_of_url(&url) else { continue };
+                let Ok(Some(blob)) = file.blob(hash) else { continue };
+                if let Some((width, height)) = kition_table_display::image::size(&blob.bytes) {
+                    resources.set_image_size(key, width, height);
+                }
+                if let Some(pixmap) = kition_table_display::image::decode(&blob.bytes, THUMBNAIL) {
+                    resources.set_image(key, pixmap);
+                }
+            }
+        }
+    }
+    resources
+}
+
+/// The grid of `table` from `top`, `width` wide, laid out by `kition-table-grid` with the
+/// pictures its attachments show; answers its height and the focused cell's area.
+fn grid(scene: &mut Scene, file: &TableFile, table: &data::TableShown, top: f64, width: f64, focus: Option<Focus>) -> (f64, Option<Rect>) {
     let columns = grid_columns(table);
     let view = kition_table_grid::View {
         columns: &columns,
@@ -130,7 +167,7 @@ fn grid(scene: &mut Scene, table: &data::TableShown, top: f64, width: f64, focus
         reorderable: reorderable(table),
         theme: kition_table_grid::theme::Theme::LIGHT,
     };
-    let grid = kition_table_grid::lay_out(&view, top as f32, width as f32, focus);
+    let grid = kition_table_grid::lay_out(&view, top as f32, width as f32, focus, pictures(file, table));
     let height = f64::from(grid.geometry.height);
     let focused = grid.focus.map(|area| Rect::new(f64::from(area.x), f64::from(area.y), f64::from(area.right()), f64::from(area.bottom())));
     scene.list(Rect::new(0.0, top, f64::from(grid.width), top + height), grid.list, grid.resources);

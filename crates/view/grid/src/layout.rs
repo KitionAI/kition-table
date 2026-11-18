@@ -166,7 +166,9 @@ pub struct Grid {
 }
 
 /// The whole view as one display list, from `top`, at least `width` wide, with `focus` outlined.
-pub fn lay_out(view: &View<'_>, top: f32, width: f32, focus: Option<Focus>) -> Grid {
+/// Its ids are added to `resources`, which may already hold the attachment pictures the caller
+/// decoded or measured (their sizes set the thumbnails' proportions).
+pub fn lay_out(view: &View<'_>, top: f32, width: f32, focus: Option<Focus>, resources: Resources) -> Grid {
     let geometry = geometry(view, top);
     let width = width.max(geometry.width);
     let theme = view.theme;
@@ -180,7 +182,7 @@ pub fn lay_out(view: &View<'_>, top: f32, width: f32, focus: Option<Focus>) -> G
         size: (width, geometry.height),
         ..Header::default()
     });
-    let mut resources = Resources::default();
+    let mut resources = resources;
     let mut shaper = Shaper::default();
     let mut out = Out { list: &mut list, resources: &mut resources, shaper: &mut shaper, theme };
     let g = &geometry;

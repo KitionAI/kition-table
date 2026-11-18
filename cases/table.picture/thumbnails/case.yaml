@@ -1,0 +1,21 @@
+format: 1
+id: table.picture/thumbnails
+feature: table.picture
+intent: >-
+  The document's picture draws the pictures a table attaches: a PNG stored in the file with
+  attachments.put is decoded and drawn in its grid cell as the editor's thumbnail (a 2:1 picture
+  in a 40 px row is 68 x 34 px of its own pixels), next to a PDF's chip. A picture the file does
+  not hold (a web address) is a placeholder, since the engine reads nothing from the network.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, D5 (real thumbnails in the picture) (card tg-res)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: thumbnails, filter: "the_picture_draws_attached_pictures_as_thumbnails" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-17"

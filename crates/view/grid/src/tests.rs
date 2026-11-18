@@ -15,6 +15,9 @@ fn fonts() {
     assert_eq!(found, kition_table_fonts::CHECKOUT_FILES.len(), "the kition-fonts checkout at {} (set KITION_FONTS_DIR)", dir.display());
 }
 
+/// A picture held in the file, as `attachments.put` names it.
+const PHOTO: &str = "kition-blob:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+
 fn field(id: i64, name: &str, kind: &str, options: Value) -> Field {
     Field {
         id,
@@ -95,7 +98,7 @@ fn one_row(fields: Vec<Field>, values: Value, row_height: f32) -> (Grid, Vec<Vec
     fonts();
     let columns: Vec<Column> = fields.into_iter().map(column).collect();
     let records = vec![record(1, values)];
-    let grid = lay_out(&view(&columns, &records, &[], row_height), 0.0, 0.0, None);
+    let grid = lay_out(&view(&columns, &records, &[], row_height), 0.0, 0.0, None, Resources::default());
     let (_, y, height) = grid.geometry.rows[0].clone();
     let cells = grid.geometry.lefts.iter().map(|left| ops_in(&grid, Area { x: *left, y, w: DEFAULT_WIDTH, h: height })).collect();
     (grid, cells)
@@ -144,7 +147,7 @@ fn groups_have_headers_and_an_add_row_each() {
         "numbers restart in each group"
     );
     fonts();
-    let grid = lay_out(&view(&columns, &records, &groups, 40.0), 0.0, 0.0, None);
+    let grid = lay_out(&view(&columns, &records, &groups, 40.0), 0.0, 0.0, None, Resources::default());
     let (_, y, h) = grid.geometry.rows[0].clone();
     assert_eq!(h, GROUP_HEADER);
     let header = ops_in(&grid, Area { x: 0.0, y, w: 600.0, h });
@@ -162,7 +165,7 @@ fn heads_header_and_add_row() {
     fonts();
     let columns = vec![column(Field { is_primary: true, ..field(1, "title", "text", json!({})) }), column(field(2, "due", "date", json!({})))];
     let records = vec![record(7, json!({})), record(8, json!({}))];
-    let grid = lay_out(&View { first: 41, ..view(&columns, &records, &[], 40.0) }, 0.0, 0.0, None);
+    let grid = lay_out(&View { first: 41, ..view(&columns, &records, &[], 40.0) }, 0.0, 0.0, None, Resources::default());
     let header = ops_in(&grid, Area { x: 0.0, y: 0.0, w: 800.0, h: HEADER });
     let expected_header = [
         "rect 472x32 #F8F7F6",
@@ -255,7 +258,7 @@ fn typed_cells() {
     let values = json!({
         "done": true, "open": false, "stage": "Lead", "tags": ["urgent", "ops"], "stars": 3,
         "owner": [{ "id": "u1", "name": "ada" }],
-        "files": [{ "id": "a1", "name": "photo.png", "mime_type": "image/png" }, { "id": "a2", "name": "brief.pdf", "mime_type": "application/pdf" }],
+        "files": [{ "url": PHOTO, "name": "photo.png", "mime_type": "image/png" }, { "id": "a2", "name": "brief.pdf", "mime_type": "application/pdf" }],
         "go": null, "love": 1,
     });
     let (grid, cells) = one_row(fields, values, 40.0);
@@ -275,9 +278,9 @@ fn typed_cells() {
             && cells[5][2].ends_with("Center #1A1A1A 'A'")
             && cells[5][3].ends_with("'ada'")
     );
-    assert_eq!(cells[6][0], "image 34x34", "a picture: {:?}", cells[6]);
-    assert!(cells[6][1].starts_with("rrect ") && cells[6][1].ends_with("x20 r6 #F6F5F4"), "a file's chip: {:?}", cells[6]);
-    assert_eq!(&cells[6][2..], ["icon paperclip 14 #797772", "text Sans 400 12 Left #1A1A1A 'brief.pdf'"], "a file");
+    assert_eq!(cells[6][..2], ["image 34x34", "border 34x34 1 #E6E3E0"], "a picture: {:?}", cells[6]);
+    assert!(cells[6][2].starts_with("rrect ") && cells[6][2].ends_with("x20 r6 #F6F5F4"), "a file's chip: {:?}", cells[6]);
+    assert_eq!(&cells[6][3..], ["icon paperclip 14 #797772", "text Sans 400 12 Left #1A1A1A 'brief.pdf'"], "a file");
     assert!(
         cells[7][0].starts_with("rrect") && cells[7][0].contains("x24 r4 #EEF6F5") && cells[7][1] == "text Sans 500 12 Center #0C8375 'Run'",
         "{:?}",
@@ -295,12 +298,12 @@ fn focus_outlines_a_cell_or_a_column_header() {
     fonts();
     let columns = vec![column(field(1, "a", "text", json!({}))), column(field(2, "b", "text", json!({})))];
     let records = vec![record(5, json!({})), record(6, json!({}))];
-    let cell = lay_out(&view(&columns, &records, &[], 40.0), 10.0, 0.0, Some(Focus { field: Some(2), record: Some(6) }));
+    let cell = lay_out(&view(&columns, &records, &[], 40.0), 10.0, 0.0, Some(Focus { field: Some(2), record: Some(6) }), Resources::default());
     assert_eq!(cell.focus, Some(Area { x: 272.0, y: 10.0 + 32.0 + 40.0, w: 200.0, h: 40.0 }));
     assert!(matches!(cell.list.ops.last(), Some(Op::RRectStroke { width: 2.0, .. })));
-    let header = lay_out(&view(&columns, &records, &[], 40.0), 0.0, 0.0, Some(Focus { field: Some(1), record: None }));
+    let header = lay_out(&view(&columns, &records, &[], 40.0), 0.0, 0.0, Some(Focus { field: Some(1), record: None }), Resources::default());
     assert_eq!(header.focus, Some(Area { x: 72.0, y: 0.0, w: 200.0, h: 32.0 }));
-    let none = lay_out(&view(&columns, &records, &[], 40.0), 0.0, 0.0, Some(Focus { field: Some(9), record: None }));
+    let none = lay_out(&view(&columns, &records, &[], 40.0), 0.0, 0.0, Some(Focus { field: Some(9), record: None }), Resources::default());
     assert_eq!(none.focus, None);
 }
 
@@ -309,7 +312,7 @@ fn the_list_survives_its_bytes_and_draws() {
     fonts();
     let columns = vec![column(field(1, "title", "text", json!({}))), column(field(2, "stars", "rating", json!({})))];
     let records = vec![record(1, json!({ "title": "季度 plan 🚀", "stars": 2 }))];
-    let grid = lay_out(&view(&columns, &records, &[], 40.0), 0.0, 900.0, None);
+    let grid = lay_out(&view(&columns, &records, &[], 40.0), 0.0, 900.0, None, Resources::default());
     assert_eq!(grid.width, 900.0);
     let decoded = kition_table_display::decode(&kition_table_display::encode(&grid.list)).expect("decodes");
     assert_eq!(decoded, grid.list);
@@ -344,4 +347,108 @@ fn a_file_is_a_chip_with_its_name() {
     });
     let right = grid.geometry.lefts[0] + DEFAULT_WIDTH - 8.0;
     assert!(chip.is_some_and(|end| end <= right + 0.01), "the chip stays in the cell: {chip:?} > {right}");
+}
+
+/// A thumbnail as laid out: its image key, x, width and height.
+type Thumb = (u32, f32, f32, f32);
+
+/// One attachment cell laid out with `resources`: its pictures and its "+N" badges' texts.
+fn attachment_cell(items: Value, options: Value, row_height: f32, resources: Resources) -> (Grid, Vec<Thumb>, Vec<String>) {
+    fonts();
+    let columns = vec![column(field(7, "files", "attachment", options))];
+    let records = vec![record(1, json!({ "files": items }))];
+    let grid = lay_out(&view(&columns, &records, &[], row_height), 0.0, 0.0, None, resources);
+    let pictures = grid
+        .list
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            Op::Image { key, x, w, h, fit, radius, .. } => {
+                assert_eq!((*fit, *radius), (kition_table_display::Fit::Cover, 4.0), "centre-cropped with round corners");
+                Some((*key, *x, *w, *h))
+            }
+            _ => None,
+        })
+        .collect();
+    let texts = grid
+        .list
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            Op::Text { text, .. } => Some(grid.list.text(*text).to_owned()),
+            _ => None,
+        })
+        .filter(|text| text.starts_with('+'))
+        .collect();
+    (grid, pictures, texts)
+}
+
+fn picture(url: &str) -> Value {
+    json!({ "url": url, "name": "photo.png", "mimeType": "image/png" })
+}
+
+#[test]
+fn thumbnails_take_the_pictures_proportions_and_are_centred() {
+    let wide = "kition-blob:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let mut resources = Resources::default();
+    let key = resources.image(wide);
+    resources.set_image_size(key, 300, 150);
+    let (grid, pictures, _) = attachment_cell(json!([picture(wide)]), json!({}), 40.0, resources);
+    let left = grid.geometry.lefts[0];
+    // A 40 px row: 34 px tall (3 px above and below), 2:1, centred in the cell's 184 px.
+    assert_eq!(pictures, [(key, left + 8.0 + (184.0 - 68.0) / 2.0, 68.0, 34.0)]);
+    assert_eq!(grid.resources.image_source(key), Some(wide));
+    assert!(
+        grid.list.ops.iter().any(|op| matches!(op, Op::RRectStroke { w: 68.0, h: 34.0, width: 1.0, .. })),
+        "a hairline border around the thumbnail"
+    );
+
+    // Unknown size: square. A field's aspect ratio wins over the picture's own.
+    let (_, pictures, _) = attachment_cell(json!([picture(wide)]), json!({}), 56.0, Resources::default());
+    assert_eq!((pictures[0].2, pictures[0].3), (50.0, 50.0));
+    let mut resources = Resources::default();
+    let key = resources.image(wide);
+    resources.set_image_size(key, 300, 150);
+    let (_, pictures, _) = attachment_cell(json!([picture(wide)]), json!({ "ai_config": { "aspect_ratio": "3:4" } }), 40.0, resources);
+    assert_eq!((pictures[0].2, pictures[0].3), (25.5, 34.0));
+
+    // The same url is one image key; a blob hash without a url names its blob.
+    let hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let items = json!([picture(wide), picture(wide), { "sha256": hash, "name": "b.webp", "mimeType": "image/webp" }]);
+    let (grid, pictures, _) = attachment_cell(items, json!({}), 40.0, Resources::default());
+    assert_eq!(pictures.len(), 3);
+    assert_eq!(pictures[0].0, pictures[1].0);
+    assert_eq!(grid.resources.image_source(pictures[2].0), Some(format!("kition-blob:{hash}").as_str()));
+    // Without a url a picture is a placeholder tile, not an image the page cannot load.
+    let (grid, pictures, _) = attachment_cell(json!([{ "name": "lost.png", "mimeType": "image/png" }]), json!({}), 40.0, Resources::default());
+    assert!(pictures.is_empty());
+    assert!(grid.list.ops.iter().any(|op| matches!(op, Op::RRect { w: 34.0, h: 34.0, r: 4.0, .. })));
+}
+
+#[test]
+fn thumbnails_beyond_the_cell_are_counted_by_a_badge() {
+    let items: Vec<Value> = (0..8).map(|index| picture(&format!("kition-blob:{index:064}"))).collect();
+    let (grid, pictures, badges) = attachment_cell(Value::Array(items), json!({}), 40.0, Resources::default());
+    let left = grid.geometry.lefts[0] + 8.0;
+    let right = left + 184.0;
+    assert!(pictures.len() >= 3 && pictures.len() < 8, "{pictures:?}");
+    assert_eq!(pictures[0].1, left, "from the left when they do not fit");
+    assert_eq!(badges, [format!("+{}", 8 - pictures.len())]);
+    let badge = grid.list.ops.iter().rev().find_map(|op| match op {
+        Op::RRect { x, w, h: 20.0, .. } => Some((*x, *w)),
+        _ => None,
+    });
+    let (x, w) = badge.expect("a badge chip");
+    assert!(
+        x >= pictures.last().map_or(0.0, |last| last.1 + last.2) && x + w <= right + 0.01,
+        "the badge follows the last thumbnail, inside the cell"
+    );
+    let hits = grid.list.hits.iter().filter(|hit| hit.kind == HitKind::Attachment).count();
+    assert_eq!(hits, pictures.len(), "one hit per thumbnail shown");
+
+    // Two fit: no badge, centred.
+    let items: Vec<Value> = (0..2).map(|index| picture(&format!("kition-blob:{index:064}"))).collect();
+    let (_, pictures, badges) = attachment_cell(Value::Array(items), json!({}), 40.0, Resources::default());
+    assert!(badges.is_empty());
+    assert_eq!(pictures[0].1, left + (184.0 - 72.0) / 2.0);
 }

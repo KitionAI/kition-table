@@ -64,11 +64,13 @@
 //! (`kition-blob:<sha256>` for a file held in the document); the page loads and decodes it, and
 //! applies the picture's orientation as the engine does. Its width and height are the picture's
 //! as shown (after orientation), or 0 when the engine does not know them; the grid's layout uses
-//! them for the thumbnail's proportions. The headless rasterizer reads [`Resources`] directly.
-//! A table of another version is refused, as a list is.
+//! them for the thumbnail's proportions. The headless rasterizer reads [`Resources`] directly,
+//! with the pictures it decoded itself (PNG, JPEG and WebP, [`image::decode`]). A table of another
+//! version is refused, as a list is.
 
 mod codec;
 pub mod emoji;
+pub mod image;
 mod raster;
 mod resources;
 mod table;
@@ -487,3 +489,6 @@ mod raster_tests;
 
 #[cfg(test)]
 mod table_tests;
+
+#[cfg(test)]
+mod image_tests;

@@ -1,0 +1,23 @@
+format: 1
+id: table.editor.grid/picture-decode
+feature: table.editor.grid
+intent: >-
+  The headless rasterizer reads PNG, JPEG and WebP attachments into thumbnails: decoded,
+  premultiplied, scaled down by area so that the longest side is at most the size asked for, and
+  turned by the picture's EXIF orientation as a browser shows it (a JPEG with orientation 6 shows
+  its left half on top). The size as shown is read from the headers alone. Other formats (GIF,
+  SVG), bytes cut short and pictures of more than 50 million pixels are not decoded, so the grid
+  draws its placeholder for them.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, D5 (real thumbnails, PNG/JPEG/WebP) (card tg-res)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-display, filter: "image_tests::" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-17"

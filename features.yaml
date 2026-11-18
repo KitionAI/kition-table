@@ -182,8 +182,8 @@ features:
     priority: P1
     status: has
     commands: [table.file.render, table.preview.show]
-    paths: [crates/view/fonts/**, crates/view/picture/**, bindings/wasm/src/preview.rs, bindings/wasm/tests/picture.rs, bindings/wasm/tests/preview.rs, apps/kition-table/src/main.rs, apps/kition-table/tests/render.rs, conformance/golden/**]
-    cases: [regressions/issue-4, regressions/issue-render-command, regressions/issue-emoji-cuts-cell, regressions/issue-file-chip]
+    paths: [crates/view/fonts/**, crates/view/picture/**, bindings/wasm/src/preview.rs, bindings/wasm/tests/picture.rs, bindings/wasm/tests/preview.rs, bindings/wasm/tests/thumbnails.rs, apps/kition-table/src/main.rs, apps/kition-table/tests/render.rs, conformance/golden/**]
+    cases: [regressions/issue-4, regressions/issue-render-command, regressions/issue-emoji-cuts-cell, regressions/issue-file-chip, table.picture/thumbnails]
     since: "2026-11-16"
   - id: table.attachments
     title: "Attachments stored in the file"
@@ -226,5 +226,5 @@ features:
     status: partial
     paths: [crates/view/display/**, crates/view/grid/**, bindings/wasm/src/bands.rs, web/src/editor/table/canvas/**, web/dev/grid.html, web/fonts.lock.json, web/scripts/fonts.mjs, web/tests/gridPage.mjs, web/tests/parity.mjs, web/tests/perf.mjs, web/tests/widths.mjs]
     gap: "Phases 1 and 3 of the grid moving to a Rust layout: the display list, the picture, the engine's bands and the page's read-only player on the development page (dev/grid.html), with the fonts in the package. The editor still draws its own grid; interaction and the switch come in phases 4 and 5."
-    cases: [table.editor.grid/display-format, table.editor.grid/display-raster, table.editor.grid/layout-cells, table.editor.grid/shaping-as-canvas, table.editor.grid/resource-table, table.editor.grid/bands, table.editor.grid/page-player, table.editor.grid/widths, table.editor.grid/parity, table.editor.grid/scroll-perf, table.editor.grid/interaction]
+    cases: [table.editor.grid/display-format, table.editor.grid/display-raster, table.editor.grid/layout-cells, table.editor.grid/shaping-as-canvas, table.editor.grid/resource-table, table.editor.grid/attachment-thumbnails, table.editor.grid/picture-decode, table.editor.grid/bands, table.editor.grid/page-player, table.editor.grid/widths, table.editor.grid/parity, table.editor.grid/scroll-perf, table.editor.grid/interaction]
     since: "2026-11-17"

@@ -3,7 +3,7 @@
 //! attachments and buttons. Contents are centred in the cell, as the editor's grid aligns them.
 
 use kition_table_display::{Align, DisplayList, Fit, Hit, HitKind, Op, Resources};
-use kition_table_file::Field;
+use kition_table_file::{Field, blobs};
 use serde_json::Value;
 
 use crate::format::{self, choices, display, tone};
@@ -33,6 +33,9 @@ const THUMB_INSET: f32 = 3.0;
 const FILE_ICON: f32 = 14.0;
 const FILE_TEXT: f32 = 24.0;
 const FILE_CHIP_EXTRA: f32 = 34.0;
+/// A thumbnail's corner radius, and the "+N" badge's side padding.
+const THUMB_RADIUS: f32 = 4.0;
+const BADGE_PAD: f32 = 6.0;
 /// Tessera's icon stroke, in its 24-unit grid.
 const ICON_STROKE: f32 = 1.5;
 
@@ -166,13 +169,120 @@ fn names(value: Option<&Value>) -> Vec<String> {
 }
 
 /// Whether an attachment item is a picture (its MIME type, else its name's extension).
-fn is_picture(item: &Value) -> bool {
+pub fn is_picture(item: &Value) -> bool {
     let mime = ["mime_type", "mimeType", "type"].iter().find_map(|key| item.get(key).and_then(Value::as_str)).unwrap_or_default();
     if !mime.is_empty() {
         return mime.starts_with("image/");
     }
     let name = display(Some(item)).to_ascii_lowercase();
     [".png", ".jpg", ".jpeg", ".webp", ".gif"].iter().any(|ext| name.ends_with(ext))
+}
+
+/// The url an attachment's file is loaded from, as the editor finds it: the item itself when it
+/// is text, else its `url`, `src` or `href`, else the blob url of its `sha256`.
+pub fn attachment_url(item: &Value) -> Option<String> {
+    let text = |value: Option<&Value>| value.and_then(Value::as_str).map(str::trim).filter(|url| !url.is_empty()).map(str::to_owned);
+    if let Some(url) = text(Some(item)).or_else(|| ["url", "src", "href"].iter().find_map(|key| text(item.get(key)))) {
+        return Some(url);
+    }
+    ["sha256", "hash"].iter().find_map(|key| item.get(key).and_then(Value::as_str)).filter(|hash| blobs::is_blob_hash(hash)).map(blobs::blob_url)
+}
+
+/// The proportions (width over height) a field gives its pictures: an AI field's
+/// `aspect_ratio` ("16:9"), as the editor reads it.
+fn aspect_ratio(field: &Field) -> Option<f32> {
+    let text = field.options.get("ai_config")?.get("aspect_ratio")?.as_str()?;
+    let (width, height) = text.split_once(':')?;
+    let (width, height) = (width.trim().parse::<f32>().ok()?, height.trim().parse::<f32>().ok()?);
+    (width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0).then_some(width / height)
+}
+
+/// One attachment of a cell: a picture's thumbnail (by its image key, when it has a url) or a
+/// file's chip, and its width.
+enum Piece<'v> {
+    Picture { key: Option<u32>, width: f32 },
+    File { item: &'v Value, width: f32 },
+}
+
+impl Piece<'_> {
+    fn width(&self) -> f32 {
+        match self {
+            Self::Picture { width, .. } | Self::File { width, .. } => *width,
+        }
+    }
+}
+
+/// The "+N" badge's width.
+fn badge_width(out: &mut Out<'_>, count: usize) -> f32 {
+    out.shaper.width(&format!("+{count}"), MEDIUM, SMALL) + 2.0 * BADGE_PAD
+}
+
+/// An attachment cell, as the editor's: each picture a thumbnail as tall as the row allows (less
+/// an inset), as wide as its proportions (the field's aspect ratio, else the picture's own, else
+/// square) and filled centre-cropped; each other file a chip with its name. They are centred
+/// when they fit; otherwise they start at the left and a "+N" badge counts the ones left out.
+fn attachments(out: &mut Out<'_>, field: &Field, items: &[&Value], area: Area, inner: Area, col: u16, row: u32) {
+    let theme = out.theme;
+    let side = area.h - 2.0 * THUMB_INSET;
+    let middle = area.middle();
+    let fixed = aspect_ratio(field);
+    let pieces: Vec<Piece<'_>> = items
+        .iter()
+        .map(|item| {
+            if is_picture(item) {
+                let key = attachment_url(item).map(|url| out.resources.image(&url));
+                let own = key.and_then(|key| out.resources.image_size(key)).map(|(width, height)| width as f32 / height as f32);
+                let ratio = fixed.or(own).unwrap_or(1.0);
+                Piece::Picture { key, width: (side * ratio).min(inner.w) }
+            } else {
+                let name = display(Some(item));
+                Piece::File { item, width: (out.shaper.width(&name, REGULAR, SMALL) + FILE_CHIP_EXTRA).min(inner.w) }
+            }
+        })
+        .collect();
+    let total = pieces.iter().map(|piece| piece.width() + THUMB_GAP).sum::<f32>() - THUMB_GAP;
+    let fits = total <= inner.w;
+    let mut x = if fits { inner.x + (inner.w - total) / 2.0 } else { inner.x };
+    for (index, piece) in pieces.iter().enumerate() {
+        let after = pieces.len() - index - 1;
+        let mut room = inner.right() - x;
+        if !fits && after > 0 {
+            room -= THUMB_GAP + badge_width(out, after);
+        }
+        if index > 0 && piece.width() > room {
+            badge(out, x, middle, pieces.len() - index);
+            break;
+        }
+        let width = piece.width().min(room.max(side)).min(inner.right() - x);
+        let at = match piece {
+            Piece::Picture { key, .. } => {
+                let at = Area { x, y: area.y + THUMB_INSET, w: width, h: side };
+                match key {
+                    Some(key) => out.list.push(Op::Image { key: *key, x: at.x, y: at.y, w: at.w, h: at.h, fit: Fit::Cover, radius: THUMB_RADIUS }),
+                    None => out.rrect(at, THUMB_RADIUS, theme.chip),
+                }
+                out.border(at, THUMB_RADIUS, 1.0, theme.line);
+                at
+            }
+            Piece::File { item, .. } => {
+                let at = Area { x, y: middle - CHIP_HEIGHT / 2.0, w: width, h: CHIP_HEIGHT };
+                if !file_chip(out, item, at) {
+                    break;
+                }
+                at
+            }
+        };
+        out.hit(HitKind::Attachment, u16::try_from(index).unwrap_or(u16::MAX), col, row, at);
+        x = at.right() + THUMB_GAP;
+    }
+}
+
+/// A "+`count`" badge from `x`, centred on `middle`.
+fn badge(out: &mut Out<'_>, x: f32, middle: f32, count: usize) {
+    let width = badge_width(out, count);
+    let theme = out.theme;
+    out.rrect(Area { x, y: middle - CHIP_HEIGHT / 2.0, w: width, h: CHIP_HEIGHT }, CHIP_RADIUS, theme.chip);
+    out.text(&format!("+{count}"), x + width / 2.0, middle, Align::Center, SMALL, MEDIUM, theme.muted, width);
 }
 
 /// A file that is not a picture, in `at`: a chip with a paperclip and the file's name, cut to the
@@ -186,13 +296,6 @@ fn file_chip(out: &mut Out<'_>, item: &Value, at: Area) -> bool {
     out.icon("paperclip", at.x + 6.0, at.middle() - FILE_ICON / 2.0, FILE_ICON, theme.muted, false);
     out.text(&display(Some(item)), at.x + FILE_TEXT, at.middle(), Align::Left, SMALL, REGULAR, theme.text, at.w - FILE_CHIP_EXTRA);
     true
-}
-
-/// A stable image key for an attachment item (its id, hash or path, else its name).
-fn image_key(item: &Value) -> u32 {
-    let id = ["id", "hash", "path", "url"].iter().find_map(|key| item.get(key).map(Value::to_string)).unwrap_or_else(|| display(Some(item)));
-    // FNV-1a.
-    id.bytes().fold(0x811C_9DC5u32, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193))
 }
 
 /// How many lines of text a row of `height` shows.
@@ -270,30 +373,7 @@ pub fn cell(out: &mut Out<'_>, field: &Field, value: Option<&Value>, area: Area,
                 Some(Value::Null) | None => Vec::new(),
                 Some(other) => vec![other],
             };
-            let side = area.h - 2.0 * THUMB_INSET;
-            let mut x = inner.x;
-            for (index, item) in items.iter().enumerate() {
-                let picture = is_picture(item);
-                let at = if picture {
-                    Area { x, y: area.y + THUMB_INSET, w: side, h: side }
-                } else {
-                    let name = display(Some(item));
-                    let width = (out.shaper.width(&name, REGULAR, SMALL) + FILE_CHIP_EXTRA).min(inner.right() - x);
-                    Area { x, y: middle - CHIP_HEIGHT / 2.0, w: width, h: CHIP_HEIGHT }
-                };
-                if index > 0 && at.right() > inner.right() {
-                    let more = format!("+{}", items.len() - index);
-                    out.text(&more, x, middle, Align::Left, SMALL, MEDIUM, theme.muted, inner.right() - x);
-                    break;
-                }
-                if picture {
-                    out.list.push(Op::Image { key: image_key(item), x: at.x, y: at.y, w: at.w, h: at.h, fit: Fit::Cover, radius: 4.0 });
-                } else if !file_chip(out, item, at) {
-                    break;
-                }
-                out.hit(HitKind::Attachment, u16::try_from(index).unwrap_or(u16::MAX), col, row, at);
-                x = at.right() + THUMB_GAP;
-            }
+            attachments(out, field, &items, area, inner, col, row);
         }
         "button" => {
             let label = field.options.get("label").and_then(Value::as_str).filter(|label| !label.is_empty()).unwrap_or(&field.title);

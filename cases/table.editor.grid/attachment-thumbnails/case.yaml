@@ -1,0 +1,25 @@
+format: 1
+id: table.editor.grid/attachment-thumbnails
+feature: table.editor.grid
+intent: >-
+  An attachment cell is laid out as the editor's: each picture a thumbnail as tall as the row
+  allows less a 3 px inset, as wide as its proportions (the field's AI aspect ratio, else the
+  picture's own size from the resources, else square), centre-cropped with 4 px corners and a
+  hairline border; each other file a chip with its name. They are centred when they fit; when they
+  do not, they start at the left and a "+N" badge inside the cell counts the ones left out, with
+  one hit part per shown attachment. The same url is one image key, a blob hash without a url
+  names its blob, and a picture with no url is a placeholder tile rather than an image no player
+  can load.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, D5 (real thumbnails), the editor's imageCellRenderer (card tg-res)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-grid, filter: "thumbnails_" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-17"

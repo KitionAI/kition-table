@@ -16,7 +16,7 @@ mod layout;
 pub mod text;
 pub mod theme;
 
-pub use cells::{Area, Out, cell, chip, field_icon};
+pub use cells::{Area, Out, attachment_url, cell, chip, field_icon, is_picture};
 pub use layout::{
     APPEND_COLUMN, APPEND_ROW, Column, DEFAULT_WIDTH, Focus, GROUP_HEADER, Geometry, Grid, HEADER, ROW_CONTROL, Row, View, geometry, height, lay_out,
     row_height, rows, width,

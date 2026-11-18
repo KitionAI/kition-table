@@ -46,6 +46,10 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 csv = "1"
 # The preview's PNG (`table.file.render`), the version kition-headless already brings.
 png = "0.17"
+# The headless picture's attachment thumbnails (with png): JPEG and WebP decoders.
+zune-jpeg = "0.5"
+zune-core = "0.5"
+image-webp = "0.2"
 js-sys = "0.3"
 regex = "1"
 rusqlite = { version = "0.38", features = ["backup", "blob", "bundled", "hooks", "serde_json", "serialize"] }
