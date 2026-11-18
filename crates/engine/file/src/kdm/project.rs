@@ -320,6 +320,10 @@ struct Projector<'a> {
     created: HashSet<i64>,
     /// Records whose object changed.
     touched: HashSet<i64>,
+    /// Whether no live table has a derived field (formula, lookup, rollup, or link), once
+    /// known: then no record's values depend on another record's or on other fields, and a
+    /// record's new cells are its values.
+    underived: Option<bool>,
     /// Record recomputations run.
     recomputed: u64,
 }
@@ -353,6 +357,7 @@ impl<'a> Projector<'a> {
             seeds: HashMap::new(),
             created: HashSet::new(),
             touched: HashSet::new(),
+            underived: None,
             recomputed: 0,
         })
     }
@@ -1226,8 +1231,19 @@ impl<'a> Projector<'a> {
                 self.seed(id, Seed::All);
                 continue;
             }
-            let changed = self.write_cell_history(id, table_id, &record, &before)?;
-            if !changed.is_empty() {
+            let schema = self.schema(table_id)?;
+            let cells = self.stored_values(&schema, &record)?;
+            let before = json::object(&before);
+            let changed = self.write_cell_history(id, table_id, &schema, &before, &cells)?;
+            if changed.is_empty() {
+                continue;
+            }
+            if self.underived()? {
+                // What `derive` would compute, from what is read already: a large write reads
+                // each record once.
+                self.recomputed += 1;
+                self.store_values(id, table_id, record.as_str(), &before, None, cells)?;
+            } else {
                 self.seed(id, Seed::Names(changed));
             }
         }
@@ -1375,12 +1391,36 @@ impl<'a> Projector<'a> {
         )
     }
 
-    /// One history row per stored cell that differs from the row being replaced. Answers the
-    /// names of those cells.
-    fn write_cell_history(&mut self, id: i64, table_id: i64, record: &ObjectId, before: &str) -> Result<HashSet<String>> {
-        let schema = self.schema(table_id)?;
-        let cells = self.stored_values(&schema, record)?;
-        let before = json::object(before);
+    /// Whether no live table has a derived field (see [`Projector::underived`]'s field).
+    fn underived(&mut self) -> Result<bool> {
+        if let Some(underived) = self.underived {
+            return Ok(underived);
+        }
+        let tables: Vec<i64> = {
+            let mut statement = self.conn.prepare_cached("SELECT id FROM kition_tables WHERE deleted_at IS NULL")?;
+            statement.query_map([], |row| row.get(0))?.collect::<std::result::Result<_, _>>()?
+        };
+        let mut underived = true;
+        for table in tables {
+            if self.schema(table)?.fields.iter().any(derive::is_derived) {
+                underived = false;
+                break;
+            }
+        }
+        self.underived = Some(underived);
+        Ok(underived)
+    }
+
+    /// One history row per stored cell (`cells`) that differs from the row being replaced
+    /// (`before`). Answers the names of those cells.
+    fn write_cell_history(
+        &mut self,
+        id: i64,
+        table_id: i64,
+        schema: &TableSchema,
+        before: &Map<String, Value>,
+        cells: &Map<String, Value>,
+    ) -> Result<HashSet<String>> {
         let mut changed = HashSet::new();
         for (name, field_id) in &schema.stored_by_name {
             let old = before.get(name).unwrap_or(&Value::Null);

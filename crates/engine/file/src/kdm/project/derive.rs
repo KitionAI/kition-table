@@ -639,26 +639,42 @@ impl Projector<'_> {
         // everything, as for a row that held nothing.
         let created = self.created.contains(&id);
         let before = if created { Map::new() } else { json::object(&current) };
+        let (table, key) = (node.table, node.key.clone());
+        self.store_values(id, table, &key, &before, created.then_some(current.as_str()), values)
+    }
+
+    /// Writes a record's recomputed `values` over its row's values `before` (a row this
+    /// projection created: `before` is empty and `created` holds the row's text). Answers the
+    /// names whose values changed.
+    pub(super) fn store_values(
+        &mut self,
+        id: i64,
+        table: i64,
+        key: &str,
+        before: &Map<String, Value>,
+        created: Option<&str>,
+        values: Map<String, Value>,
+    ) -> Result<HashSet<String>> {
         let mut changed: HashSet<String> = HashSet::new();
         for (name, value) in &values {
             if !json::equal(before.get(name).unwrap_or(&Value::Null), value) {
                 changed.insert(name.clone());
             }
         }
-        for (name, value) in &before {
+        for (name, value) in before {
             if !values.contains_key(name) && !value.is_null() {
                 changed.insert(name.clone());
             }
         }
         if changed.is_empty() {
-            if created {
-                self.out.upserted.insert((node.table, node.key.clone()));
+            if created.is_some() {
+                self.out.upserted.insert((table, key.to_owned()));
             }
             return Ok(changed);
         }
         let encoded = Value::Object(values).to_string();
-        if created && encoded == current {
-            self.out.upserted.insert((node.table, node.key.clone()));
+        if created == Some(encoded.as_str()) {
+            self.out.upserted.insert((table, key.to_owned()));
             return Ok(changed);
         }
         if self.touched.contains(&id) {
@@ -670,7 +686,7 @@ impl Projector<'_> {
                 .prepare_cached("UPDATE kition_records SET values_json = ?1, updated_at = ?2 WHERE id = ?3")?
                 .execute(params![encoded, self.now, id])?;
         }
-        self.out.upserted.insert((node.table, node.key.clone()));
+        self.out.upserted.insert((table, key.to_owned()));
         Ok(changed)
     }
 }
@@ -724,7 +740,7 @@ fn circular(component: &[usize], adjacency: &[Vec<usize>]) -> bool {
     component.len() > 1 || component.first().is_some_and(|i| adjacency.get(*i).is_some_and(|next| next.contains(i)))
 }
 
-fn is_derived(field: &Field) -> bool {
+pub(super) fn is_derived(field: &Field) -> bool {
     matches!(field.field_type.as_str(), "formula" | "lookup" | "rollup" | "link_to_record")
 }
 
