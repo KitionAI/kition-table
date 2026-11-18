@@ -259,9 +259,11 @@ impl TableFile {
             // An in-memory database takes a copy only at its own page size.
             let page_size: i64 = source.query_row("PRAGMA page_size", [], |row| row.get(0))?;
             conn.execute_batch(&format!("PRAGMA page_size = {page_size}"))?;
-            // The copy allocates its pages one at a time, and in WebAssembly each allocation past
-            // the end of memory grows it, which took longer than the copy: grow it once.
-            drop(std::hint::black_box(Vec::<u8>::with_capacity(bytes.len())));
+            // The copy allocates its pages one at a time, each with the page cache's header (a
+            // few hundred bytes) on top of the page: make room for all of them at once (see
+            // `reserve_memory`).
+            let pages = bytes.len() / usize::try_from(page_size).unwrap_or(4096).max(512);
+            reserve_memory(bytes.len().saturating_add(pages.saturating_mul(512)));
             let copy = rusqlite::backup::Backup::new(&source, &mut conn)?;
             if copy.step(-1)? != rusqlite::backup::StepResult::Done {
                 return Err(TableFileError::invalid("ktable bytes could not be read"));
@@ -461,6 +463,16 @@ pub(crate) fn find_base(conn: &Connection, replica: &Replica) -> Result<Option<O
         return Ok(Some(id));
     }
     Ok(replica.objects_of_type(BASE).into_iter().next())
+}
+
+/// Makes the heap `bytes` larger in one step, ahead of many small allocations that need about as
+/// much. In WebAssembly the allocator grows linear memory by 64 KiB whenever it runs out, and once
+/// that memory is large the browser answers every growth with a full garbage collection (V8:
+/// "external memory pressure"): growing by the hundreds of megabytes a large table's pages take,
+/// 64 KiB at a time, cost seconds. A block taken and given back stays with the allocator, which
+/// hands it out again.
+fn reserve_memory(bytes: usize) {
+    drop(std::hint::black_box(Vec::<u8>::with_capacity(bytes)));
 }
 
 /// Opens the SQLite database at `path`; answers the connection and the absolute path.
