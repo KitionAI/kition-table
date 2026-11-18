@@ -3,6 +3,10 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
+## Unreleased
+
+- A grid view whose scroll bar is dragged to the end of a table in slow frames shows its exact bands once it rests; it used to keep its drafts until the next scroll.
+
 ## 0.5.1
 
 - Large writes are faster: clearing, pasting or filling a column of 100,000 records no longer reads any cell back into the projection (each row is patched with the values the write carries), and the transaction prepares the maps it writes once (kition-sdk 3cbd200, KitionPkg/loro 2498cd8).

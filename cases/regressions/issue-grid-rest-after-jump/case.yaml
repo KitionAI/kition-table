@@ -1,0 +1,29 @@
+format: 1
+id: regressions/issue-grid-rest-after-jump
+feature: table.editor.grid
+intent: >-
+  A grid view whose scroll bar is dragged to the end of a table in slow, steady frames, more than a
+  screen a frame, shows its exact bands once it rests, in Chromium and WebKit. While the view
+  jumps it asks for drafts where it will be; at the end of the table every such draft is here, so
+  the requests of its last moving frames have nothing to fetch. The view stopped asking then, and
+  no answer or scroll came to make it draw again: it kept its drafts for good. A moving view with
+  nothing to fetch now looks again a moment later, until it rests and asks for the exact bands.
+layer: gate
+source:
+  kind: probe
+  from: the lazy fonts of the engine, whose stale bands made parity's scrolled run time out (cards sdk-fonts-lazy, table-lazy-fonts)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [node, web/tests/restAfterJump.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/restAfterJump.mjs, webkit]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+requires: [chromium, webkit]
+tags: [browser]
+timeout_s: 120
+since: "2026-11-18"

@@ -49,6 +49,8 @@ type Jump = { v: number; frame: number; span: number; at: number; y: (frames: nu
 export const MAX_SCROLL_PX = 15_000_000
 /** Scroll speed (CSS px per second) from which the view prefetches two screens ahead, not one. */
 const FAST_SCROLL = 3000
+/** How soon a moving view with nothing to fetch looks again (ms). */
+const LOOK_AGAIN_MS = 50
 
 /** The colors of a band not here yet, from the engine's theme. */
 export type Skeleton = { background: string; line: string }
@@ -128,6 +130,8 @@ export class GridView {
   private inFlight = false
   private received = 0
   private destroyed = false
+  /** The timer of `lookAgain`. */
+  private again = 0
   private overlayPainter: ((ctx: CanvasRenderingContext2D, dpr: number) => void) | null = null
   private readonly cleanup: Array<() => void> = []
   private readonly axesListeners = new Set<(opened: GridOpened) => void>()
@@ -297,6 +301,7 @@ export class GridView {
   destroy() {
     this.destroyed = true
     if (this.frame) cancelAnimationFrame(this.frame)
+    if (this.again) clearTimeout(this.again)
     for (const undo of this.cleanup) undo()
     this.element.remove()
   }
@@ -544,7 +549,12 @@ export class GridView {
             .filter((key) => !this.cache.has(key))
             .slice(0, MAX_BANDS_PER_JUMP)
         : this.wanted().slice(0, MAX_BANDS_PER_CALL)
-    if (!keys.length) return
+    if (!keys.length) {
+      // Nothing to fetch while the view moves (drafts are here): look again until it rests and
+      // asks for the exact bands, since no answer or scroll may come to draw again.
+      if (jump || leap) this.lookAgain()
+      return
+    }
     const draft = jump !== null || leap
     this.inFlight = true
     const dpr = this.dpr
@@ -591,6 +601,15 @@ export class GridView {
         this.invalidate()
         this.request()
       })
+  }
+
+  /** Draws again (and so asks again) in a moment, once. */
+  private lookAgain() {
+    if (this.again || this.destroyed) return
+    this.again = window.setTimeout(() => {
+      this.again = 0
+      this.invalidate()
+    }, LOOK_AGAIN_MS)
   }
 
   private draw(at: number) {
