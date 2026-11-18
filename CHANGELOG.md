@@ -3,7 +3,7 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
-## Unreleased
+## 0.5.0
 
 - The editor's grid is rewritten: the engine arranges the view, lays it out and draws it in bands
   (the same display list the headless picture rasterizes), and the page plays the bands on a
@@ -13,6 +13,8 @@ each package is published with a `package-v<version>` tag.
   grid, derived from Teable's `packages/sdk` grid, is deleted, and with it the Teable notice in
   NOTICE and its unused dependencies (react-hammerjs, react-hotkeys-hook, lodash-es, lru-cache,
   scroller, ts-key-enum, ts-keycode-enum).
+- The package carries the grid's faces in `fonts/` (`web/fonts.lock.json`, copied from
+  kition-fonts by `web/scripts/fonts.mjs`), which the page and the engine both load.
 - Engine extras: `gridAxes` takes the view's config as the editor holds it (`config`), and
   `gridSummary` sums number fields over the editor's arrangement.
 
