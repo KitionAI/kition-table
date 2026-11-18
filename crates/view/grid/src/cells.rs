@@ -66,6 +66,8 @@ pub struct Out<'a> {
     pub resources: &'a mut Resources,
     pub shaper: &'a mut Shaper,
     pub theme: Theme,
+    /// Where dates are read (`Zone::default()`, UTC, for a picture).
+    pub zone: &'a format::Zone,
 }
 
 impl Out<'_> {
@@ -325,7 +327,7 @@ pub fn cell(out: &mut Out<'_>, field: &Field, value: Option<&Value>, area: Area,
             }
             let mut x = start(chips_width(out, &items, inner.w));
             for item in &items {
-                let width = chip(out, x, middle, item, tone(field, item), inner.right());
+                let width = chip(out, x, middle, item, tone(field, item, &theme), inner.right());
                 if width == 0.0 {
                     break;
                 }
@@ -384,7 +386,7 @@ pub fn cell(out: &mut Out<'_>, field: &Field, value: Option<&Value>, area: Area,
             out.hit(HitKind::Button, 0, col, row, at);
         }
         kind => {
-            let text = format::cell_text(field, value);
+            let text = format::cell_text_in(field, value, out.zone);
             if text.is_empty() {
                 return;
             }

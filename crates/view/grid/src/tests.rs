@@ -160,6 +160,22 @@ fn groups_have_headers_and_an_add_row_each() {
     assert_eq!(grid.list.hits.iter().filter(|hit| hit.kind == HitKind::AppendRow).count(), 2);
 }
 
+/// A group of records without a value is headed "Empty", under its field's title (the old grid's
+/// group collection, tableEditorShared.spec).
+#[test]
+fn a_group_without_a_value_is_headed_empty() {
+    let owner = field(2, "owner", "text", json!({}));
+    let columns = vec![column(field(1, "title", "text", json!({}))), column(owner.clone())];
+    let records = vec![record(1, json!({ "title": "a" })), record(2, json!({ "title": "b", "owner": "Ada" }))];
+    let groups = vec![owner];
+    fonts();
+    let grid = lay_out(&view(&columns, &records, &groups, 40.0), 0.0, 0.0, None, Resources::default());
+    let (_, y, h) = grid.geometry.rows[0].clone();
+    let header = ops_in(&grid, Area { x: 0.0, y, w: 600.0, h });
+    assert!(header.iter().any(|op| op.ends_with("'OWNER'")), "the field's title: {header:?}");
+    assert!(header.iter().any(|op| op.ends_with("'Empty'")), "{header:?}");
+}
+
 #[test]
 fn heads_header_and_add_row() {
     fonts();

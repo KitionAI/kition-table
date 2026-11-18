@@ -119,7 +119,7 @@ pub fn board(scene: &mut Scene, shown: &TableShown, top: f64) -> f64 {
         let count_width = count.width + 14.0;
         let count_x = area.x1 - 12.0 - count_width;
         if field.field_type == "single_select" && key != "Empty" {
-            cell::chip(scene, area.x0 + 12.0, middle, &label, tone(field, key), count_x - 8.0);
+            cell::chip(scene, area.x0 + 12.0, middle, &label, tone(field, key, &kition_table_grid::theme::Theme::LIGHT), count_x - 8.0);
         } else {
             let line = shape(&label, LARGE, MEDIUM, count_x - area.x0 - 20.0);
             scene.text_mid(line, area.x0 + 12.0, middle, FOREGROUND);

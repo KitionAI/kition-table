@@ -127,6 +127,26 @@ fn grid_hits_answer_the_cells_holding_the_search_in_a_run_of_rows_as_they_are_no
     assert!(t.doc.grid_hits(&json!({ "epoch": plain.epoch, "from": 0, "count": 1 })).is_err());
 }
 
+/// The editor's footer sums number fields over the shown records without reading them on the
+/// page (`gridSummary`, case table.editor.grid/editor).
+#[test]
+fn the_summary_counts_and_sums_the_numbers_of_the_shown_records() {
+    let mut t = table();
+    assert!(t.doc.grid_summary(&json!({ "fields": [t.score.clone()] })).is_err(), "no arrangement yet");
+    t.open(json!({}));
+    let summary = t.doc.grid_summary(&json!({ "fields": [t.score.clone(), t.title.clone()] })).unwrap();
+    assert_eq!(summary, json!([{ "field": t.score, "count": 3, "sum": 6.0 }, { "field": t.title, "count": 0, "sum": 0.0 }]));
+    // Only the records the arrangement shows; a cell without a number counts for nothing.
+    t.open(json!({ "query": "a" }));
+    let summary = t.doc.grid_summary(&json!({ "fields": [t.score.clone()] })).unwrap();
+    assert_eq!(summary, json!([{ "field": t.score, "count": 1, "sum": 3.0 }]));
+    let a = t.record_id("a");
+    t.doc.call("records.update", &json!({ "tableId": t.table, "recordId": a, "values": { t.score.clone(): null } })).unwrap();
+    let summary = t.doc.grid_summary(&json!({ "fields": [t.score.clone()] })).unwrap();
+    assert_eq!(summary, json!([{ "field": t.score, "count": 0, "sum": 0.0 }]));
+    assert!(t.doc.grid_summary(&json!({})).is_err(), "fields are named");
+}
+
 #[test]
 fn a_sync_moves_an_edited_record_and_answers_nothing_when_the_axis_stays() {
     let mut t = table();

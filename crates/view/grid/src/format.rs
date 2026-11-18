@@ -7,7 +7,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use kition_table_file::Field;
 use serde_json::Value;
 
-use crate::theme::{Rgba, hex};
+use crate::theme::{Mode, Rgba, Theme, hex};
 
 /// A value's text, as the editor's `displayValue`: lists joined with commas, objects by their
 /// name, title, display, url, href or row key.
@@ -105,52 +105,97 @@ pub fn parse_time(text: &str) -> Option<i64> {
     None
 }
 
-/// A date field's value in its `date_format` (the editor's formats; times in UTC, so a picture is
-/// the same on every machine). Text that is no date is shown as it is.
+/// Where dates are read: the UTC offset (minutes east) from each instant (Unix milliseconds) on,
+/// oldest first, as the page's time zone has them; none is UTC (a picture, the same on every
+/// machine). An instant before the first change takes the first offset.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Zone {
+    pub changes: Vec<(i64, i32)>,
+}
+
+impl Zone {
+    /// The offset (minutes east of UTC) at `millis`.
+    pub fn offset_at(&self, millis: i64) -> i32 {
+        let after = self.changes.partition_point(|(at, _)| *at <= millis);
+        self.changes.get(after.saturating_sub(1)).map_or(0, |(_, minutes)| *minutes)
+    }
+}
+
+/// `GMT+8`, `GMT-3:30`, `GMT+0`: the label of an offset, as the editor writes it.
+fn zone_label(minutes: i32) -> String {
+    let sign = if minutes >= 0 { '+' } else { '-' };
+    let (hours, rest) = (minutes.unsigned_abs() / 60, minutes.unsigned_abs() % 60);
+    if rest == 0 { format!("GMT{sign}{hours}") } else { format!("GMT{sign}{hours}:{rest:02}") }
+}
+
+/// A date field's value in its `date_format` (the editor's formats), in UTC. Text that is no date
+/// is shown as it is.
 pub fn date(field: &Field, value: Option<&Value>) -> String {
-    let millis = match value {
-        Some(Value::Number(number)) => number.as_f64().map(|n| n as i64),
-        Some(Value::String(text)) => parse_time(text),
-        _ => None,
+    date_in(field, value, &Zone::default())
+}
+
+/// A date field's value in its `date_format`, read in `zone`: an instant (a number, or text with
+/// its offset) shows its wall time there; a calendar day and a date-time without an offset show as
+/// they are written.
+pub fn date_in(field: &Field, value: Option<&Value>, zone: &Zone) -> String {
+    let (millis, instant) = match value {
+        Some(Value::Number(number)) => (number.as_f64().map(|n| n as i64), true),
+        Some(Value::String(text)) => (parse_time(text), DateTime::parse_from_rfc3339(text.trim()).is_ok()),
+        _ => (None, false),
     };
-    let Some(time) = millis.and_then(DateTime::<Utc>::from_timestamp_millis) else {
+    let offset = match millis {
+        Some(millis) if instant => zone.offset_at(millis),
+        _ => 0,
+    };
+    let Some(time) = millis.and_then(|millis| DateTime::<Utc>::from_timestamp_millis(millis + i64::from(offset) * 60_000)) else {
         return display(value);
     };
     let default = if field.field_type == "date" { "year_month_day_slash" } else { "year_month_day_time_slash" };
     let format = field.options.get("date_format").and_then(Value::as_str).unwrap_or(default);
     let pattern = match format {
         "year_month_day_time_slash" => "%Y/%m/%d %H:%M",
-        "year_month_day_time_zone_slash" => "%Y/%m/%d %H:%M (GMT+0)",
+        "year_month_day_time_zone_slash" => "%Y/%m/%d %H:%M (ZONE)",
         "year_month_day_dash" => "%Y-%m-%d",
         "year_month_day_time_dash" => "%Y-%m-%d %H:%M",
-        "year_month_day_time_zone_dash" => "%Y-%m-%d %H:%M (GMT+0)",
+        "year_month_day_time_zone_dash" => "%Y-%m-%d %H:%M (ZONE)",
         "month_day_dash" => "%m-%d",
         "month_day_year_slash" => "%m/%d/%Y",
         "day_month_year_slash" => "%d/%m/%Y",
         _ => "%Y/%m/%d",
     };
-    time.format(pattern).to_string()
+    time.format(pattern).to_string().replace("ZONE", &zone_label(offset))
 }
 
 /// A select choice's colours: `(background, text)`.
 pub type Tone = (Rgba, Rgba);
 
 /// The editor's choice palette (light theme), in its order.
-const TONES: [(&str, Tone); 6] = [
-    ("green", (hex(0xD1FAE5), hex(0x065F46))),
-    ("blue", (hex(0xE0F2FE), hex(0x075985))),
-    ("yellow", (hex(0xFEF3C7), hex(0x92400E))),
-    ("red", (hex(0xFFE4E6), hex(0x9F1239))),
-    ("purple", (hex(0xE6E0F5), hex(0x5B21B6))),
-    ("gray", (hex(0xE4E4E7), hex(0x27272A))),
+/// The select palette, light and dark (the editor's tones, `selectPalette`).
+const TONES: [(&str, Tone, Tone); 6] = [
+    ("green", (hex(0xD1FAE5), hex(0x065F46)), (hex(0x064E3B), hex(0xA7F3D0))),
+    ("blue", (hex(0xE0F2FE), hex(0x075985)), (hex(0x0C4A6E), hex(0xBAE6FD))),
+    ("yellow", (hex(0xFEF3C7), hex(0x92400E)), (hex(0x78350F), hex(0xFDE68A))),
+    ("red", (hex(0xFFE4E6), hex(0x9F1239)), (hex(0x881337), hex(0xFECDD3))),
+    ("purple", (hex(0xE6E0F5), hex(0x5B21B6)), (hex(0x4C1D95), hex(0xDDD6FE))),
+    ("gray", (hex(0xE4E4E7), hex(0x27272A)), (hex(0x3F3F46), hex(0xF4F4F5))),
 ];
 
-/// The colours of choice `value` of a select field: its `choice_tones` entry, else the editor's
-/// hash of the text (each character's first UTF-16 unit added in, modulo the palette).
-pub fn tone(field: &Field, value: &str) -> Tone {
+/// The colours of choice `value` of a select field in `theme`: a value the field's choices do not
+/// list is neutral (the theme's chip); a listed one, or any value of a field that lists none, takes
+/// its `choice_tones` entry, else the editor's hash of the text (each character's first UTF-16
+/// unit added in, modulo the palette), in the palette of the theme's mode.
+pub fn tone(field: &Field, value: &str, theme: &Theme) -> Tone {
+    let listed: Vec<String> = match field.options.get("choices") {
+        Some(Value::Array(items)) => items.iter().map(|item| display(Some(item)).trim().to_owned()).filter(|label| !label.is_empty()).collect(),
+        _ => Vec::new(),
+    };
+    if !listed.is_empty() && !listed.iter().any(|label| label == value) {
+        return (theme.chip, theme.text);
+    }
+    let pick = |entry: &(&str, Tone, Tone)| if theme.mode == Mode::Dark { entry.2 } else { entry.1 };
     let named = field.options.get("choice_tones").and_then(|tones| tones.get(value)).and_then(Value::as_str);
-    if let Some((_, tone)) = named.and_then(|name| TONES.iter().find(|(tone, _)| *tone == name)) {
-        return *tone;
+    if let Some(entry) = named.and_then(|name| TONES.iter().find(|(tone, _, _)| *tone == name)) {
+        return pick(entry);
     }
     let mut hash = 0usize;
     for c in value.chars() {
@@ -159,7 +204,7 @@ pub fn tone(field: &Field, value: &str) -> Tone {
         let first = c.encode_utf16(&mut units).first().copied().unwrap_or_default();
         hash = (hash + usize::from(first)) % TONES.len();
     }
-    TONES.get(hash).map_or(TONES[5].1, |(_, tone)| *tone)
+    pick(TONES.get(hash).unwrap_or(&TONES[5]))
 }
 
 /// A select value's choices, as a list.
@@ -177,10 +222,15 @@ pub fn choices(value: Option<&Value>) -> Vec<String> {
     }
 }
 
-/// The text a cell of `field` shows, for cells drawn as text.
+/// The text a cell of `field` shows, for cells drawn as text (dates in UTC).
 pub fn cell_text(field: &Field, value: Option<&Value>) -> String {
+    cell_text_in(field, value, &Zone::default())
+}
+
+/// The text a cell of `field` shows, for cells drawn as text, its dates read in `zone`.
+pub fn cell_text_in(field: &Field, value: Option<&Value>, zone: &Zone) -> String {
     match field.field_type.as_str() {
-        "date" | "datetime" | "created_time" | "last_modified_time" => date(field, value),
+        "date" | "datetime" | "created_time" | "last_modified_time" => date_in(field, value, zone),
         _ => display(value),
     }
 }
@@ -212,9 +262,45 @@ mod tests {
     fn choices_take_the_editor_tones() {
         let field = Field::default();
         // "A" is 65: 65 % 6 = 5, gray.
-        assert_eq!(tone(&field, "A"), TONES[5].1);
+        assert_eq!(tone(&field, "A", &Theme::LIGHT), TONES[5].1);
         let mut toned = field.clone();
         toned.options.insert("choice_tones".into(), serde_json::json!({ "A": "green" }));
-        assert_eq!(tone(&toned, "A"), TONES[0].1);
+        assert_eq!(tone(&toned, "A", &Theme::LIGHT), TONES[0].1);
+    }
+
+    /// The editor reads dates in the person's time zone (the old grid formatted them with the
+    /// browser's): an instant shows its wall time there, with its offset as the zone formats
+    /// write it; a calendar day and a date-time without an offset show as written; a picture
+    /// (no zone) shows UTC.
+    #[test]
+    fn dates_read_in_the_page_s_zone() {
+        let mut field = Field { field_type: "datetime".into(), ..Field::default() };
+        let shanghai = Zone { changes: vec![(i64::MIN, 480)] };
+        let instant = Value::String("2026-07-23T04:14:47Z".into());
+        assert_eq!(date_in(&field, Some(&instant), &shanghai), "2026/07/23 12:14");
+        assert_eq!(date(&field, Some(&instant)), "2026/07/23 04:14");
+        assert_eq!(date_in(&field, Some(&Value::String("2026-07-23T04:14".into())), &shanghai), "2026/07/23 04:14");
+        // Daylight saving time: the offset of each instant.
+        let new_york = Zone { changes: vec![(i64::MIN, -300), (1_772_953_200_000, -240), (1_793_512_800_000, -300)] };
+        assert_eq!(date_in(&field, Some(&Value::String("2026-01-15T12:00:00Z".into())), &new_york), "2026/01/15 07:00");
+        assert_eq!(date_in(&field, Some(&Value::String("2026-07-15T12:00:00Z".into())), &new_york), "2026/07/15 08:00");
+        field.options.insert("date_format".into(), Value::String("year_month_day_time_zone_dash".into()));
+        assert_eq!(date_in(&field, Some(&instant), &Zone { changes: vec![(i64::MIN, 330)] }), "2026-07-23 09:44 (GMT+5:30)");
+        assert_eq!(date(&field, Some(&instant)), "2026-07-23 04:14 (GMT+0)");
+        let day = Field { field_type: "date".into(), ..Field::default() };
+        assert_eq!(date_in(&day, Some(&Value::String("2026-11-28".into())), &new_york), "2026/11/28");
+    }
+
+    /// The old grid's selectChoiceColors.spec: a tone in the dark theme is the dark palette's, and
+    /// a value the field's choices do not list is neutral.
+    #[test]
+    fn choices_are_toned_for_the_theme_and_unlisted_values_are_neutral() {
+        let mut field = Field::default();
+        field.options.insert("choices".into(), serde_json::json!(["Ready", "Done"]));
+        field.options.insert("choice_tones".into(), serde_json::json!({ "Ready": "red" }));
+        assert_eq!(tone(&field, "Ready", &Theme::LIGHT), (hex(0xFFE4E6), hex(0x9F1239)));
+        assert_eq!(tone(&field, "Ready", &Theme::DARK), (hex(0x881337), hex(0xFECDD3)));
+        assert_eq!(tone(&field, "Later", &Theme::LIGHT), (Theme::LIGHT.chip, Theme::LIGHT.text));
+        assert_eq!(tone(&field, "Later", &Theme::DARK), (Theme::DARK.chip, Theme::DARK.text));
     }
 }

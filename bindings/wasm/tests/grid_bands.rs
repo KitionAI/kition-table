@@ -131,6 +131,77 @@ fn the_axes_lay_out_the_arrangement_with_the_editors_geometry() {
     assert_eq!(grouped["skeleton"]["background"], json!("#1b1d23"));
 }
 
+/// The editor shows a view's settings before it saves them (and a read-only person's, which it
+/// never saves): `gridAxes` lays out with the editor's `config` (case table.editor.grid/editor).
+#[test]
+fn the_axes_follow_the_editors_config_before_it_is_saved() {
+    let (mut doc, table_id, grid, _) = document();
+    let axis = doc.grid_open(&json!({ "tableId": table_id, "viewId": grid })).unwrap();
+    let config = json!({ "hidden_field_names": ["notes", "amount"], "row_height": "tall", "frozen_column_count": 2 });
+    let laid = doc.grid_axes(&axis, &json!({ "tableId": table_id, "viewId": grid, "config": config })).unwrap();
+    assert_eq!(laid["rowRuns"], json!([[56.0, 70], [32.0, 1]]), "tall rows");
+    let columns = laid["columns"].as_array().unwrap();
+    assert_eq!(columns.len(), 5, "four fields and the add-field column");
+    assert_eq!(columns.iter().filter(|column| column["frozen"] == true).count(), 2);
+    // The view itself still says otherwise.
+    let stored = doc.grid_axes(&axis, &json!({ "tableId": table_id, "viewId": grid })).unwrap();
+    assert_eq!(stored["rowRuns"], json!([[40.0, 70], [32.0, 1]]));
+    assert_eq!(stored["columns"].as_array().unwrap().len(), 7);
+    // Groups the editor has not saved yet: headers, and no drag handle in the row head.
+    let groups = json!({ "group_items": [{ "id": "g", "field_name": "status", "direction": "asc" }] });
+    let axis = doc.grid_open(&json!({ "tableId": table_id, "viewId": grid, "config": groups.clone() })).unwrap();
+    let grouped = doc.grid_axes(&axis, &json!({ "tableId": table_id, "viewId": grid, "config": groups })).unwrap();
+    assert_eq!(grouped["rowHeadWidth"], json!(48.0));
+    assert_eq!(grouped["groups"].as_array().unwrap().len(), 2);
+    assert!(
+        doc.grid_axes(&axis, &json!({ "tableId": table_id, "viewId": grid, "config": "tall" })).is_err(),
+        "a config that is not an object is refused"
+    );
+}
+
+/// The editor's bands read dates in the page's time zone (`gridAxes`' `zone`), as the old grid
+/// formatted them with the browser's; without one, in UTC as the picture does (case
+/// table.editor.grid/editor).
+#[test]
+fn the_bands_read_dates_in_the_page_s_zone() {
+    fonts();
+    let mut doc = TableDocument::create("Dates.ktable", 0, 0).unwrap();
+    let table = call(&mut doc, "documents.get", json!({}))["tables"][0].clone();
+    let (table_id, view) = (table["id"].as_i64().unwrap(), table["views"][0]["id"].as_i64().unwrap());
+    let due = call(&mut doc, "fields.create", json!({ "tableId": table_id, "title": "Due", "type": "datetime" }));
+    let due = if due["field"].is_object() { due["field"].clone() } else { due };
+    let title = table["fields"].as_array().unwrap().iter().find(|field| field["is_primary"] == true).unwrap()["name"].as_str().unwrap().to_owned();
+    call(
+        &mut doc,
+        "records.create",
+        json!({ "tableId": table_id, "values": { title: "Launch", due["name"].as_str().unwrap(): "2026-07-23T04:14:47Z" } }),
+    );
+    let texts = |doc: &mut TableDocument, zone: Value| -> Vec<String> {
+        let axis = doc.grid_open(&json!({ "tableId": table_id, "viewId": view })).unwrap();
+        let laid = doc.grid_axes(&axis, &json!({ "tableId": table_id, "viewId": view, "zone": zone })).unwrap();
+        let epoch = u32::try_from(laid["epoch"].as_u64().unwrap()).unwrap();
+        let batch = items(&doc.grid_bands(epoch, &[0, 0, 0, 1, 0, 0], 1.0, 1, false).unwrap());
+        lists(&batch)
+            .iter()
+            .flat_map(|list| {
+                list.ops
+                    .iter()
+                    .filter_map(|op| if let Op::Text { text, .. } = op { Some(list.text(*text).to_owned()) } else { None })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    };
+    let shanghai = texts(&mut doc, json!([[-8.64e15, 480]]));
+    assert!(shanghai.iter().any(|text| text == "2026/07/23 12:14"), "{shanghai:?}");
+    let utc = texts(&mut doc, Value::Null);
+    assert!(utc.iter().any(|text| text == "2026/07/23 04:14"), "{utc:?}");
+    let axis = doc.grid_open(&json!({ "tableId": table_id, "viewId": view })).unwrap();
+    assert!(
+        doc.grid_axes(&axis, &json!({ "tableId": table_id, "viewId": view, "zone": [[0, "east"]] })).is_err(),
+        "a zone of other things is refused"
+    );
+}
+
 #[test]
 fn every_band_draws_its_own_area_clipped_with_the_resources_it_uses() {
     let (mut doc, table_id, grid, _) = document();

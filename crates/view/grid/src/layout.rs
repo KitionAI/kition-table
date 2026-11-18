@@ -184,7 +184,8 @@ pub fn lay_out(view: &View<'_>, top: f32, width: f32, focus: Option<Focus>, reso
     });
     let mut resources = resources;
     let mut shaper = Shaper::default();
-    let mut out = Out { list: &mut list, resources: &mut resources, shaper: &mut shaper, theme };
+    let zone = crate::format::Zone::default();
+    let mut out = Out { list: &mut list, resources: &mut resources, shaper: &mut shaper, theme, zone: &zone };
     let g = &geometry;
     let bottom = top + g.height;
     let row_ids: Vec<u32> = (0..g.rows.len()).map(|index| u32::try_from(index).unwrap_or(u32::MAX)).collect();
@@ -313,14 +314,14 @@ fn group_header(out: &mut Out<'_>, view: &View<'_>, g: &Geometry, (depth, field,
     if matches!(field.field_type.as_str(), "single_select" | "multi_select") && !items.is_empty() {
         let mut x = left;
         for item in &items {
-            let width = chip(out, x, middle, item, tone(field, item), right);
+            let width = chip(out, x, middle, item, tone(field, item, &theme), right);
             if width == 0.0 {
                 break;
             }
             x += width + 6.0;
         }
     } else {
-        let text = crate::format::cell_text(field, value.filter(|value| !matches!(value, Value::Null)));
+        let text = crate::format::cell_text_in(field, value.filter(|value| !matches!(value, Value::Null)), out.zone);
         let text = if text.is_empty() { "Empty".to_owned() } else { text };
         out.text(&text, left, middle, Align::Left, BODY, REGULAR, theme.text, right - left);
     }

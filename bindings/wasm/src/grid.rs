@@ -1,15 +1,16 @@
 //! The editor's arrangement (`kition-table-arrange`) over the open document: the extras
-//! `gridOpen`, `gridSync`, `gridHits` and `gridStats`.
+//! `gridOpen`, `gridSync`, `gridHits`, `gridSummary` and `gridStats`.
 //!
 //! `gridOpen` arranges a view of a table for the editor (its settings as the editor holds them,
 //! its search, its collapsed groups) and answers the axis (`kition_table_arrange::axis`, format
-//! v2). `gridHits` answers which cells of a run of its rows hold the search. The document then notes what every request and every imported change touches; `gridSync`
+//! v2). `gridHits` answers which cells of a run of its rows hold the search, and `gridSummary`
+//! the numbers of some fields over its records (the editor's footer). The document then notes what every request and every imported change touches; `gridSync`
 //! brings the arrangement to the document's current state, moving only the records the changes
 //! touched, and answers the new axis, or no bytes when the axis is the same. A change to the
 //! table's fields, its records' positions, or the view's settings arranges it again; so does any
 //! change the document could not attribute.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use kition_kdm::Version;
 use kition_table_arrange::{Arranged, Arrangement, Stats, Stopwatch};
@@ -171,6 +172,33 @@ impl Grid {
         Ok(hits.encode())
     }
 
+    /// `gridSummary`: `{fields}` (field names); for each, how many of the arrangement's records
+    /// hold a number in it (a JSON number, or text that reads as one) and their sum, as
+    /// `[{field, count, sum}]` in the order asked. The records are the arrangement's as it stands
+    /// (the editor asks after each axis it takes), their values the document's now.
+    pub(crate) fn summary(&self, file: &TableFile, params: &Value) -> Result<Value, String> {
+        let names: Vec<String> = params
+            .get("fields")
+            .and_then(Value::as_array)
+            .and_then(|items| items.iter().map(|item| item.as_str().map(str::to_owned)).collect())
+            .ok_or("invalid params: fields lists field names")?;
+        let session = self.session.as_ref().ok_or("no grid is open: call gridOpen first")?;
+        let mut sums = vec![(0u64, 0f64); names.len()];
+        if !names.is_empty() {
+            let shown: HashSet<i64> = session.arranged.ids().collect();
+            let records = file.list_record_values(session.key.table_id, &names).map_err(|error| error.to_string())?;
+            for record in records.iter().filter(|record| shown.contains(&record.id)) {
+                for (name, (count, sum)) in names.iter().zip(sums.iter_mut()) {
+                    if let Some(number) = record.values.get(name).and_then(number) {
+                        *count += 1;
+                        *sum += number;
+                    }
+                }
+            }
+        }
+        Ok(Value::Array(names.iter().zip(sums).map(|(name, (count, sum))| json!({ "field": name, "count": count, "sum": sum })).collect()))
+    }
+
     /// `gridStats`: how long arranging took.
     pub(crate) fn stats(&self) -> Value {
         let mut stats = self.stats.json();
@@ -215,6 +243,41 @@ impl Grid {
         let changed = session.arranged.relocate(file, &touched)?;
         self.stats.relocate.record(watch.elapsed_ms(), touched.len());
         Ok(changed)
+    }
+}
+
+/// A cell's value as a number: a finite JSON number, or text that reads as one.
+fn number(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(number) => number.as_f64(),
+        Value::String(text) => text.trim().parse::<f64>().ok(),
+        _ => None,
+    }
+    .filter(|number| number.is_finite())
+}
+
+impl crate::TableDocument {
+    /// The numbers of some fields over the editor's arrangement (`gridSummary`, see `Grid::summary`).
+    pub fn grid_summary(&self, params: &Value) -> Result<Value, String> {
+        self.grid.summary(&self.file, params)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod web {
+    use kition_kit::wasm_bindgen::prelude::*;
+
+    use crate::__kition_kit_export::WebDocument;
+
+    #[wasm_bindgen(js_class = "TableDocument", wasm_bindgen = kition_kit::wasm_bindgen)]
+    impl WebDocument {
+        /// The numbers of some fields over the editor's arrangement (`{fields}`), as JSON
+        /// `[{field, count, sum}]`.
+        #[wasm_bindgen(js_name = gridSummary)]
+        pub fn grid_summary(&self, params: &str) -> Result<String, JsError> {
+            let params = kition_kit::parse_params(params).map_err(|message| JsError::new(&message))?;
+            self.0.grid_summary(&params).map(|value| value.to_string()).map_err(|message| JsError::new(&message))
+        }
     }
 }
 

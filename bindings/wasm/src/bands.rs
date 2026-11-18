@@ -109,6 +109,8 @@ struct Layout {
     /// Each row's top (and the bottom of the last), from the header's bottom.
     tops: Vec<f32>,
     band_rows: usize,
+    /// Where the page reads dates (`gridAxes`' `zone`).
+    zone: kition_table_grid::format::Zone,
 }
 
 /// How many band times `gridStats` keeps (the latest).
@@ -210,16 +212,26 @@ fn on(color: Rgba) -> Rgba {
     if luminance > 150.0 { [0, 0, 0, 255] } else { [255, 255, 255, 255] }
 }
 
-/// The view's shown columns with their widths.
-fn columns(file: &TableFile, fields: &[Field], view: Option<&kition_table_file::View>) -> Result<Vec<Column>, String> {
-    let empty = serde_json::Map::new();
-    let config = view.map_or(&empty, |view| &view.config);
+/// A view setting `key`: the editor's (`config`, not saved yet) when it names one, else the view's.
+fn setting<'a>(key: &str, config: Option<&'a serde_json::Map<String, Value>>, view: Option<&'a kition_table_file::View>) -> Option<&'a Value> {
+    config.and_then(|config| config.get(key)).or_else(|| view.and_then(|view| view.config.get(key)))
+}
+
+/// The view's shown columns with their widths (the fields `config` or the view hides are left out).
+fn columns(
+    file: &TableFile,
+    fields: &[Field],
+    view: Option<&kition_table_file::View>,
+    config: Option<&serde_json::Map<String, Value>>,
+) -> Result<Vec<Column>, String> {
     let layouts = match view {
         Some(view) => file.list_view_fields(view.id).map_err(|error| error.to_string())?,
         None => Vec::new(),
     };
-    let hidden: Vec<&str> =
-        config.get("hidden_field_names").and_then(Value::as_array).map(|names| names.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    let hidden: Vec<&str> = setting("hidden_field_names", config, view)
+        .and_then(Value::as_array)
+        .map(|names| names.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
     Ok(fields
         .iter()
         .filter(|field| !hidden.contains(&field.name.as_str()))
@@ -368,7 +380,11 @@ impl Layout {
 
 impl Bands {
     /// `gridAxes`: lays out `axis` (from `gridOpen` or `gridSync`) for the view `params` names
-    /// (`{tableId, viewId?, theme?, brand?}`); answers the axes as JSON.
+    /// (`{tableId, viewId?, config?, zone?, theme?, brand?}`); answers the axes as JSON. `config` is the
+    /// view's config as the editor holds it (as `gridOpen` takes it): its hidden fields, row
+    /// height, frozen count, sorts and groups lay the grid out before they are saved (or when they
+    /// cannot be, read-only); the keys it leaves out are the view's. `zone` is the page's time zone
+    /// (`[[from, minutes east of UTC], ...]`, oldest first), where the bands read dates; without it, UTC.
     pub(crate) fn axes(&mut self, file: &TableFile, axis: &[u8], params: &Value) -> Result<Value, String> {
         let axis = Arranged::decode(axis)?;
         let table_id = params.get("tableId").and_then(Value::as_i64).ok_or("invalid params: tableId is a table's id")?;
@@ -382,13 +398,37 @@ impl Bands {
         if let Some(brand) = params.get("brand").and_then(Value::as_str).and_then(parse_hex) {
             theme = theme.with_brand(brand, on(brand));
         }
-        let arrangement = Arrangement::of(file, &table.fields, view)?;
-        let columns = columns(file, &table.fields, view)?;
-        let empty = serde_json::Map::new();
-        let config = view.map_or(&empty, |view| &view.config);
-        let record_height = row_height(config.get("row_height").and_then(Value::as_str));
+        // The page's time zone: `[[from (Unix ms), minutes east of UTC], ...]`, oldest first.
+        let zone = match params.get("zone") {
+            None | Some(Value::Null) => kition_table_grid::format::Zone::default(),
+            Some(Value::Array(changes)) => kition_table_grid::format::Zone {
+                changes: changes
+                    .iter()
+                    .map(|change| {
+                        let at = change.get(0).and_then(Value::as_f64)?;
+                        let minutes = change.get(1).and_then(Value::as_i64).and_then(|minutes| i32::try_from(minutes).ok())?;
+                        // Unix milliseconds well inside an f64's exact range.
+                        #[allow(clippy::cast_possible_truncation)]
+                        Some((at as i64, minutes))
+                    })
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or("invalid params: zone lists [from, minutes] pairs")?,
+            },
+            Some(_) => return Err("invalid params: zone lists [from, minutes] pairs".into()),
+        };
+        let config = match params.get("config") {
+            None | Some(Value::Null) => None,
+            Some(Value::Object(config)) => Some(config),
+            Some(_) => return Err("invalid params: config is a view config object".into()),
+        };
+        let arrangement = match (view, config) {
+            (Some(view), Some(config)) => Arrangement::of_config(file, &table.fields, view, config)?,
+            _ => Arrangement::of(file, &table.fields, view)?,
+        };
+        let columns = columns(file, &table.fields, view, config)?;
+        let record_height = row_height(setting("row_height", config, view).and_then(Value::as_str));
         // The editor freezes the first column unless the view says otherwise.
-        let frozen = config.get("frozen_column_count").and_then(Value::as_u64).map_or(1, |count| count as usize).min(columns.len());
+        let frozen = setting("frozen_column_count", config, view).and_then(Value::as_u64).map_or(1, |count| count as usize).min(columns.len());
         let reorderable = arrangement.sorts.is_empty() && arrangement.groups.is_empty();
         let row_head = if reorderable { 3.0 } else { 2.0 } * ROW_CONTROL;
         let mut lefts = Vec::with_capacity(columns.len());
@@ -459,6 +499,7 @@ impl Bands {
             rows,
             tops,
             band_rows,
+            zone,
         });
         Ok(answer)
     }
@@ -557,7 +598,7 @@ impl Bands {
             size: (area.w, area.h),
             ..Header::default()
         });
-        let mut out = Out { list: &mut list, resources, shaper, theme };
+        let mut out = Out { list: &mut list, resources, shaper, theme, zone: &layout.zone };
         out.list.push(Op::Clip { x: area.x, y: area.y, w: area.w, h: area.h });
         match key.layer {
             Layer::Header | Layer::HeaderFrozen => header(&mut out, layout, key.layer, area),
@@ -751,14 +792,14 @@ fn group_title(out: &mut Out<'_>, layout: &Layout, header: &GroupHeader, y: f32)
     if matches!(field.field_type.as_str(), "single_select" | "multi_select") && !items.is_empty() {
         let mut x = left;
         for item in &items {
-            let width = chip(out, x, middle, item, kition_table_grid::format::tone(field, item), right);
+            let width = chip(out, x, middle, item, kition_table_grid::format::tone(field, item, &theme), right);
             if width == 0.0 {
                 break;
             }
             x += width + 6.0;
         }
     } else {
-        let text = kition_table_grid::format::cell_text(field, Some(&header.value).filter(|value| !value.is_null()));
+        let text = kition_table_grid::format::cell_text_in(field, Some(&header.value).filter(|value| !value.is_null()), out.zone);
         let text = if text.is_empty() { "Empty".to_owned() } else { text };
         out.text(&text, left, middle, Align::Left, BODY, REGULAR, theme.text, right - left);
     }
@@ -1044,7 +1085,7 @@ impl Bands {
 
 impl crate::TableDocument {
     /// Lays out the editor's arrangement for its grid (`gridAxes`): `axis` is what `gridOpen` or
-    /// `gridSync` answered, `params` `{tableId, viewId?, theme?, brand?}`; answers the axes.
+    /// `gridSync` answered, `params` `{tableId, viewId?, config?, zone?, theme?, brand?}`; answers the axes.
     pub fn grid_axes(&mut self, axis: &[u8], params: &Value) -> Result<Value, String> {
         self.bands.axes(&self.file, axis, params)
     }

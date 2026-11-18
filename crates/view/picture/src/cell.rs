@@ -93,7 +93,7 @@ pub fn draw(scene: &mut Scene, field: &Field, value: Option<&Value>, area: Rect)
             }
             let mut x = inner.x0;
             for item in &items {
-                let width = chip(scene, x, middle, item, tone(field, item), inner.x1);
+                let width = chip(scene, x, middle, item, tone(field, item, &kition_table_grid::theme::Theme::LIGHT), inner.x1);
                 if width == 0.0 {
                     break;
                 }
