@@ -1,0 +1,29 @@
+format: 1
+id: table.editor.grid/widths
+feature: table.editor.grid
+intent: >-
+  Every run of text the engine sets is as wide in the browser as the engine measured it, so the
+  page never measures or lays out text and the screen matches the picture: for a corpus of Latin,
+  kerning pairs, ligature candidates, numbers, dates, punctuation, Chinese, Japanese, Korean and
+  mixed lines at weights 400, 500 and 600 and sizes 12 to 20 px, the page's measureText of each
+  run in its one face (the package's locked fonts, every face declared for weights 100 to 900)
+  is within 0.5 CSS px of the engine's width, in Chromium and WebKit, at device pixel ratios 1
+  and 2 (the gate of the grid design, section 3.5.7).
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid spike TG-0a corpus (card tg3)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [node, web/tests/widths.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/widths.mjs, webkit]
+expected:
+  - actual: out:exit
+    compare: exit
+requires: [chromium, webkit]
+tags: [browser]
+timeout_s: 60
+since: "2026-11-18"

@@ -1,0 +1,14 @@
+{
+  "about": "The read-only scrolling lines of the grid plan (section 4.2) on the owner's machine (headed Chromium, DPR 2, 1440 x 900, 100,000 records in 50 fields); the headless tier multiplies every line by relax.",
+  "relax": 3,
+  "interval": { "p95": 16.7, "p99": 25, "max": 50 },
+  "playP95": 6,
+  "skeletonSteady": 0,
+  "skeletonRun": 2,
+  "bandWarmP95": 4,
+  "bandColdP95": 12,
+  "frameBytes": 65536,
+  "bytesPerSecond": 262144,
+  "axisBytes": 1048576,
+  "openMs": 1500
+}

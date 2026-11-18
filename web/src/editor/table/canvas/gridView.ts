@@ -158,6 +158,11 @@ export class GridView {
     return this.needed().every((key) => this.cache.has(key))
   }
 
+  /** Whether a `gridBands` request is on its way (the view fetches bands one request at a time). */
+  get fetching(): boolean {
+    return this.inFlight
+  }
+
   /** The bands the viewport shows now (header strips first). */
   neededKeys(): BandKey[] {
     return this.needed()

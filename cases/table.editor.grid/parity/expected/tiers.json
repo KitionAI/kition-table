@@ -1,0 +1,14 @@
+{
+  "about": "Screen == picture tolerances (grid plan section 5.1), calibrated on macOS in spike TG-0c: the page's Canvas 2D player against the engine's rasterizer, region by region. Device pixels; differences per channel 0-255.",
+  "flat": { "maxAbs": 2, "diffShare": 0.001 },
+  "curve": { "maxAbs": 96, "diff2Share": 0.15 },
+  "glyphTile": { "maxAbs": 2 },
+  "inkEdge": { "1": 2, "2": 1 },
+  "centroid": { "1": 3, "2": 1.5 },
+  "segmentMean": 24,
+  "textPsnr": 17,
+  "wholePsnr": { "1": 23, "2": 25 },
+  "width": 0.5,
+  "widthWarn": 0.1,
+  "macosOnly": ["segmentMean", "textPsnr", "wholePsnr"]
+}

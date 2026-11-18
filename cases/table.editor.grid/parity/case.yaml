@@ -1,0 +1,32 @@
+format: 1
+id: table.editor.grid/parity
+feature: table.editor.grid
+intent: >-
+  The screen is the picture: the page's Canvas 2D player and the engine's rasterizer draw the
+  same display list alike, region by region, in Chromium and WebKit. Over every cell kind (Latin,
+  CJK, Hangul, emoji, characters no face covers, wrapped text in tall rows, chips, checkboxes,
+  ratings, dates, people, attachments), frozen and grouped views, light and dark themes, a changed
+  brand color, device pixel ratios 1 and 2 and two scroll positions, each visible band is drawn
+  by both and compared at the tolerances of expected/tiers.json: flat areas (snapped rectangles,
+  hairlines, backgrounds) to 2 of 255, curved shapes and icons, emoji tiles and tofu boxes, the
+  ink box and centre of each text run, and on macOS the text's mean difference and PSNR and the
+  whole band's PSNR (the text tiers are calibrated for macOS only, spike TG-0c). Every text run's
+  width also matches the page's measureText within 0.5 px.
+layer: gate
+source:
+  kind: synthetic
+  from: the Table grid design, section 5.1, and spike TG-0c (card tg3)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [node, web/tests/parity.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/parity.mjs, webkit]
+expected:
+  - actual: out:exit
+    compare: exit
+requires: [chromium, webkit]
+tags: [browser, platform-macos]
+timeout_s: 60
+since: "2026-11-18"

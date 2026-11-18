@@ -224,7 +224,7 @@ features:
     dimension: [function, fidelity]
     priority: P1
     status: partial
-    paths: [crates/view/display/**, crates/view/grid/**]
-    gap: "Phase 1 of the grid moving to a Rust layout: the display list and the picture. The editor still draws its own grid; the page player, bands, fonts in the package and the parity tests come in later phases."
-    cases: [table.editor.grid/display-format, table.editor.grid/display-raster, table.editor.grid/layout-cells, table.editor.grid/shaping-as-canvas]
+    paths: [crates/view/display/**, crates/view/grid/**, bindings/wasm/src/bands.rs, web/src/editor/table/canvas/**, web/dev/grid.html, web/fonts.lock.json, web/scripts/fonts.mjs, web/tests/gridPage.mjs, web/tests/parity.mjs, web/tests/perf.mjs, web/tests/widths.mjs]
+    gap: "Phases 1 and 3 of the grid moving to a Rust layout: the display list, the picture, the engine's bands and the page's read-only player on the development page (dev/grid.html), with the fonts in the package. The editor still draws its own grid; interaction and the switch come in phases 4 and 5."
+    cases: [table.editor.grid/display-format, table.editor.grid/display-raster, table.editor.grid/layout-cells, table.editor.grid/shaping-as-canvas, table.editor.grid/bands, table.editor.grid/page-player, table.editor.grid/widths, table.editor.grid/parity, table.editor.grid/scroll-perf]
     since: "2026-11-17"

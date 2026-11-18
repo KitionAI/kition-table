@@ -131,6 +131,19 @@ pnpm run test:flow   # browser flows in Chromium and WebKit (Playwright; run wit
 
 The flow tests need Playwright's browsers (`pnpm exec playwright install chromium webkit`).
 
+The new grid (the engine's bands played on a canvas, not yet the editor's) has a development page,
+`web/dev/grid.html` (`pnpm dev`, then `/dev/grid.html?file=<a .ktable URL>&view=<id>`; `hud=1`
+shows its frame and band timings), which is not part of `pnpm build`. It draws with the same font
+files the engine shapes with: `pnpm fonts` copies them from `KITION_FONTS_DIR` into
+`web/public/fonts/` and refuses any whose SHA-256 is not in `web/fonts.lock.json`; `pnpm build`
+packages them from there. Its tests, with no HTTP proxy set:
+
+```sh
+pnpm run test:grid    # text widths and screen == picture, in Chromium and WebKit
+pnpm run test:perf    # scrolling 100,000 records (writes target/perf/ on first run; minutes)
+PERF_TIER=strict PERF_HEADED=1 pnpm run test:perf   # the lines themselves, on a maintainer's machine
+```
+
 The editor depends on the `@kition/*` packages of kition-sdk and Kition Tessera from npm, at the
 versions the committed `web/pnpm-lock.yaml` pins. To work against local checkouts instead, clone
 `kition-sdk` and `kition-tessera` beside this repository (or set `KITION_SDK` and

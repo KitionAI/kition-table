@@ -1,0 +1,29 @@
+format: 1
+id: table.editor.grid/scroll-perf
+feature: table.editor.grid
+intent: >-
+  Scrolling the grid stays smooth on a table of 100,000 records in 50 fields (the grid design,
+  section 4): on the development page, at a device pixel ratio of 2 in a 1440 x 900 viewport,
+  steady scrolls at 6,000 px/s (also grouped and sorted, and with 88 px rows) keep frame intervals,
+  the content's play time and the bytes per frame under the lines of expected/lines.json and never
+  show a skeleton; a 20,000 px/s fling and the scroll bar dragged from top to bottom in a second
+  show skeletons for at most a few frames in a row; scrolling across the 50 columns keeps its frame
+  intervals; and the worker makes a band within the warm and cold lines. The headless run checks
+  every line relaxed by the file's factor; the lines themselves hold in a headed Chromium on the
+  owner's machine (PERF_TIER=strict PERF_HEADED=1).
+layer: corpus
+dimension: performance
+source:
+  kind: synthetic
+  from: bindings/wasm/examples/perf_fixture.rs at its fixed seed (card tg3)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [node, web/tests/perf.mjs, chromium]
+expected:
+  - actual: out:exit
+    compare: exit
+requires: [chromium]
+tags: [browser, large, slow]
+since: "2026-11-18"
