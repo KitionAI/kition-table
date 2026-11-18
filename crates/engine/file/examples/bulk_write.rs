@@ -1,13 +1,16 @@
 //! Times a table's large writes natively, as the grid sends them (one `transact` of one
 //! `cells.set`): a number column cleared in every record, its undo and redo, a paste of a
-//! different value into every record, and a fill of one value into every record.
+//! different value into every record, and a fill of one value into every record. Steps that are
+//! not cell writes mix the history: `create` adds a record at the end and `delete` deletes the
+//! first one, each one transaction.
 //!
 //! `cargo run --release -p kition-table-file --example bulk_write -- [<file.ktable>]`
 //!
 //! With a file (the grid's performance fixture, `kition-table-kit`'s `perf_fixture` output) it
 //! opens a copy of it in memory; without one it builds a table of `BULK_ROWS` records (default
 //! 20,000) in 12 fields. `BULK_PHASES` picks the steps (default `clear,undo,redo,paste,fill`); a
-//! step repeated writes what is already there (a second `paste` changes nothing). Each step
+//! step repeated writes what is already there (a second `paste` changes nothing), and
+//! `create,clear,undo,undo` undoes a column clear and then the record created before it. Each step
 //! prints its time, the CPU time it took, and the process's resident memory after it.
 
 #![allow(clippy::disallowed_methods, reason = "a native timing tool reads the clock")]
@@ -114,6 +117,14 @@ fn main() -> Result<(), String> {
             "fill" => {
                 let op = cells_set(&|_| json!(7));
                 timed("fill", || file.transact(&[op]).map_err(text))?;
+            }
+            "create" => {
+                let op = TableOp::RecordsCreate { table_id: table.id, at: None, records: vec![Map::from_iter([(number.clone(), json!(1))])] };
+                timed("create", || file.transact(&[op]).map_err(text))?;
+            }
+            "delete" => {
+                let op = TableOp::RecordsDelete { table_id: table.id, row_keys: keys.first().cloned().into_iter().collect() };
+                timed("delete", || file.transact(&[op]).map_err(text))?;
             }
             other => return Err(format!("unknown phase {other}")),
         }

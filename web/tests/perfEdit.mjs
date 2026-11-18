@@ -9,7 +9,9 @@
 // for each), and the first record's value filled down over all the others (the fill handle's
 // action), each timed the same way from the key or the action and checked in the engine; between
 // the clear and the paste, the clear is undone and redone (the page's Undo and Redo), each timed
-// to the first complete frame after the engine answered and checked.
+// to the first complete frame after the engine answered and checked. Last, a record is appended,
+// the column cleared again, and both undone: the clear's undo, then the append's (the engine's
+// undo, across the clear of every record), each timed and checked the same way.
 //
 // The fixture is tests/perf.mjs's (bindings/wasm/examples/perf_fixture.rs, in target/perf/; it is
 // written when missing). PERF_TIER=strict checks the line itself (owner's machine, PERF_HEADED=1);
@@ -167,7 +169,7 @@ try {
 
   // The clear undone and redone, as the page's Undo and Redo (Cmd+Z, Cmd+Shift+Z) run them: each
   // timed from the action to the first complete frame after the engine answered.
-  const timedHistory = async (name) => {
+  const timedHistory = async (name, what = 'the clear', key = name) => {
     const seen = await page.evaluate(() => window.__ktableGridEvents.length)
     const started = await page.evaluate((name) => {
       const at = performance.now()
@@ -190,8 +192,8 @@ try {
         }),
       started,
     )
-    results[name] = { ms, records: rows }
-    console.log(`${name} the clear of ${rows} records: ${f(ms)} ms from the action to the redraw`)
+    results[key] = { ms, records: rows }
+    console.log(`${name} ${what} of ${rows} records: ${f(ms)} ms from the action to the redraw`)
     return failed
   }
   const undoFailed = await timedHistory('undo')
@@ -240,6 +242,52 @@ try {
   })
   const filled = await sampled()
   step('a whole column is filled', filled.values.every((value) => value === 0), JSON.stringify(filled.values))
+
+  // A record appended, then the column cleared again, and both undone: the clear's undo writes
+  // its values back, and the append's undo is the engine's, which reads the history across the
+  // clear.
+  const count = () => page.evaluate(() => window.__ktableGrid.interaction.rows.count)
+  const records = await count()
+  // The rows sampled are those before the append, which goes to the end.
+  const kept = () =>
+    page.evaluate(
+      async ([col, at]) => {
+        const { interaction, data, view } = window.__ktableGrid
+        const field = data.field(view.currentAxes.columns[col].fieldId)
+        const ids = at.map((row) => interaction.rows.recordId(row))
+        return (await data.records(ids, [field.name])).map((record) => record.values[field.name] ?? null)
+      },
+      [columns.number, filled.at],
+    )
+  const appendSeen = await page.evaluate(() => window.__ktableGridEvents.length)
+  await page.evaluate(() => window.__ktableGrid.interaction.handlers.onAppendRecord({ anchorRecordId: null }))
+  await page.waitForFunction(
+    (seen) => window.__ktableGridEvents.slice(seen).some((event) => event.name === 'appendRecord:done' || event.name === 'appendRecord:failed'),
+    appendSeen,
+    { timeout: 600_000, polling: 50 },
+  )
+  await settled(page)
+  step('a record is appended', (await count()) === records + 1, `${records} → ${await count()}`)
+  await page.evaluate(() => window.__ktableGrid.view.scrollTo(0, 0))
+  await settled(page)
+  const again = await centre(0, columns.number)
+  await page.mouse.click(box.left + again.x, box.top + 16)
+  await settled(page)
+  const clearedAgain = await page.evaluate(() => window.__ktableEditTimes.length)
+  await page.keyboard.press('Delete')
+  await page.waitForFunction((count) => window.__ktableEditTimes.length > count, clearedAgain, { timeout: 600_000, polling: 50 })
+  const clearAgainMs = (await page.evaluate(() => window.__ktableEditTimes.slice()))[clearedAgain]
+  results.clearAfterAppend = { ms: clearAgainMs, records: rows }
+  console.log(`clear the column after an append: ${f(clearAgainMs)} ms from Delete to the redraw`)
+  const clearedAfter = await kept()
+  step('the column is cleared after the append', clearedAfter.every((value) => value == null), JSON.stringify(clearedAfter))
+  const undoClearFailed = await timedHistory('undo', 'the clear after the append', 'undoClearAfterAppend')
+  const unclear = await kept()
+  step('the second clear is undone', undoClearFailed == null && unclear.every((value) => value === 0), undoClearFailed ?? JSON.stringify(unclear))
+  const undoAppendFailed = await timedHistory('undo', 'the append, before the clear,', 'undoAppend')
+  step('the append is undone', undoAppendFailed == null && (await count()) === records, undoAppendFailed ?? `${await count()} records`)
+  const restored = await kept()
+  step('the column is as filled', restored.every((value) => value === 0), JSON.stringify(restored))
   step('page errors', errors.length === 0, errors.slice(0, 3).join(' | ') || 'none')
   await context.close()
 } catch (error) {

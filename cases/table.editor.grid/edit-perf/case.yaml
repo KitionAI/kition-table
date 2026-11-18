@@ -10,7 +10,10 @@ intent: >-
   the 100,000 records cleared with Delete, the clear undone and redone with the page's Undo and
   Redo, then the column pasted (one line for each record) and filled down from its first cell, is
   each time written and redrawn, every record holding what was written (after the undo, what it
-  held before the clear).
+  held before the clear); last, a record appended, the column cleared again and both undone (the
+  clear's undo, then the append's, which the engine undoes across the clear of every record) are
+  each done and redrawn without the page's engine running out of memory (case
+  regressions/issue-kdm-mixed-undo-memory in kition-sdk).
 layer: corpus
 dimension: performance
 source:
