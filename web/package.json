@@ -1,6 +1,6 @@
 {
   "name": "kition-table-ui",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "The Table kit's editor (Kition platform `docs/platform/kits/ui.md`): the table editor, its UI primitives, theme, strings, and templates over the kit's engine, embedded by hosts over the Kit UI protocol.",
   "license": "Apache-2.0",

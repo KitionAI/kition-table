@@ -3,7 +3,7 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
-## Unreleased
+## 0.5.2
 
 - A grid view whose scroll bar is dragged to the end of a table in slow frames shows its exact bands once it rests; it used to keep its drafts until the next scroll.
 - The editor gives the engine Inter before a table opens and the CJK, Hangul and emoji faces only once its text needs them (kit-editor `lazyFonts`, SDK 0.4.0), so a table in Latin text never downloads them; the four `@kition` editor packages move to 0.4.0.
