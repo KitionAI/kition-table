@@ -15,6 +15,7 @@ publish = false
 kition-time = { path = "crates/engine/time" }
 kition-table-file = { path = "crates/engine/file" }
 kition-table-api = { path = "crates/engine/api" }
+kition-table-arrange = { path = "crates/engine/arrange" }
 kition-table-ai = { path = "crates/engine/ai-field" }
 kition-table-import = { path = "crates/formats/import" }
 kition-table-fonts = { path = "crates/view/fonts" }

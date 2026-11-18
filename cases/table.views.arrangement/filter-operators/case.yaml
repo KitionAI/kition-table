@@ -1,0 +1,23 @@
+format: 1
+id: table.views.arrangement/filter-operators
+feature: table.views.arrangement
+intent: >-
+  A view's filter keeps the records the editor's filter kept: text, number, date (by calendar
+  day), single and multi select, and checkbox operators; AND and OR groups, nested; an empty group
+  keeps every record; a condition on an unknown field, with an operator the editor does not offer
+  for the field's type, or still without a value is left out; the engine's operators (eq, neq,
+  gt, …) filter as agents write them. These are the assertions of the editor's former
+  filter/evaluate.spec.ts, now run on the engine's one filter.
+layer: unit
+source:
+  kind: synthetic
+  from: crates/engine/arrange/src/filter.rs (tests), ported from web/src/editor/table/filter/evaluate.spec.ts
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: { package: kition-table-arrange, filter: "filter::tests" }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

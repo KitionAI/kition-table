@@ -1,0 +1,23 @@
+format: 1
+id: table.views.arrangement/groups-search-relocation
+feature: table.views.arrangement
+intent: >-
+  A view's records are arranged once in the engine: group headers nest by depth with their ids,
+  values, counts and collapsed marks; the search keeps records with any field's text holding it,
+  case ignored, and names the cells that hold it; sorts order text naturally and numbers by value,
+  ties keeping the table's order. After any batch of created, edited and deleted records, moving
+  only those records gives exactly the arrangement made anew, for views with filters, sorts,
+  groups and searches.
+layer: gate
+source:
+  kind: synthetic
+  from: crates/engine/arrange/tests/arranged.rs (group and search assertions ported from web/src/editor/table/lib/tableEditorShared.spec.ts)
+  license: Apache-2.0
+input: []
+steps:
+  - cargo-test: { package: kition-table-arrange, test: arranged }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-18"

@@ -139,6 +139,15 @@ features:
     gap: "table.views.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
     cases: [table.views/save-reopen]
     since: "2026-11-16"
+  - id: table.views.arrangement
+    title: "One arrangement of a view's records in the engine (filter, sorts, groups, search), kept up to date edit by edit, for the editor's views and the agent's read"
+    dimension: [function, performance]
+    priority: P0
+    status: partial
+    paths: [crates/engine/arrange/**]
+    gap: "The engine's extras and the editor do not use it yet; the picture (crates/view/picture/src/data.rs) still has its own copy of the arrangement."
+    cases: [table.views.arrangement/filter-operators, table.views.arrangement/groups-search-relocation]
+    since: "2026-11-18"
   - id: table.links
     title: "Links between records"
     dimension: [function]

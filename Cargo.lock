@@ -1287,6 +1287,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kition-table-arrange"
+version = "0.4.0"
+dependencies = [
+ "chrono",
+ "js-sys",
+ "kition-table-file",
+ "serde_json",
+]
+
+[[package]]
 name = "kition-table-display"
 version = "0.4.0"
 dependencies = [

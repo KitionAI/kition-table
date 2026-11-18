@@ -1,0 +1,21 @@
+[package]
+name = "kition-table-arrange"
+description = "The Table kit's view model: a view's filter, sorts, groups and the editor's search applied to a table's records, as the record order and group headers the editor and the picture show, kept up to date edit by edit (builds for wasm32)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kition-table-file = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+
+# Browsers have no monotonic clock through std: the arrangement's timings come from `performance.now()`.
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+js-sys = { workspace = true }
+
+[lints]
+workspace = true

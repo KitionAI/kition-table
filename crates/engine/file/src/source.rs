@@ -455,6 +455,63 @@ impl TableFile {
         self.list_records_page(table_id, 0, 0)
     }
 
+    /// The live records of a table in order, each holding only the values of the fields `names`
+    /// (the cells an arrangement reads), for the fields with a value. Reads a table of 100,000
+    /// records without parsing every cell of it. A name holding `"` is read from the whole value.
+    pub fn list_record_values(&self, table_id: i64, names: &[String]) -> Result<Vec<Record>> {
+        let paths: Vec<String> = names.iter().filter(|name| !name.contains('"')).map(|name| format!("$.\"{name}\"")).collect();
+        if paths.len() != names.len() {
+            let mut records = self.list_records(table_id)?;
+            for record in &mut records {
+                record.values.retain(|name, _| names.contains(name));
+            }
+            return Ok(records);
+        }
+        let mut columns = String::from("id, document_id, table_id, row_key, position, created_at, updated_at");
+        for index in 0..paths.len() {
+            columns.push_str(&format!(", values_json -> ?{}", index + 2));
+        }
+        let mut statement = self
+            .conn
+            .prepare(&format!("SELECT {columns} FROM kition_records WHERE table_id = ?1 AND deleted_at IS NULL ORDER BY position ASC, id ASC"))?;
+        let mut binds: Vec<&dyn rusqlite::ToSql> = vec![&table_id];
+        binds.extend(paths.iter().map(|path| path as &dyn rusqlite::ToSql));
+        let rows = statement.query_map(binds.as_slice(), |row| {
+            let mut values = Map::new();
+            for (index, name) in names.iter().enumerate() {
+                if let Some(text) = row.get::<_, Option<String>>(index + 7)? {
+                    values.insert(name.clone(), serde_json::from_str(&text).unwrap_or(Value::Null));
+                }
+            }
+            Ok(Record {
+                id: row.get(0)?,
+                document_id: row.get(1)?,
+                table_id: row.get(2)?,
+                row_key: row.get(3)?,
+                order: row.get(4)?,
+                values,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
+    /// The live records of a table among `row_keys`, whole, in order; a key of no live record of
+    /// the table (deleted, or never there) is left out.
+    pub fn records_by_row_keys(&self, table_id: i64, row_keys: &[String]) -> Result<Vec<Record>> {
+        let mut statement =
+            self.conn.prepare(&format!("SELECT {RECORD_COLUMNS} FROM kition_records WHERE table_id = ?1 AND row_key = ?2 AND deleted_at IS NULL"))?;
+        let mut records = Vec::new();
+        for key in row_keys {
+            if let Some(record) = statement.query_row(params![table_id, key], record_from_row).optional()? {
+                records.push(record);
+            }
+        }
+        records.sort_by_key(|record| (record.order, record.id));
+        Ok(records)
+    }
+
     pub fn count_records(&self, table_id: i64) -> Result<i64> {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM kition_records WHERE table_id = ?1 AND deleted_at IS NULL", [table_id], |row| row.get(0))?)
     }
