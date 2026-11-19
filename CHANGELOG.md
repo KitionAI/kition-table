@@ -3,6 +3,10 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
+## 0.5.6
+
+- Footer counts agree with their number: one record reads "1 record", not "1 records", and Spanish, French and Portuguese say the same of one selected record.
+
 ## 0.5.5
 
 - The same kit as 0.5.4, released again so that its release carries prebuilt headless executables for macOS, Linux and Windows, which `kition kit install` downloads.
