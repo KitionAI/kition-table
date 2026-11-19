@@ -63,9 +63,11 @@
     "descending": "Descendente"
   },
   "footer": {
-    "recordsCount": "{{count}} registros",
+    "recordsCount_one": "{{count}} registro",
+    "recordsCount_other": "{{count}} registros",
     "aggregate": "{{title}}: suma {{sum}} · media {{avg}}",
-    "selectedCount": "{{count}} seleccionados",
+    "selectedCount_one": "{{count}} seleccionado",
+    "selectedCount_other": "{{count}} seleccionados",
     "editHint": "Haz doble clic en una celda para editar"
   },
   "recordMenu": {

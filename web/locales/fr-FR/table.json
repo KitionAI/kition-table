@@ -63,9 +63,11 @@
     "descending": "Décroissant"
   },
   "footer": {
-    "recordsCount": "{{count}} enregistrements",
+    "recordsCount_one": "{{count}} enregistrement",
+    "recordsCount_other": "{{count}} enregistrements",
     "aggregate": "{{title}} : somme {{sum}} · moy. {{avg}}",
-    "selectedCount": "{{count}} sélectionnés",
+    "selectedCount_one": "{{count}} sélectionné",
+    "selectedCount_other": "{{count}} sélectionnés",
     "editHint": "Double-cliquez sur une cellule pour modifier"
   },
   "recordMenu": {

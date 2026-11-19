@@ -63,9 +63,11 @@
     "descending": "Decrescente"
   },
   "footer": {
-    "recordsCount": "{{count}} registros",
+    "recordsCount_one": "{{count}} registro",
+    "recordsCount_other": "{{count}} registros",
     "aggregate": "{{title}}: soma {{sum}} · média {{avg}}",
-    "selectedCount": "{{count}} selecionados",
+    "selectedCount_one": "{{count}} selecionado",
+    "selectedCount_other": "{{count}} selecionados",
     "editHint": "Clique duas vezes em uma célula para editar"
   },
   "recordMenu": {

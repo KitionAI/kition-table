@@ -63,7 +63,8 @@
     "descending": "Descending"
   },
   "footer": {
-    "recordsCount": "{{count}} records",
+    "recordsCount_one": "{{count}} record",
+    "recordsCount_other": "{{count}} records",
     "aggregate": "{{title}}: sum {{sum}} · avg {{avg}}",
     "selectedCount": "{{count}} selected",
     "editHint": "Double-click a cell to edit"

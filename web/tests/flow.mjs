@@ -314,7 +314,8 @@ try {
   await test('the search keeps the records that hold it', async () => {
     const search = kit.getByTestId('ktable-toolbar-search')
     const footer = kit.locator('.data-inline-footer')
-    const shows = (count) => until(async () => new RegExp(`(^|\\D)${count} records`).test(await footer.textContent()))
+    // "1 record", "2 records" (the footer's plural, regressions/issue-footer-count-plural).
+    const shows = (count) => until(async () => new RegExp(`(^|\\D)${count} ${count === 1 ? 'record\\b' : 'records'}`).test(await footer.textContent()))
     await search.fill('PHASE')
     const both = await shows(2)
     await search.fill('deferred')

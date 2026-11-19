@@ -1,0 +1,23 @@
+format: 1
+id: regressions/issue-footer-count-plural
+feature: table.editor.grid
+intent: >-
+  The grid's footer counts agree with their number in every locale, by i18next's plural keys and
+  the locale's plural rules: one record reads "1 record" (not "1 records"), "1 registro",
+  "1 enregistrement"; one selected record "1 seleccionado", "1 sélectionné", "1 selecionado".
+  Russian names the count as a label ("Записей: 1") and Chinese has no plural, so their one string
+  serves every number.
+layer: gate
+source:
+  kind: issue
+  from: Kition interaction suite, table footer after deleting a record (B4)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/i18n.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-19"
