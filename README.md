@@ -13,7 +13,7 @@ TSV and XLSX import · MCP tools for agents
 [![KHP 1.0](https://img.shields.io/badge/KHP-1.0-5645d4)](https://github.com/kitharness/khp)
 [![Engine: Rust](https://img.shields.io/badge/engine-Rust%20%2B%20WebAssembly-5645d4)](bindings/wasm)
 
-[Embed it](#embed-it-in-your-app) · [Give it to your agent](#give-it-to-your-agent) · [Kition SDK](https://github.com/KitionAI/kition-sdk) · [Kition](https://kition.ai) · [Developer docs](https://developer.kition.ai) · [KHP](https://github.com/kitharness/khp)
+[Use it in Kition](https://kition.ai) · [Embed it](#embed-it-in-your-app) · [Give it to your agent](#give-it-to-your-agent) · [Showcase](https://github.com/KitionAI/kition-showcase/tree/main/table) · [Developer docs](https://developer.kition.ai) · [KHP](https://github.com/kitharness/khp)
 
 </div>
 
