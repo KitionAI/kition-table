@@ -221,7 +221,7 @@ let bytes = document.save(None)?;
   protocol, and name a table or dashboard to open with a view (`document.view` when the editor
   opens, `document/reveal` after): `{ "path": "tables/<id>" }` or `{ "path": "dashboards/<id>" }`.
 - **Headless.** `kition-table` speaks the Kit Protocol of the
-  [Kit Harness Protocol (KHP)](https://github.com/kitharness/khp); the SDK's `kition-kits-mcp`
+  [Kit Harness Protocol (KHP)](https://github.com/kitharness/kitharness); the SDK's `kition-kits-mcp`
   serves it to agents.
 - **Offline.** The engine never reaches the network: AI fields build their prompts and apply
   results in the engine, and the model call is the host's.
