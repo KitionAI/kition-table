@@ -47,7 +47,7 @@ pnpm dev                                           # http://localhost:5189/dev.h
   Homebrew's LLVM on macOS (`brew install llvm`; the build script finds it), or set
   `CC_wasm32_unknown_unknown` and `AR_wasm32_unknown_unknown`. Apple's clang cannot target wasm32.
 - A current Node.js (22 or newer) and pnpm 10 for the editor.
-- The three fonts the engine draws text with, in a folder named by `KITION_FONTS_DIR` (see
+- The four fonts the engine draws text with, in a folder named by `KITION_FONTS_DIR` (see
   [Fonts](#fonts)). They are not in this repository.
 
 The Rust crates of the [Kition SDK](https://github.com/KitionAI/kition-sdk) and Kition Tessera are
@@ -62,8 +62,9 @@ error names the setting).
 The picture (thumbnails, the agent's preview, `table.file.render`) draws text with the faces
 below. `scripts/fetch-fonts.sh <folder>` downloads each file, with its license, from its upstream
 source into `<folder>`, laid out as shown, and checks its SHA-256; then set `KITION_FONTS_DIR` to
-that folder (the default is a `kition-fonts` folder beside this repository, the maintainers'
-private font checkout, which has the same layout and the same files). The headless executable embeds them at build time (`kition-table-fonts`, feature
+that folder (the default is a `kition-fonts` folder beside this repository: a checkout of
+[kition-fonts](https://github.com/KitionAI/kition-fonts), which has the same layout and these files
+among others). The headless executable embeds them at build time (`kition-table-fonts`, feature
 `embed`); without them it builds with a warning and its previews have no text
 (`KITION_FONTS_REQUIRED=1` makes that an error). The picture and preview tests read them and fail
 without them.
