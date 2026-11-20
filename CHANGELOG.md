@@ -3,6 +3,12 @@
 Changes to Kition Table, newest first. A version is the kit package version in `kit.json`;
 each package is published with a `package-v<version>` tag.
 
+## 0.5.7
+
+- `kit.json` declares the engine's editor state as `engine.editorState`, so a host that does not run the engine's Rust code reads `inspect()` without it.
+- The editor reports the kit's version to the host from `kit.json`, instead of a stale `0.1.0`.
+- `fetch-fonts.sh` downloads Droid Sans Fallback's licence too.
+
 ## 0.5.6
 
 - Footer counts agree with their number: one record reads "1 record", not "1 records", and Spanish, French and Portuguese say the same of one selected record.
