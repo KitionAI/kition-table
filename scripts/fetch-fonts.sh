@@ -13,12 +13,16 @@ google=https://github.com/google/fonts/raw/45e3d5269e4a17d823f6d84470bc084dc5ae4
 emoji=https://github.com/googlefonts/noto-emoji/raw/1ffdd21391dd1f25c081fa93a9dea0c7c029442b
 # googlesource serves a file's bytes base64-encoded with ?format=TEXT.
 android=https://android.googlesource.com/platform/frameworks/base/+/cac6285b48e88e118f69992d5c97d56163b6274c/data/fonts
+# Upstream has no LICENSE beside Droid Sans Fallback; kition-fonts ships the Apache License 2.0 text
+# there (apache.org's LICENSE-2.0.txt without the appendix).
+kitionfonts=https://github.com/KitionAI/kition-fonts/raw/66949b770d1132d26284417368e154e8e5ae1acf
 
 # <path under the folder> <sha256> <url> [base64]
 files=(
   "fonts/inter/Inter-Variable.ttf 29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031 $google/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
   "fonts/inter/OFL.txt 5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57 $google/ofl/inter/OFL.txt"
   "fonts/droid-sans-fallback/DroidSansFallbackFull.ttf acb6440a713d880a13a21b468ba7cd43f5a2b2934972e51be791c880730777b8 $android/DroidSansFallbackFull.ttf?format=TEXT base64"
+  "fonts/droid-sans-fallback/LICENSE 0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594 $kitionfonts/fonts/droid-sans-fallback/LICENSE"
   "fonts/droid-sans-fallback/NOTICE 38751245389e1e23f73e6f5384b5cbe7fa972cc4410c5adc9c04b082a0b9561a $android/NOTICE?format=TEXT base64"
   "fonts/nanum-gothic/NanumGothic-Regular.ttf 76f45ef4a6bcff344c837c95a7dcc26e017e38b5846d5ae0cdcb5b86be2e2d31 $google/ofl/nanumgothic/NanumGothic-Regular.ttf"
   "fonts/nanum-gothic/OFL.txt eeacf16032901d0ed0456876ec77b8f0fda6b3fecec7d972f8543eb602e6c30f $google/ofl/nanumgothic/OFL.txt"
