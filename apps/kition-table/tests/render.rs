@@ -61,7 +61,7 @@ fn open(name: &str) -> Kit {
     std::fs::create_dir_all(&root).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     std::fs::copy(repo().join("conformance/basic.ktable"), root.join("basic.ktable")).unwrap();
-    let mut kit = Headless::<TableDocument>::with_replica_port(KitInfo::from_manifest(MANIFEST, &[], &[]).unwrap());
+    let mut kit = Headless::<TableDocument>::with_replica_port(KitInfo::from_manifest(MANIFEST, &[], kition_table_kit::EDITOR_STATE).unwrap());
     let folder = HostFolder::new(&root).unwrap();
     kit.set_host(folder.host());
     let id = kit.open(OpenRequest { file: &folder.file("basic.ktable").unwrap(), read_only: false, create: None }).unwrap().id;

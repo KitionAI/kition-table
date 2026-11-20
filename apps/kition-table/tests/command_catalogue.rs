@@ -22,7 +22,9 @@ fn new_document(name: &str) -> (Headless<TableDocument>, String, HostFolder) {
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let folder = HostFolder::new(&std::fs::canonicalize(&root).unwrap()).unwrap();
-    let mut kit = Headless::<TableDocument>::new(KitInfo::from_manifest(MANIFEST, &["table.import.preview", "table.import.run"], &[]).unwrap());
+    let mut kit = Headless::<TableDocument>::new(
+        KitInfo::from_manifest(MANIFEST, &["table.import.preview", "table.import.run"], kition_table_kit::EDITOR_STATE).unwrap(),
+    );
     kit.set_host(folder.host());
     let file = folder.file(&format!("{name}.ktable")).unwrap();
     let id = kit.open(OpenRequest { file: &file, read_only: false, create: Some(("ktable", None)) }).unwrap().id;

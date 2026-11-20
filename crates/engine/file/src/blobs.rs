@@ -34,7 +34,7 @@ const HEADER_LENGTH: usize = HASH_LENGTH + 8;
 /// Hex runs longer than this are not split into every window (they are not hash text).
 const LONGEST_RUN: usize = 1024;
 
-const CREATE_TABLE: &str = "CREATE TABLE IF NOT EXISTS kition_blobs (
+pub(crate) const CREATE_TABLE: &str = "CREATE TABLE IF NOT EXISTS kition_blobs (
     hash TEXT PRIMARY KEY,
     mime TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL DEFAULT '',

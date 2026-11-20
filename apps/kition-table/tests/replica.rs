@@ -38,7 +38,9 @@ fn a_table_opens_from_its_exported_replica_with_its_attachments() {
     doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "With a file", "files": [attachment] } })).unwrap();
     std::fs::write(root.join("Tasks.ktable"), doc.save(None).unwrap()).unwrap();
 
-    let mut kit = Headless::<TableDocument>::with_replica_port(KitInfo::from_manifest(include_str!("../../../kit.json"), &[], &[]).unwrap());
+    let mut kit = Headless::<TableDocument>::with_replica_port(
+        KitInfo::from_manifest(include_str!("../../../kit.json"), &[], kition_table_kit::EDITOR_STATE).unwrap(),
+    );
     let folder = HostFolder::new(&root).unwrap();
     kit.set_host(folder.host());
     let file = kit.open(OpenRequest { file: &folder.file("Tasks.ktable").unwrap(), read_only: false, create: None }).unwrap().id;

@@ -522,7 +522,7 @@ pub(crate) fn load_replica(conn: &Connection) -> Result<Replica> {
     store::load(conn, schema(), crate::ids::actor())?.ok_or_else(|| TableFileError::Kdm("the ktable file holds no kdm replica".into()))
 }
 
-fn validate(conn: &Connection) -> Result<()> {
+pub(crate) fn validate(conn: &Connection) -> Result<()> {
     let format: String = conn.query_row("SELECT value FROM kition_meta WHERE key = 'format'", [], |row| row.get(0))?;
     if format != FORMAT {
         return Err(TableFileError::invalid(format!("invalid ktable format {format:?}")));
@@ -531,7 +531,7 @@ fn validate(conn: &Connection) -> Result<()> {
 }
 
 /// Whether the file holds a KDM replica (`kition_kdm` exists and has its row).
-fn has_replica(conn: &Connection) -> Result<bool> {
+pub(crate) fn has_replica(conn: &Connection) -> Result<bool> {
     let table: Option<String> =
         conn.query_row("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'kition_kdm'", [], |row| row.get(0)).optional()?;
     if table.is_none() {
@@ -540,7 +540,7 @@ fn has_replica(conn: &Connection) -> Result<bool> {
     Ok(conn.query_row("SELECT id FROM kition_kdm WHERE id = 1", [], |row| row.get::<_, i64>(0)).optional()?.is_some())
 }
 
-fn schema_version(conn: &Connection) -> Result<i64> {
+pub(crate) fn schema_version(conn: &Connection) -> Result<i64> {
     let has_meta: Option<String> =
         conn.query_row("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'kition_meta'", [], |row| row.get(0)).optional()?;
     if has_meta.is_none() {

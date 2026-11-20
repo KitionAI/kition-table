@@ -4,7 +4,7 @@
   "level": "basic",
   "id": "kit.table",
   "name": "Table",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "license": "Apache-2.0",
   "distribution": "default",
   "capabilities": [
@@ -193,10 +193,11 @@
   },
   "headless": {
     "executable": "kition-table",
-    "protocol": "kition-kit/2",
+    "protocol": "kition-kit/1",
     "features": [
       "view.describe",
       "document.check",
+      "document.identity",
       "model.open",
       "model.import",
       "model.export",

@@ -11,6 +11,7 @@ mod computed;
 mod dashboards;
 mod file;
 mod history;
+pub mod identity;
 pub mod ids;
 mod json;
 pub mod kdm;

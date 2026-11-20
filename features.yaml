@@ -1,6 +1,6 @@
 format: 1
 kit: table
-updated: "2026-11-19"
+updated: "2026-11-20"
 gate_budget_s: 600
 protected: []
 features:
@@ -94,6 +94,14 @@ features:
     paths: [bindings/wasm/src/web.rs, bindings/wasm/src/lib.rs, crates/engine/file/src/file.rs, kit.json]
     cases: [table.collab.replica/open-from-snapshot, regressions/issue-room-snapshot-ignored]
     since: "2026-11-16"
+  - id: table.platform.document-identity
+    title: "A host reads the document id a .ktable carries and forks a copied table into a new document with no history (document.identity, document.fork; Kit Process Protocol 5.6)"
+    dimension: [platform, data-safety]
+    priority: P1
+    status: has
+    paths: [apps/kition-table/src/main.rs, crates/engine/file/src/identity.rs, kit.json]
+    cases: [table.platform.document-identity/fork, table.platform.document-identity/no-replica]
+    since: "2026-11-20"
   - id: table.collab.live
     title: Two or more people edit one table at the same time, live
     dimension: [collab, function]

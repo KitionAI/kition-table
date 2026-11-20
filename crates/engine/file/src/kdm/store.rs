@@ -42,7 +42,7 @@ const PROJECTED_EPOCH_KEY: &str = "kdm_projected_epoch";
 
 /// The document id [`save_initial`] records, so [`append`] and [`compact`] can refuse a replica of
 /// another document (one loaded from the wrong file, or a programming mistake).
-const DOC_ID_KEY: &str = "kdm_doc_id";
+pub(crate) const DOC_ID_KEY: &str = "kdm_doc_id";
 
 /// Creates the KDM tables and columns if they are missing, and the indexes that keep `kdm_id`
 /// unique per live row. Safe to call on a file that already has them.

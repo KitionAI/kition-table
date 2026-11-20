@@ -1,0 +1,21 @@
+format: 1
+id: table.platform.document-identity/fork
+feature: table.platform.document-identity
+intent: >-
+  Through the real kition-table process: document.identity answers the docId a .ktable carries
+  (the one its replica and its recorded kdm_doc_id name), and a byte copy answers the same one;
+  document.fork writes a new document to a new file: a new docId in the replica, document_id and
+  kdm_doc_id, the same objects, ids and values, the blob its records name and not the one only a
+  deleted record named, no change rows, origin log, record history, change log, deleted rows or
+  free pages; the text of a record deleted before the fork is in the source's bytes and not the
+  fork's; the fork opens, edits and saves under its own id; a fork of the fork is a third
+  document; a fork never replaces an existing file.
+layer: gate
+dimension: data-safety
+source: {kind: synthetic, from: apps/kition-table/tests/identity.rs (a_table_tells_its_identity_and_forks_into_a_new_document_without_history), license: Apache-2.0}
+input: []
+steps:
+  - cargo-test: {package: kition-table, test: identity, filter: a_table_tells_its_identity_and_forks_into_a_new_document_without_history}
+expected:
+  - {actual: out:exit, compare: exit, value: 0}
+since: "2026-11-20"
