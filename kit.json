@@ -15,7 +15,8 @@
     "module": "kition_table_kit",
     "class": "TableDocument",
     "contract": 2,
-    "crate": "kition-table-kit"
+    "crate": "kition-table-kit",
+    "editorState": []
   },
   "formats": [
     {
