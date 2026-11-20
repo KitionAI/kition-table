@@ -19,7 +19,7 @@ const alone = window.setTimeout(() => {
   root.render(<div className="kui-alone">{t('noHost')}</div>)
 }, 3000)
 
-void connectHost({ id: 'kit.table', version: '0.1.0', capabilities: CAPABILITIES, brand: manifest.ui.brand }).then(async (host) => {
+void connectHost({ id: 'kit.table', version: manifest.version, capabilities: CAPABILITIES, brand: manifest.ui.brand }).then(async (host) => {
   window.clearTimeout(alone)
   const i18n = await createTableI18n(host.init.locale)
   // No StrictMode: its doubled effects would open the document twice, in two engine workers.
