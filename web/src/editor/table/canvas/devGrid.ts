@@ -24,7 +24,7 @@
  */
 import '../../../styles/index.css'
 import '@kition/sdk/editor/styles.css'
-import { KitEngine } from '@kition/sdk/editor'
+import { isMac, KitEngine } from '@kition/sdk/editor'
 import { mountPopups } from './devGridEditors'
 import { type EngineSource, engineSource } from './engineSource'
 import { engineData, type GridData } from './gridData'
@@ -259,7 +259,7 @@ start()
         log('write:done', { written: written.kind, synced: await syncAfterWrite(view, source, written) })
       },
       onError: (error) => log('write:failed', String(error)),
-    })
+    }, { mac: isMac() })
     const interaction = new GridInteraction(view, handlers(engine, source.target.tableId, () => view, () => source, editing))
     editing.attach(interaction)
     window.__ktableGrid = { view, engine, interaction, source, editing, data }

@@ -13,8 +13,11 @@
  *   commits and moves sideways, Escape cancels). Dates and choices open a popup the editor draws
  *   (`onPopup`: the date editor and the choice list, `GridCellEditors.tsx`). A checkbox toggles
  *   on Enter or a click; a rating takes a typed digit or a click on its symbol.
- * - **Clipboard.** Copy and cut put the selection's cells on the clipboard as tab-separated text;
- *   paste writes the text from the active cell on, past the last record as new records, in one
+ * - **Clipboard.** Copy and cut put the selection's cells on the clipboard as tab-separated text.
+ *   Cmd+C and Cmd+X on a Mac, Ctrl+C and Ctrl+X elsewhere (`mac`, as the kit editor reports the
+ *   platform) are the grid's own keys: they write through `navigator.clipboard` in place of the
+ *   browser's copy (WebKit enables its copy only for selected text, and the grid's textarea holds
+ *   none); a copy event from elsewhere (a menu) sets the clipboard on the event. Paste writes the text from the active cell on, past the last record as new records, in one
  *   `transact`; Delete and Backspace clear the selection's cells in one `transact`.
  * - **Pictures.** The view decodes the pictures the document holds (and `data:` urls) through its
  *   source; the pictures at web addresses the bands name (and `blob:` urls, or what
@@ -145,6 +148,21 @@ export function withValueBefore(value: string, typed: string, caret: { start: nu
   return { text: value + typed, start: value.length + caret.start, end: value.length + caret.end }
 }
 
+/**
+ * Writes `text` to the system clipboard as plain text, as a clipboard item whose text may come
+ * later, so the write starts at once even while the text is read (WebKit refuses a write that
+ * starts after the key press; the Sheet kit's copy does the same). A browser without such items,
+ * or that refuses one, gets the text by `writeText`.
+ */
+export function writeClipboard(clipboard: Clipboard, text: string | Promise<string>): Promise<void> {
+  const value = Promise.resolve(text)
+  if (typeof ClipboardItem !== 'undefined' && typeof clipboard.write === 'function') {
+    const item = new ClipboardItem({ 'text/plain': value.then((plain) => new Blob([plain], { type: 'text/plain' })) })
+    return clipboard.write([item]).catch(async () => clipboard.writeText(await value))
+  }
+  return value.then((plain) => clipboard.writeText(plain))
+}
+
 export class GridEditing {
   private grid: GridInteraction | null = null
   /** The focused textarea on the active cell; a text cell's editor when shown. */
@@ -152,6 +170,8 @@ export class GridEditing {
   private session: Session | null = null
   private composing = false
   private copy: { key: string; text: string } | null = null
+  /** A copy key was just handled: a copy event the same key press still makes is that copy's. */
+  private keyCopy = false
   private copyTimer = 0
   private copyRun = 0
   private generating = new Set<string>()
@@ -170,8 +190,11 @@ export class GridEditing {
   constructor(
     readonly data: GridData,
     private readonly handlers: EditingHandlers = {},
-    /** `readOnly`: a table this person may only view: no editor opens, nothing is written, nothing drags. */
-    private readonly options: { readOnly?: boolean } = {},
+    /**
+     * `readOnly`: a table this person may only view: no editor opens, nothing is written, nothing
+     * drags. `mac`: the platform is a Mac (the kit editor's `isMac()`): Cmd copies, not Ctrl.
+     */
+    private readonly options: { readOnly?: boolean; mac?: boolean } = {},
   ) {
     const input = document.createElement('textarea')
     input.dataset.ktableGridInput = 'true'
@@ -627,6 +650,11 @@ export class GridEditing {
     const session = this.session
     if (event.isComposing || this.composing || event.keyCode === 229) return
     if (!session) {
+      const action = this.clipboardKey(event)
+      if (action && this.copyByKey(action === 'cut')) {
+        event.preventDefault()
+        return
+      }
       if (grid.handleKey(event)) event.preventDefault()
       return
     }
@@ -744,20 +772,53 @@ export class GridEditing {
     }, 30)
   }
 
+  /** Cmd+C or Cmd+X on a Mac, Ctrl+C or Ctrl+X elsewhere, without Shift or Alt; else null. */
+  private clipboardKey(event: KeyboardEvent): 'copy' | 'cut' | null {
+    const mac = this.options.mac === true
+    if (event.shiftKey || event.altKey || (mac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey)) return null
+    // The letter, or the key's place on a keyboard whose layout types another script.
+    const letter = /^[a-z]$/i.test(event.key) ? event.key.toLowerCase() : event.code === 'KeyC' ? 'c' : event.code === 'KeyX' ? 'x' : ''
+    return letter === 'c' ? 'copy' : letter === 'x' ? 'cut' : null
+  }
+
+  /**
+   * A copy key on the grid: the selection's text goes through `navigator.clipboard`, written while
+   * the key press is the person's (WebKit refuses a write after it). Answers whether it took the
+   * key; without a selection or an async clipboard it leaves the key to the browser, whose copy
+   * event (`onCopy`) then carries the text.
+   */
+  private copyByKey(cut: boolean): boolean {
+    const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined
+    const selection = this.interaction.selection
+    if (!clipboard || selection.kind === 'none') return false
+    this.keyCopy = true
+    window.setTimeout(() => {
+      this.keyCopy = false
+    }, 0)
+    const ready = this.copy?.key === this.copyKey() ? this.copy.text : null
+    void writeClipboard(clipboard, ready ?? this.copyText(selection)).then(
+      () => (cut ? this.clear(selection) : undefined),
+      (error: unknown) => console.error('grid: copy failed', error),
+    )
+    return true
+  }
+
   private onCopy(event: ClipboardEvent, cut: boolean) {
     if (this.session) return
+    // The key press that made this event wrote the clipboard already (`copyByKey`).
+    if (this.keyCopy) {
+      event.preventDefault()
+      return
+    }
     const grid = this.interaction
     const selection = grid.selection
     if (selection.kind === 'none') return
     event.preventDefault()
     if (this.copy?.key === this.copyKey() && event.clipboardData) {
       event.clipboardData.setData('text/plain', this.copy.text)
-    } else {
+    } else if (navigator.clipboard) {
       // Not read yet: the clipboard takes the text when it is.
-      const text = this.copyText(selection)
-      const item = typeof ClipboardItem !== 'undefined' ? new ClipboardItem({ 'text/plain': text.then((value) => new Blob([value], { type: 'text/plain' })) }) : null
-      const done = item ? navigator.clipboard?.write([item]) : text.then((value) => navigator.clipboard?.writeText(value))
-      void done?.catch((error: unknown) => console.error('grid: copy failed', error))
+      void writeClipboard(navigator.clipboard, this.copyText(selection)).catch((error: unknown) => console.error('grid: copy failed', error))
     }
     if (cut) void this.clear(selection)
   }

@@ -1,0 +1,35 @@
+format: 1
+id: regressions/issue-grid-copy-keys
+feature: table.editor.grid
+intent: >-
+  The grid's copy and cut keys copy in every browser: Cmd+C and Cmd+X on a Mac, Ctrl+C and Ctrl+X
+  elsewhere, as the kit editor reports the platform (its `isMac()`, navigator.platform). In WebKit
+  on Linux Ctrl+C on the grid copied nothing: the browser starts its copy only for selected text,
+  and the grid's textarea holds none, so no copy event came. The grid now takes these keys itself
+  and writes the selection's text through navigator.clipboard while the key press is the
+  person's, once: a copy event the same key press still makes writes nothing more, and a copy event
+  from elsewhere (a menu) still sets the clipboard on the event. Cut clears the cells once the
+  clipboard holds them. A cell being edited keeps its own text copy, and with nothing selected the
+  key is the browser's.
+layer: gate
+source:
+  kind: issue
+  from: Kit CI, the flow's copy step (WebKit, hosted runner)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/canvas/gridEditingClipboard.spec.ts]
+  - exec:
+      cmd: [node, web/tests/gridEditing.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/gridEditing.mjs, webkit]
+  - flow: { spec: web/tests/flow.mjs, scenario: "copies the selected cell to the system clipboard", browsers: [chromium, webkit] }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+requires: [chromium, webkit]
+tags: [browser]
+timeout_s: 600
+since: "2026-11-21"

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { isMac } from '@kition/sdk/editor'
 import type { DataAttachment, DataField } from '../../types/dataDocument'
 import { useIsDark } from '../../lib/useIsDark'
 import type { GridCellSelection } from '../lib/tableEditorShared'
@@ -145,7 +146,7 @@ export function GridView(props: GridViewProps) {
         onError: (error) => services.current.notify.error(error instanceof Error ? error.message : String(error)),
         resolveFileURL: (url) => resolveTableFileURL(services.current.host, url),
       },
-      { readOnly },
+      { readOnly, mac: isMac() },
     )
     const interaction = new GridInteraction(view, {
       ...editing.gridHandlers,

@@ -512,6 +512,40 @@ try {
     }
   })
 
+  // regressions/issue-grid-copy-keys: the copy key is the grid's own in both browsers (WebKit
+  // starts no copy event on the grid's empty textarea): it writes the selection through
+  // navigator.clipboard once, and a copy event it may still make writes nothing more.
+  await test('Cmd/Ctrl+C writes the selection through navigator.clipboard, once', async () => {
+    await page.waitForFunction(() => window.__ktableGrid.editing.copyReady, null, { timeout: 5000 })
+    await page.evaluate(() => {
+      const writes = []
+      const events = []
+      window.__copyKeys = { writes, events }
+      const recorded = {
+        write: async (items) => {
+          for (const item of items) writes.push(await (await item.getType('text/plain')).text())
+        },
+        writeText: async (text) => {
+          writes.push(text)
+        },
+      }
+      Object.defineProperty(navigator, 'clipboard', { value: recorded, configurable: true })
+      window.addEventListener('copy', (event) => events.push(event.defaultPrevented ? 'handled' : 'unhandled'))
+    })
+    await page.keyboard.press(`${mod}+c`)
+    await page.waitForFunction(() => window.__copyKeys.writes.length > 0, null, { timeout: 5000 }).catch(() => {})
+    await page.waitForTimeout(200)
+    const seen = await page.evaluate(() => {
+      Reflect.deleteProperty(navigator, 'clipboard')
+      return window.__copyKeys
+    })
+    step(
+      'Cmd/Ctrl+C writes the selection through navigator.clipboard, once',
+      seen.writes.length === 1 && seen.writes[0] === 'Record 5\t50\nRecord 6\t60' && seen.events.every((event) => event === 'handled'),
+      JSON.stringify(seen),
+    )
+  })
+
   await test('a paste past the last record is one transact of cells.set and records.create', async () => {
     const before = (await shown(page)).length
     const at = await cell(page, before - 2, col('title'))

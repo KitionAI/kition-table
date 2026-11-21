@@ -240,7 +240,12 @@ const engine = async (method, params = {}) => {
 const tables = async () => (await engine('documents.get')).tables
 const records = async (tableId) => (await engine('records.list', { tableId })).items
 const drew = (predicate) => frame().evaluate((source) => window.__textDraws.some(new Function('draw', `return (${source})(draw)`)), predicate.toString())
-const modifier = () => frame().evaluate(() => (/mac/i.test(navigator.userAgent) && !/iphone|ipad|ipod/i.test(navigator.userAgent) ? 'Meta' : 'Control'))
+/**
+ * The platform's command key, as the kit editor reads the platform (`isMac()`: navigator.platform).
+ * Not the user agent: Playwright's WebKit names a Mac in it on every system, and on Linux (CI sets
+ * PLAYWRIGHT_NO_UA_PLATFORM) the browser and the editor take Ctrl, so Meta+C copied nothing there.
+ */
+const modifier = () => frame().evaluate(() => (/Mac|iPhone|iPad/i.test(navigator.platform) ? 'Meta' : 'Control'))
 
 /** Opens `bytes` (base64) in the development host, at `view` when given, and waits for the table editor and its records. */
 async function open(name, bytes, view) {
@@ -400,11 +405,11 @@ try {
     await stage().hover({ position: { x: 145, y: 48 } })
     await stage().click({ position: { x: 145, y: 48 } })
     const seen = consoleErrors.length
-    // Which clipboard the frame offers a copy made before the editor has read the cells (then the
-    // copy writes through navigator.clipboard once it has them).
+    // Which clipboard the frame offers: the grid's copy key writes through navigator.clipboard
+    // (regressions/issue-grid-copy-keys).
     const api = await frame().evaluate(() => ({ write: typeof navigator.clipboard?.write, item: typeof ClipboardItem, focus: document.activeElement?.tagName ?? null }))
     // In WebKit the person copies once the selection has settled (the editor reads a small
-    // selection's text 30 ms after it changes, and the copy event then carries it).
+    // selection's text 30 ms after it changes, and the copy then writes it at once).
     if (which === 'webkit') await page.waitForTimeout(300)
     await page.keyboard.press(`${await modifier()}+c`)
     let copied = ''
