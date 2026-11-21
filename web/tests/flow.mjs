@@ -172,7 +172,14 @@ await context.addInitScript(() => {
 const page = await context.newPage()
 const errors = []
 let failures = 0
-page.on('pageerror', (error) => errors.push(error.message))
+// The test running when a page error came, so a late report still names its step.
+let running = 'opening the development host'
+page.on('pageerror', (error) => errors.push(`${running}: ${error.message}`))
+// Console errors (all frames) are not failures; a failed step shows the ones it saw.
+const consoleErrors = []
+page.on('console', (message) => {
+  if (message.type() === 'error') consoleErrors.push(message.text())
+})
 const step = (name, ok, detail = '') => {
   if (!ok) failures += 1
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` - ${detail}` : ''}`)
@@ -187,6 +194,7 @@ const until = async (check, tries = 60) => {
 /** Runs one test: an exception fails it and the next one still runs. */
 async function test(name, body) {
   if (process.env.FLOW_ONLY && !new RegExp(process.env.FLOW_ONLY).test(name)) return
+  running = name
   try {
     await body()
   } catch (error) {
@@ -237,6 +245,11 @@ async function open(name, bytes, view) {
 try {
   await page.goto(`${origin}/dev.html?locale=en-US`)
   await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes(' open in '), null, { timeout: 60000 })
+  // The sample's grid draws its first frame, which waits for Inter, before the first test opens
+  // another file, as a person sees the page before choosing one: opening a file loads the editor's
+  // frame again, and WebKit reports the fetch of Inter it stops then as a page error ("cannot load
+  // .../fonts/inter/Inter-Variable.ttf due to access control checks").
+  await until(() => drew((draw) => draw.text === 'Write the brief'), 600)
 
   // 1. Opens the file and mounts the editor's shell.
   await test('opens the table and mounts the editor', async () => {
@@ -364,10 +377,33 @@ try {
     step('draws dates formatted, not raw', dates.formatted && !dates.raw && dates.expected === '2026/07/23 12:14', JSON.stringify(dates))
     await stage().hover({ position: { x: 145, y: 48 } })
     await stage().click({ position: { x: 145, y: 48 } })
+    const seen = consoleErrors.length
     await page.keyboard.press(`${await modifier()}+c`)
     let copied = ''
-    await until(async () => (copied = await page.evaluate(() => navigator.clipboard.readText())) === 'Phase 2 wrap')
-    step('copies the selected cell to the system clipboard', copied === 'Phase 2 wrap', JSON.stringify(copied))
+    if (which === 'webkit') {
+      // Playwright's WebKit on Linux answers navigator.clipboard.readText() with nothing whatever
+      // the clipboard holds: the browser's own paste shows what it holds, as a person pastes it
+      // somewhere else (a text box of the host page, outside the editor).
+      const key = await modifier()
+      await until(async () => {
+        await page.evaluate(() => {
+          const probe = document.createElement('textarea')
+          probe.id = 'clipboard-probe'
+          document.body.append(probe)
+          probe.focus()
+        })
+        await page.keyboard.press(`${key}+v`)
+        copied = await page.evaluate(() => {
+          const probe = document.getElementById('clipboard-probe')
+          probe.remove()
+          return probe.value
+        })
+        return copied === 'Phase 2 wrap'
+      })
+    } else {
+      await until(async () => (copied = await page.evaluate(() => navigator.clipboard.readText())) === 'Phase 2 wrap')
+    }
+    step('copies the selected cell to the system clipboard', copied === 'Phase 2 wrap', JSON.stringify({ copied, consoleErrors: consoleErrors.slice(seen, seen + 3) }))
   })
 
   // 14. Undo and Redo keys run the engine's undo and redo.
