@@ -211,6 +211,12 @@ const stage = () => kit.locator('.data-inline-grid-canvas [data-ktable-grid-stag
 const cellEditor = () => kit.locator('.data-inline-grid-canvas textarea[data-ktable-grid-input]')
 /** Waits for the cell editor to show (the textarea is on the grid, invisible, until a cell is edited). */
 const editorShown = () => until(() => cellEditor().evaluate((element) => element.style.pointerEvents === 'auto'))
+/**
+ * Waits for the cell editor to hold `text`, the cell's value, which it reads from the engine after
+ * it shows: a person sees the value before typing over it (what is typed before it arrives is
+ * replaced by it, and the cell keeps its value).
+ */
+const editorHolds = (text) => until(async () => (await cellEditor().inputValue()) === text)
 /** The engine commands the editor's worker was sent since `from` (a count from `mark()`), with their answers. */
 const mark = async () => frame().evaluate(() => window.__engineCalls.length)
 const sent = async (from, command) => (await frame().evaluate((from) => window.__engineCalls.slice(from), from)).filter((call) => call.ok !== undefined && (!command || call.command === command))
@@ -416,7 +422,7 @@ try {
     await stage().click({ position: { x: 145, y: 48 } })
     await stage().dblclick({ position: { x: 145, y: 48 } })
     const input = cellEditor()
-    const shown = await editorShown()
+    const shown = (await editorShown()) && (await editorHolds(first.values.title))
     await input.fill('Phase 2 renamed')
     const typed = await input.inputValue()
     await page.keyboard.press('Enter')
@@ -639,7 +645,9 @@ try {
     await stage().click({ position: { x: 145, y: 88 } })
     await stage().dblclick({ position: { x: 145, y: 88 } })
     const input = cellEditor()
+    const second = (await records(table.id))[1].values.title
     await editorShown()
+    await editorHolds(second)
     await input.fill('Mine')
     await page.keyboard.press('Enter')
     await until(async () => (await records(table.id)).some((record) => record.values.title === 'Mine'))
