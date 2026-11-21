@@ -4,7 +4,7 @@
   "level": "basic",
   "id": "kit.table",
   "name": "Table",
-  "version": "0.5.8",
+  "version": "0.1.0",
   "license": "Apache-2.0",
   "distribution": "default",
   "capabilities": [
