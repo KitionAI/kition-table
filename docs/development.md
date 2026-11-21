@@ -34,7 +34,7 @@ kition-kits-mcp --workspace <folder of tables> --kit target/release/kition-table
 # The editor, in a development host
 cd web
 pnpm install
-pnpm run engine                                    # the engine (WebAssembly) into public/engine
+pnpm run engine                                    # the engine (WebAssembly) into public/engine, the fonts into public/fonts
 node scripts/sample.mjs                            # a sample table for dev.html
 pnpm dev                                           # http://localhost:5189/dev.html
 ```
@@ -122,8 +122,8 @@ case under `cases/regressions/`, and every feature has an entry in `features.yam
 ```sh
 cd web
 pnpm install
-pnpm run engine      # builds bindings/wasm into web/public/engine
-node scripts/sample.mjs   # web/public/sample/Sample.ktable, which dev.html, pnpm test and the flows open
+pnpm run engine      # builds bindings/wasm into web/public/engine and copies the locked fonts into web/public/fonts
+node scripts/sample.mjs   # web/public/sample/Sample.ktable, which dev.html opens (pnpm test, test:flow and test:modes write it first)
 pnpm build           # type check and the package in web/dist
 pnpm test            # the built engine from Node
 pnpm test:unit       # the editor's own specs (Vitest, jsdom)
