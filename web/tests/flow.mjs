@@ -311,12 +311,19 @@ try {
     const remove = row.getByRole('button', { name: 'Remove sort' })
     await field.locator('select[aria-label="Sort field"]').selectOption('received_at')
     await direction.locator('select[aria-label="Sort direction"]').selectOption('desc')
+    // The view keeps its sort (the editor saves a view's settings half a second after a change),
+    // as a person sees the rows sorted before removing the rule again. Removed while that save is
+    // under way, the rule came back with the save's answer, and the next steps found the rows
+    // sorted (seen in WebKit on a hosted runner).
+    const savedSorts = async () => (await tables())[0].views[0].config?.sort_items?.length ?? 0
+    await until(async () => (await savedSorts()) === 1, 100)
     const label = await direction.locator('select[aria-label="Sort direction"]').evaluate((select) => select.selectedOptions[0]?.text ?? '')
     const [menuBox, rowBox, fieldBox, directionBox, removeBox] = await Promise.all([menu, row, field, direction, remove].map((part) => part.boundingBox()))
     const inside = rowBox.x >= menuBox.x && removeBox.x + removeBox.width <= menuBox.x + menuBox.width && fieldBox.width > 80 && directionBox.width > 120
     step('keeps the sort rule inside the popover', inside && label === 'Latest → Earliest', JSON.stringify({ label, menuBox, rowBox, removeBox, field: fieldBox.width, direction: directionBox.width }))
     await remove.click()
     await page.keyboard.press('Escape')
+    await until(async () => (await savedSorts()) === 0, 100)
   })
 
   // 7. Search takes typing.
@@ -384,6 +391,12 @@ try {
     await stage().hover({ position: { x: 145, y: 48 } })
     await stage().click({ position: { x: 145, y: 48 } })
     const seen = consoleErrors.length
+    // Which clipboard the frame offers a copy made before the editor has read the cells (then the
+    // copy writes through navigator.clipboard once it has them).
+    const api = await frame().evaluate(() => ({ write: typeof navigator.clipboard?.write, item: typeof ClipboardItem }))
+    // In WebKit the person copies once the selection has settled (the editor reads a small
+    // selection's text 30 ms after it changes, and the copy event then carries it).
+    if (which === 'webkit') await page.waitForTimeout(300)
     await page.keyboard.press(`${await modifier()}+c`)
     let copied = ''
     if (which === 'webkit') {
@@ -409,7 +422,7 @@ try {
     } else {
       await until(async () => (copied = await page.evaluate(() => navigator.clipboard.readText())) === 'Phase 2 wrap')
     }
-    step('copies the selected cell to the system clipboard', copied === 'Phase 2 wrap', JSON.stringify({ copied, consoleErrors: consoleErrors.slice(seen, seen + 3) }))
+    step('copies the selected cell to the system clipboard', copied === 'Phase 2 wrap', JSON.stringify({ copied, api, consoleErrors: consoleErrors.slice(seen, seen + 3) }))
   })
 
   // 14. Undo and Redo keys run the engine's undo and redo.
