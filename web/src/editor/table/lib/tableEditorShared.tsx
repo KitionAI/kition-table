@@ -1,4 +1,4 @@
-import { CalendarDaysIcon as CalendarDays, CheckIcon as Check, CircleDotIcon as CircleDot, FileTextIcon as FileText, HashIcon as Hash, Link2Icon as Link2, StarIcon as Star, Table2Icon as Table2, UserIcon as User, WorkflowIcon as Workflow, GalleryHorizontalEndIcon as GalleryHorizontalEnd, SquareKanbanIcon as KanbanSquare } from '@kition/tessera-icons/react'
+import { CalendarDaysIcon as CalendarDays, CheckIcon as Check, CircleDotIcon as CircleDot, FileTextIcon as FileText, HashIcon as Hash, Link2Icon as Link2, StarIcon as Star, Table2Icon as Table2, UserIcon as User, WorkflowIcon as Workflow, GalleryHorizontalEndIcon as GalleryHorizontalEnd, SquareKanbanIcon as KanbanSquare } from '@kition/tessera/icons/react'
 import type {
   DataAttachment,
   DataField,

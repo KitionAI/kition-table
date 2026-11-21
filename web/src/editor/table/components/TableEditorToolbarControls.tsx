@@ -1,4 +1,4 @@
-import { ArrowUpDownIcon as ArrowUpDown, ChevronDownIcon as ChevronDown, CopyIcon as Copy, EyeIcon as Eye, EyeOffIcon as EyeOff, GalleryHorizontalEndIcon as GalleryHorizontalEnd, GripVerticalIcon as GripVertical, GroupIcon as Group, LockIcon as Lock, EllipsisIcon as MoreHorizontal, PencilIcon as Pencil, PinIcon as Pin, PlusIcon as Plus, Rows3Icon as Rows3, SearchIcon as Search, Settings2Icon as Settings2, TrashIcon as Trash2 } from '@kition/tessera-icons/react'
+import { ArrowUpDownIcon as ArrowUpDown, ChevronDownIcon as ChevronDown, CopyIcon as Copy, EyeIcon as Eye, EyeOffIcon as EyeOff, GalleryHorizontalEndIcon as GalleryHorizontalEnd, GripVerticalIcon as GripVertical, GroupIcon as Group, LockIcon as Lock, EllipsisIcon as MoreHorizontal, PencilIcon as Pencil, PinIcon as Pin, PlusIcon as Plus, Rows3Icon as Rows3, SearchIcon as Search, Settings2Icon as Settings2, TrashIcon as Trash2 } from '@kition/tessera/icons/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -15,7 +15,7 @@ import {
 import { cn } from '../../../lib/cn'
 
 import { ToolbarPopover } from './TableEditorOverlays'
-import { Button, Select, TextInput } from '@kition/kit-editor'
+import { Button, Select, TextInput } from '@kition/sdk/editor'
 
 function FieldConfigRowMenu({
   field,

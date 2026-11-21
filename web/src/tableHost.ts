@@ -1,4 +1,4 @@
-import { toast } from '@kition/kit-editor'
+import { toast } from '@kition/sdk/editor'
 import type { TableHost } from './editor'
 import { engineAIHost } from './aiFields'
 import type { EngineTableDataSource } from './dataSource'
@@ -37,7 +37,7 @@ function aiUnavailable(services: HostServices, messages: HostMessages) {
 }
 
 /**
- * What the table editor asks of its app, in a kit: toasts through kit-editor; attachments by URL only
+ * What the table editor asks of its app, in a kit: toasts through @kition/sdk/editor; attachments by URL only
  * where a URL loads by itself (`http(s):`, `data:`, `blob:`), while attachments held in the file
  * go through the data source (`attachments.read`, `attachments.put`); CSV, TSV, and XLSX import
  * through the engine. What needs the host is offered only when the host lists it (Kit UI protocol

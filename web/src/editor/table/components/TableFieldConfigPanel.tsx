@@ -23,7 +23,7 @@ import { useTableHost } from '../ports/TableHost'
 import { FieldShowAsSection, type LongTextShowAs } from './fieldConfig/FieldShowAsSection'
 import { FieldDateFormatSection } from './fieldConfig/FieldDateFormatSection'
 import { getTableDateFormat } from '../lib/dateFormatting'
-import { Button, Modal, ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle, Sheet } from '@kition/kit-editor'
+import { Button, Modal, ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle, Sheet } from '@kition/sdk/editor'
 
 interface Draft {
   title: string

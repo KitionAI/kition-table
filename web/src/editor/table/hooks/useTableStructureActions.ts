@@ -20,7 +20,7 @@ import {
   type DataInlineViewMode,
 } from '../lib/tableEditorShared'
 import type { TableAction } from '../lib/tableActions'
-import { useConfirm } from '@kition/kit-editor'
+import { useConfirm } from '@kition/sdk/editor'
 
 type UseTableStructureActionsArgs = {
   documentPath: string

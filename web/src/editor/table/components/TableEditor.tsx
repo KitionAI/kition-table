@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FrameChrome } from '@kition/kit-editor'
+import { FrameChrome } from '@kition/sdk/editor'
 import type {
   DataField,
   DataFieldType,
@@ -640,7 +640,7 @@ function TableEditorBody({
         }}
       />
       <div className="data-inline-editor">
-        {/* The views bar and the toolbar, and the footer, are the editor's own bars: Focus (kit-editor's display modes) shows the records alone. */}
+        {/* The views bar and the toolbar, and the footer, are the editor's own bars: Focus (@kition/sdk/editor's display modes) shows the records alone. */}
         <FrameChrome>
         <TableEditorToolbar
           tableViews={tableViews}

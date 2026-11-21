@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowDownAZIcon as ArrowDownAZ, ArrowLeftFromLineIcon as ArrowLeftFromLine, ArrowRightFromLineIcon as ArrowRightFromLine, CopyIcon as Copy, DownloadIcon as Download, EyeOffIcon as EyeOff, FunnelIcon as Filter, GroupIcon as Group, PencilIcon as Pencil, PinOffIcon as PinOff, SendIcon as Send, SparklesIcon as Sparkles, TrashIcon as Trash2 } from '@kition/tessera-icons/react'
+import { ArrowDownAZIcon as ArrowDownAZ, ArrowLeftFromLineIcon as ArrowLeftFromLine, ArrowRightFromLineIcon as ArrowRightFromLine, CopyIcon as Copy, DownloadIcon as Download, EyeOffIcon as EyeOff, FunnelIcon as Filter, GroupIcon as Group, PencilIcon as Pencil, PinOffIcon as PinOff, SendIcon as Send, SparklesIcon as Sparkles, TrashIcon as Trash2 } from '@kition/tessera/icons/react'
 import type { DataField } from '../../types/dataDocument'
 import { cn } from '../../../lib/cn'
 

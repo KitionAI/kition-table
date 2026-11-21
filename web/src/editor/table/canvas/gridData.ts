@@ -11,7 +11,7 @@
  * `engineData` is the implementation over the kit's engine (`KitEngine.invoke`), for the
  * development page; the editor's is `editorData`, over its data source.
  */
-import type { KitEngine } from '@kition/kit-editor'
+import type { KitEngine } from '@kition/sdk/editor'
 import { type AnyAIConfig, normalizeAIConfig } from '../../types/aiConfig'
 import type { DataAttachment, DataField, DataRecordValue } from '../../types/dataDocument'
 import type { TableOp } from '../ports/TableDataSource'

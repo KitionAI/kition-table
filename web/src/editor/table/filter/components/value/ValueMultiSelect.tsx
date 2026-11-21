@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDownIcon as ChevronDown, XIcon as X } from '@kition/tessera-icons/react'
+import { ChevronDownIcon as ChevronDown, XIcon as X } from '@kition/tessera/icons/react'
 import type { DataField } from '../../../../types/dataDocument'
 import { cn } from '../../../../../lib/cn'
 import type { FilterValue } from '../../types'

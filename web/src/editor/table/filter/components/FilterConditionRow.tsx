@@ -1,4 +1,4 @@
-import { TrashIcon as Trash2 } from '@kition/tessera-icons/react'
+import { TrashIcon as Trash2 } from '@kition/tessera/icons/react'
 import { useTranslation } from 'react-i18next'
 import type { DataField } from '../../../types/dataDocument'
 import { coerceConditionOnChange } from '../coerce'

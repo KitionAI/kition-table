@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const toast = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }))
-vi.mock('@kition/kit-editor', () => ({ toast }))
+vi.mock('@kition/sdk/editor', () => ({ toast }))
 
 import { kitTableHost } from './tableHost'
 import type { EngineTableDataSource } from './dataSource'

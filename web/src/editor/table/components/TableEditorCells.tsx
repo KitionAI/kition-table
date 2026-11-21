@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CheckIcon as Check, ExternalLinkIcon as ExternalLink, FileTextIcon as FileText, HeartIcon as Heart, LoaderCircleIcon as LoaderCircle, PlusIcon as Plus, RefreshCcwIcon as RefreshCcw, StarIcon as Star, ThumbsUpIcon as ThumbsUp, UploadIcon as Upload, UserIcon, XIcon as X } from '@kition/tessera-icons/react'
+import { CheckIcon as Check, ExternalLinkIcon as ExternalLink, FileTextIcon as FileText, HeartIcon as Heart, LoaderCircleIcon as LoaderCircle, PlusIcon as Plus, RefreshCcwIcon as RefreshCcw, StarIcon as Star, ThumbsUpIcon as ThumbsUp, UploadIcon as Upload, UserIcon, XIcon as X } from '@kition/tessera/icons/react'
 import { useTableDataSource } from '../ports/TableDataSource'
 import { resolveTableFileURL, useTableHost } from '../ports/TableHost'
 import type { DataAttachment, DataField, DataRecordValue, LinkRef } from '../../types/dataDocument'
@@ -25,7 +25,7 @@ import { isAttachmentAIConfig } from '../../types/aiConfig'
 
 import { AttachmentCell } from './AttachmentCell'
 import { buttonConfig } from '../lib/buttonAction'
-import { Select } from '@kition/kit-editor'
+import { Select } from '@kition/sdk/editor'
 
 type LinkRefLike = { row_key?: string; display?: string }
 type UserRefLike = { id?: string; name?: string; avatar?: string }

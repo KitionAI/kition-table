@@ -1,13 +1,13 @@
 import { useRef, useState, type DragEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GalleryHorizontalEndIcon as GalleryHorizontalEnd, GripVerticalIcon as GripVertical, PlusIcon as Plus } from '@kition/tessera-icons/react'
+import { GalleryHorizontalEndIcon as GalleryHorizontalEnd, GripVerticalIcon as GripVertical, PlusIcon as Plus } from '@kition/tessera/icons/react'
 import type { DataAttachment, DataField, DataRecord, DataRecordValue } from '../../types/dataDocument'
 import { coerceValue, displayValue, findImageLikeString, normalizeAttachmentValue } from '../lib/tableEditorShared'
 import { cn } from '../../../lib/cn'
 
 import { DataCellDisplay, DataInlineCell } from './TableEditorCells'
 import { GalleryCover } from './GalleryCover'
-import { Badge, Button } from '@kition/kit-editor'
+import { Badge, Button } from '@kition/sdk/editor'
 
 export function KanbanView({
   fields,

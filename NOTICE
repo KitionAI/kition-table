@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (LICENSE).
 
 Third-party material
 
-- Lucide icon path data in kition-tessera-icons and @kition/tessera-icons (linked by the engine,
+- Lucide icon path data in kition-tessera-icons and @kition/tessera/icons (linked by the engine,
   bundled by the editor): Copyright (c) 2026 Lucide Icons and Contributors, ISC License (below);
   the icons Lucide derives from Feather: Copyright (c) 2013-present Cole Bemis, MIT License (below).
 - Fonts built into the headless kition-table executable and shipped in the editor's package

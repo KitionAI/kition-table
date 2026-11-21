@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { FilterValue } from '../../types'
-import { TextInput } from '@kition/kit-editor'
+import { TextInput } from '@kition/sdk/editor'
 
 export function ValueUser({
   multi,

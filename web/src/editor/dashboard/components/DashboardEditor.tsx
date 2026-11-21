@@ -1,7 +1,7 @@
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 
-import { LayoutDashboardIcon as LayoutDashboard, LockIcon as Lock, RefreshCwIcon as RefreshCw, LockOpenIcon as Unlock } from '@kition/tessera-icons/react'
+import { LayoutDashboardIcon as LayoutDashboard, LockIcon as Lock, RefreshCwIcon as RefreshCw, LockOpenIcon as Unlock } from '@kition/tessera/icons/react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Responsive,
@@ -21,7 +21,7 @@ import type {
   DataRecord,
   DataTable,
 } from '../../types/dataDocument'
-import { Button, FrameChrome } from '@kition/kit-editor'
+import { Button, FrameChrome } from '@kition/sdk/editor'
 
 const ResponsiveDashboardGrid = WidthProvider(Responsive)
 type DashboardBreakpoint = 'lg' | 'md' | 'sm' | 'xs' | 'xxs'
@@ -184,7 +184,7 @@ export function DashboardEditor({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-muted/30" data-testid="dashboard-editor-pane">
-      {/* The dashboard's own bar: Focus (kit-editor's display modes) shows the widgets alone. */}
+      {/* The dashboard's own bar: Focus (@kition/sdk/editor's display modes) shows the widgets alone. */}
       <FrameChrome>
       <header className="dashboard-editor-topbar flex min-h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-5 py-3">
         <div className="dashboard-editor-topbar__icon flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">

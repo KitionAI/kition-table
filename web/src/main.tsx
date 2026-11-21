@@ -1,9 +1,9 @@
 import { createRoot } from 'react-dom/client'
-import { connectHost, createKitStrings } from '@kition/kit-editor'
+import { connectHost, createKitStrings } from '@kition/sdk/editor'
 // The editor's stylesheet first (its theme variables, Tailwind, and the `.data-*` classes), then
-// kit-editor's, so the shell keeps its own look over Tailwind's reset.
+// @kition/sdk/editor's, so the shell keeps its own look over Tailwind's reset.
 import './styles/index.css'
-import '@kition/kit-editor/styles.css'
+import '@kition/sdk/editor/styles.css'
 import './app.css'
 import { App } from './App'
 import { CAPABILITIES } from './capabilities'

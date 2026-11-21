@@ -1,4 +1,4 @@
-import type { KitView } from '@kition/kit-editor'
+import type { KitView } from '@kition/sdk/editor'
 
 /**
  * What the editor shows: one of the document's tables or dashboards. A host names it with a view

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CopyIcon as Copy, EllipsisIcon as MoreHorizontal, PencilIcon as Pencil, PlusIcon as Plus, TrashIcon as Trash2 } from '@kition/tessera-icons/react'
+import { CopyIcon as Copy, EllipsisIcon as MoreHorizontal, PencilIcon as Pencil, PlusIcon as Plus, TrashIcon as Trash2 } from '@kition/tessera/icons/react'
 import type { DataView } from '../../types/dataDocument'
 import {
   getViewIcon,
@@ -10,7 +10,7 @@ import {
   viewTypeOptions,
 } from '../lib/tableEditorShared'
 import { cn } from '../../../lib/cn'
-import { Popover, PopoverContent, PopoverTrigger, useDismissableLayer } from '@kition/kit-editor'
+import { Popover, PopoverContent, PopoverTrigger, useDismissableLayer } from '@kition/sdk/editor'
 
 export function TableEditorToolbarHeader({
   tableViews,

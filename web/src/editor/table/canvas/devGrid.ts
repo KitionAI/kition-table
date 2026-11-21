@@ -23,8 +23,8 @@
  * timings: only this page has them. `body[data-ready]` is set once the axes are in.
  */
 import '../../../styles/index.css'
-import '@kition/kit-editor/styles.css'
-import { KitEngine } from '@kition/kit-editor'
+import '@kition/sdk/editor/styles.css'
+import { KitEngine } from '@kition/sdk/editor'
 import { mountPopups } from './devGridEditors'
 import { type EngineSource, engineSource } from './engineSource'
 import { engineData, type GridData } from './gridData'

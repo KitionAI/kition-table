@@ -1,8 +1,8 @@
-import type { HostConnection } from '@kition/kit-editor'
+import type { HostConnection } from '@kition/sdk/editor'
 
 /**
  * The host requests of Kit UI protocol 2.2 section 7j that the table asks (Kition platform
- * requests: the kit stays offline, so a model call or a host feature goes to the host). kit-editor
+ * requests: the kit stays offline, so a model call or a host feature goes to the host). @kition/sdk/editor
  * types them in a later release; until then the editor sends them through the connection's peer
  * with these shapes.
  */

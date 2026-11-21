@@ -1,4 +1,4 @@
-// The engine's lazy fonts on the development page (grid plan D3; kit-editor's `lazyFonts`, Kition
+// The engine's lazy fonts on the development page (grid plan D3; @kition/sdk/editor's `lazyFonts`, Kition
 // platform E9 and E9a): node tests/lazyFonts.mjs [chromium|webkit]
 //
 // The engine gets Inter before the table opens and Droid Sans Fallback, Nanum Gothic and the emoji

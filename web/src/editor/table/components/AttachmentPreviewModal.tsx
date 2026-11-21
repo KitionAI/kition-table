@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import { ChevronLeftIcon as ChevronLeft, ChevronRightIcon as ChevronRight, CopyIcon as Copy, DownloadIcon as Download, RefreshCcwIcon as RefreshCcw, RotateCwIcon as RotateCw, XIcon as X, ZoomInIcon as ZoomIn, ZoomOutIcon as ZoomOut } from '@kition/tessera-icons/react'
+import { ChevronLeftIcon as ChevronLeft, ChevronRightIcon as ChevronRight, CopyIcon as Copy, DownloadIcon as Download, RefreshCcwIcon as RefreshCcw, RotateCwIcon as RotateCw, XIcon as X, ZoomInIcon as ZoomIn, ZoomOutIcon as ZoomOut } from '@kition/tessera/icons/react'
 import type { DataAttachment } from '../../types/dataDocument'
 import { resolveTableFileURL, useTableHost, useTableNotify, type TableHost } from '../ports/TableHost'
 import { findImageLikeString } from '../lib/tableEditorShared'

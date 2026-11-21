@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp, CopyIcon as Copy, RotateCcwClockIcon as History, ImageIcon, LayoutTemplateIcon as LayoutTemplate, Link2Icon as Link2, MessageSquareIcon as MessageSquare, SendIcon as Send, SparklesIcon as Sparkles, TrashIcon as Trash2 } from '@kition/tessera-icons/react'
+import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp, CopyIcon as Copy, RotateCcwClockIcon as History, ImageIcon, LayoutTemplateIcon as LayoutTemplate, Link2Icon as Link2, MessageSquareIcon as MessageSquare, SendIcon as Send, SparklesIcon as Sparkles, TrashIcon as Trash2 } from '@kition/tessera/icons/react'
 import type { DataRecord } from '../../types/dataDocument'
 import { cn } from '../../../lib/cn'
 

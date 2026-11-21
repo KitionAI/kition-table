@@ -1,4 +1,4 @@
-import type { KitEngineInfo, KitModuleManifest } from '@kition/kit-editor'
+import type { KitEngineInfo, KitModuleManifest } from '@kition/sdk/editor'
 import { engineFonts } from './editor/table/canvas/gridFonts'
 
 /**

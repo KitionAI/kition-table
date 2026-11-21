@@ -6,7 +6,7 @@ import {
   TABLE_DATE_FORMATS,
 } from '../../lib/dateFormatting'
 import type { DataDateFormat } from '../../../types/dataDocument'
-import { Select } from '@kition/kit-editor'
+import { Select } from '@kition/sdk/editor'
 
 const SAMPLE_DATE = new Date(2026, 0, 30, 14, 0, 0).toISOString()
 

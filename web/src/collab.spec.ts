@@ -4,7 +4,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { editsDocument } from '@kition/kit-editor'
+import { editsDocument } from '@kition/sdk/editor'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { CAPABILITIES } from './capabilities'
 import { READS, createWorkerTableDataSource, type TableEngineAccess } from './dataSource'

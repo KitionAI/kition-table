@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDownIcon as ChevronDown, ChevronRightIcon as ChevronRight, SparklesIcon as Sparkles } from '@kition/tessera-icons/react'
+import { ChevronDownIcon as ChevronDown, ChevronRightIcon as ChevronRight, SparklesIcon as Sparkles } from '@kition/tessera/icons/react'
 
 import type { DataField } from '../../../types/dataDocument'
 import type { AnyAIConfig } from '../../../types/aiConfig'

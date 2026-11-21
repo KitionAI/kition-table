@@ -10,7 +10,7 @@
  * this is a lazy load, not a download from elsewhere). Emoji are tiles the engine draws, so the
  * page never loads the emoji face.
  */
-import type { KitModuleManifest } from '@kition/kit-editor'
+import type { KitModuleManifest } from '@kition/sdk/editor'
 import { Face } from './displayList'
 
 /** The files under the package's `fonts/` folder: the page's faces and, for the engine, all four. */

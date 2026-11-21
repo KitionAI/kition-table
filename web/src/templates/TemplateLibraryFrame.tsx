@@ -1,8 +1,8 @@
 import type { ComponentType, ReactNode } from 'react'
-import { SearchIcon as Search } from '@kition/tessera-icons/react'
+import { SearchIcon as Search } from '@kition/tessera/icons/react'
 
 import { cn } from '../lib/cn'
-import { ModalDescription, ModalTitle } from '@kition/kit-editor'
+import { ModalDescription, ModalTitle } from '@kition/sdk/editor'
 
 export type TemplateCategoryItem<CategoryId extends string> = {
   id: CategoryId

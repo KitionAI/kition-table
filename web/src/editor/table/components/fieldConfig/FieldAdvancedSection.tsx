@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '../../../../lib/cn'
 import { fieldColorTones } from '../../lib/tableEditorShared'
-import { Select } from '@kition/kit-editor'
+import { Select } from '@kition/sdk/editor'
 
 const TONE_BG: Record<string, string> = {
   slate: 'hsl(var(--secondary))',

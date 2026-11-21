@@ -1,4 +1,4 @@
-import { CopyIcon as Copy, PlusIcon as Plus, SearchIcon as Search, TrashIcon as Trash2 } from '@kition/tessera-icons/react'
+import { CopyIcon as Copy, PlusIcon as Plus, SearchIcon as Search, TrashIcon as Trash2 } from '@kition/tessera/icons/react'
 import { useTranslation } from 'react-i18next'
 import type { DataField, DataFieldType } from '../../types/dataDocument'
 import {
@@ -19,7 +19,7 @@ import {
   TableEditorMultiSortControl,
   TableEditorRowHeightControl,
 } from './TableEditorToolbarControls'
-import { Button } from '@kition/kit-editor'
+import { Button } from '@kition/sdk/editor'
 
 export function TableEditorToolbarPropertyBar({
   busy,

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import type { i18n } from 'i18next'
-import { ConfirmProvider, EditorFrame, FrameChrome, ICON_STROKE, KitEditorProvider, TesseraIcons, createKitStrings, useKitEditor, useKitEditorState, useKitSession, type HostConnection } from '@kition/kit-editor'
+import { ConfirmProvider, EditorFrame, FrameChrome, ICON_STROKE, KitEditorProvider, TesseraIcons, createKitStrings, useKitEditor, useKitEditorState, useKitSession, type HostConnection } from '@kition/sdk/editor'
 import { TableDataSourceProvider, TableHostProvider } from './editor'
 import { TableEditor } from './editor/TableEditor'
 import { DashboardEditor } from './editor/DashboardEditor'
@@ -20,7 +20,7 @@ const editorKeys = (command: string) => command === 'edit.undo' || command === '
 /** The frame has no command tabs: the table editor draws its own toolbar, and the bar under the frame's top lists the tables and dashboards. */
 const NO_TABS = [] as const
 
-/** The theme's `.dark` class follows the host's color scheme (kit-editor sets `data-color-scheme`). */
+/** The theme's `.dark` class follows the host's color scheme (@kition/sdk/editor sets `data-color-scheme`). */
 function useDarkClass() {
   useEffect(() => {
     const root = document.documentElement

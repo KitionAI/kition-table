@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { TriangleAlertIcon as AlertTriangle, FileSpreadsheetIcon as FileSpreadsheet, LoaderCircleIcon as LoaderCircle } from '@kition/tessera-icons/react'
+import { TriangleAlertIcon as AlertTriangle, FileSpreadsheetIcon as FileSpreadsheet, LoaderCircleIcon as LoaderCircle } from '@kition/tessera/icons/react'
 import { useTranslation } from 'react-i18next'
 import type {
   DataImportField,
@@ -11,7 +11,7 @@ import {
   type PreparedTableFileImport,
   type TableFileImportTarget,
 } from '../ports/TableHost'
-import { Button, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalTitle, Select, TextInput } from '@kition/kit-editor'
+import { Button, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalTitle, Select, TextInput } from '@kition/sdk/editor'
 
 const IMPORT_FIELD_TYPES: DataImportField['type'][] = [
   'text',

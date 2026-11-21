@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { FilterOperator, FilterValue } from '../../types'
-import { TextInput } from '@kition/kit-editor'
+import { TextInput } from '@kition/sdk/editor'
 
 export function ValueText({
   operator,

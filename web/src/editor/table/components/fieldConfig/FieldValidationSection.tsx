@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Switch } from '@kition/kit-editor'
+import { Switch } from '@kition/sdk/editor'
 
 export function FieldValidationSection({
   readonly,

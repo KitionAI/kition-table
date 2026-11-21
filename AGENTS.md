@@ -43,7 +43,7 @@ executable, and never depends on a crate here.
   their prompts and apply results in the engine; the model call is the host's (`host/generate`),
   and buttons that run host features ask the host (`host/action`). Without those capabilities the
   editor hides the controls.
-- The editor (`web/`) talks to its host only over the Kit UI protocol through `@kition/kit-editor`,
+- The editor (`web/`) talks to its host only over the Kit UI protocol through `@kition/sdk/editor`,
   and to the engine only through engine commands and extras. Its UI primitives, theme, and strings
   are this repository's (`web/src/ui`, `web/src/styles`, `web/locales`).
 - No compatibility layer: the native suffix is `.ktable`; old `.kitable` files are not read.

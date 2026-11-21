@@ -1,12 +1,12 @@
 import { useTranslation } from 'react-i18next'
-import { GripVerticalIcon as GripVertical } from '@kition/tessera-icons/react'
+import { GripVerticalIcon as GripVertical } from '@kition/tessera/icons/react'
 import { cn } from '../../../../lib/cn'
 import {
   getSelectTone,
   normalizeChoiceTone,
   selectPalette,
 } from '../../lib/tableEditorShared'
-import { TextInput } from '@kition/kit-editor'
+import { TextInput } from '@kition/sdk/editor'
 
 export function FieldChoicesSection({
   choices,

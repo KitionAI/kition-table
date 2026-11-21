@@ -2,7 +2,7 @@
  * The new grid's popup cell editors (grid plan F9): a date cell's compact calendar and time menu,
  * and a choice cell's list. `GridEditing` asks for one with a `CellPopup` (the field, the value,
  * the cell's client rectangle) and writes what it commits; they sit over the cell in the page,
- * outside the canvas. Primitives and theme are the editor's own (kit-editor's popover, the
+ * outside the canvas. Primitives and theme are the editor's own (@kition/sdk/editor's popover, the
  * editor's Tailwind tokens), strings its `table` namespace.
  *
  * The date editor keeps today's behaviour: it opens on the calendar; a day commits at once (the
@@ -11,8 +11,8 @@
  * types, arrows move through it and Enter picks; a single choice commits on the pick, a multiple
  * choice toggles and commits when the list closes. Escape closes either without writing.
  */
-import { Popover, PopoverContent, PopoverTrigger } from '@kition/kit-editor'
-import { CalendarDaysIcon as CalendarDays, CheckIcon, ChevronLeftIcon as ChevronLeft, ChevronRightIcon as ChevronRight, Clock3Icon as Clock3 } from '@kition/tessera-icons/react'
+import { Popover, PopoverContent, PopoverTrigger } from '@kition/sdk/editor'
+import { CalendarDaysIcon as CalendarDays, CheckIcon, ChevronLeftIcon as ChevronLeft, ChevronRightIcon as ChevronRight, Clock3Icon as Clock3 } from '@kition/tessera/icons/react'
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '../../../lib/cn'

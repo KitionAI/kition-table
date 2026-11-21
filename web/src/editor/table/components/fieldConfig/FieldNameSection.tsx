@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
-import { PlusIcon as Plus } from '@kition/tessera-icons/react'
-import { Button, Textarea, TextInput } from '@kition/kit-editor'
+import { PlusIcon as Plus } from '@kition/tessera/icons/react'
+import { Button, Textarea, TextInput } from '@kition/sdk/editor'
 
 export function FieldNameSection({
   name,

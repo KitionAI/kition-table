@@ -1,5 +1,5 @@
-import { GripHorizontalIcon as GripHorizontal } from '@kition/tessera-icons/react'
-import { BarChart, LineChart, PieChart } from '@kition/kit-editor'
+import { GripHorizontalIcon as GripHorizontal } from '@kition/tessera/icons/react'
+import { BarChart, LineChart, PieChart } from '@kition/sdk/editor'
 
 import type { DashboardQueryResult } from '../lib/dashboardQuery'
 import type { DataDashboardWidget, DataRecordValue } from '../../types/dataDocument'

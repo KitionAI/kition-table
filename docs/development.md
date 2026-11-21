@@ -11,7 +11,7 @@ Table in your own app, start with the [README](../README.md).
 | `bindings/` | `wasm`: `kition-table-kit`, the engine behind the `KitDocument` contract (the editor's engine) |
 | `apps/` | `kition-table`: the headless executable (this kit's headless program; other kits keep it in `bindings/headless`) |
 | `model/` | `schema.json`: the document's KDM schema (`kit.json` `model.schema`), compiled into `bindings/wasm` |
-| `web/` | The kit's editor on `@kition/kit-editor` |
+| `web/` | The kit's editor on `@kition/sdk/editor` |
 | `agent/` | The agent guide, the command list and the check catalogue |
 | `conformance/` | One fixture per check code, and the reference renders |
 | `cases/` | The test cases of the feature catalogue (`features.yaml`, beside `kit.json`, the kit manifest) |
@@ -159,11 +159,13 @@ node tests/perfEdit.mjs chromium   # 50 edits, then a whole column cleared, the 
 node tests/restAfterJump.mjs chromium   # the scroll bar dragged to the end in slow frames: the view rests with its exact bands
 ```
 
-The editor depends on the `@kition/*` packages of kition-sdk and Kition Tessera from npm, at the
-versions the committed `web/pnpm-lock.yaml` pins. To work against local checkouts instead, clone
-`kition-sdk` and `kition-tessera` beside this repository (or set `KITION_SDK` and
-`KITION_TESSERA`), run `pnpm install` in each of them, and then run `KITION_LINK=1 pnpm install`
-here: `web/.pnpmfile.cjs` links their packages. The linked install rewrites `web/pnpm-lock.yaml`;
+The editor depends on kition-sdk's `@kition/sdk` and Kition Tessera's `@kition/tessera` from npm,
+at the versions the committed `web/pnpm-lock.yaml` pins. To work against local checkouts instead,
+clone `kition-sdk` and `kition-tessera` beside this repository (or set `KITION_SDK` and
+`KITION_TESSERA`), run `pnpm install` in each of them and build the two packages (their exports
+are the built `dist/`: `pnpm --filter @kition/sdk build` in kition-sdk, `pnpm build` in
+kition-tessera's `packages/tessera`), and then run `KITION_LINK=1 pnpm install` here:
+`web/.pnpmfile.cjs` links them. The linked install rewrites `web/pnpm-lock.yaml`;
 do not commit that. A plain `pnpm install` (or `pnpm install --frozen-lockfile`) always installs
 from npm, even when the checkouts are there.
 
@@ -206,7 +208,7 @@ let bytes = document.save(None)?;
 | `crates/view/*` | The picture and the grid: fonts (`fonts`), the grid's layout (`grid`), its display list and rasterizer (`display`), the whole picture (`picture`) |
 | `bindings/wasm` | `kition-table-kit`: `TableDocument` (`KitDocument`, engine contract 2, extras) |
 | `apps/kition-table` | `kition-table`: the engine served headless over the Kit Protocol, with the object model |
-| `web/` | The editor on `@kition/kit-editor`: the table editor, its UI primitives, theme, strings (`web/locales/<locale>/`) and starter templates |
+| `web/` | The editor on `@kition/sdk/editor`: the table editor, its UI primitives, theme, strings (`web/locales/<locale>/`) and starter templates |
 | `model/schema.json` | The document's KDM schema |
 | `agent/` | The agent guide, the command list and the check catalogue |
 | `cases/`, `features.yaml`, `conformance/` | The feature catalogue, its test cases, and one fixture per check code |
@@ -217,7 +219,7 @@ let bytes = document.save(None)?;
 - **One engine.** The engine is Rust. It implements the Kition SDK's `KitDocument` contract on the
   SDK's Kit Data Model: a `.ktable` file holds the document's replica and a relational projection
   of it in SQLite.
-- **In the page.** The editor (`web/`) is built on the SDK's `@kition/kit-editor`. The engine runs
+- **In the page.** The editor (`web/`) is built on the SDK's `@kition/sdk/editor`. The engine runs
   as WebAssembly in a Web Worker; hosts embed the editor in a sandboxed frame over the Kit UI
   protocol, and name a table or dashboard to open with a view (`document.view` when the editor
   opens, `document/reveal` after): `{ "path": "tables/<id>" }` or `{ "path": "dashboards/<id>" }`.

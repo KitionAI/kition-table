@@ -1,4 +1,4 @@
-import { ArrowLeftIcon as ArrowLeft, BriefcaseBusinessIcon as BriefcaseBusiness, DatabaseIcon as Database, EyeIcon as Eye, ListChecksIcon as ListChecks, LayoutDashboardIcon as LayoutDashboard, LoaderCircleIcon as LoaderCircle, PlusIcon as Plus, SparklesIcon as Sparkles, WorkflowIcon as Workflow } from '@kition/tessera-icons/react'
+import { ArrowLeftIcon as ArrowLeft, BriefcaseBusinessIcon as BriefcaseBusiness, DatabaseIcon as Database, EyeIcon as Eye, ListChecksIcon as ListChecks, LayoutDashboardIcon as LayoutDashboard, LoaderCircleIcon as LoaderCircle, PlusIcon as Plus, SparklesIcon as Sparkles, WorkflowIcon as Workflow } from '@kition/tessera/icons/react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -17,7 +17,7 @@ import {
 } from './templateAssets'
 import { cn } from '../lib/cn'
 import { TEMPLATE_LIBRARY_DIALOG_CLASSNAME, TemplateLibraryFrame } from './TemplateLibraryFrame'
-import { Button, Modal, ModalContent, ModalDescription, ModalTitle } from '@kition/kit-editor'
+import { Button, Modal, ModalContent, ModalDescription, ModalTitle } from '@kition/sdk/editor'
 
 type TemplateLibraryDialogProps = {
   open: boolean

@@ -1,5 +1,5 @@
 import type { FilterValue } from '../../types'
-import { TextInput } from '@kition/kit-editor'
+import { TextInput } from '@kition/sdk/editor'
 
 export function ValueNumber({
   value,

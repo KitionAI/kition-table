@@ -1,6 +1,6 @@
-import type { Catalog } from '@kition/kit-editor'
+import type { Catalog } from '@kition/sdk/editor'
 
-/** The shell's own strings (`en-US`; kit-editor translates its own). The editor's are in `locales/`. */
+/** The shell's own strings (`en-US`; @kition/sdk/editor translates its own). The editor's are in `locales/`. */
 const enUS: Catalog = {
   openFailed: 'The table could not be opened',
 }

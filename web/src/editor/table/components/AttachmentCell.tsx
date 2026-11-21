@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FileTextIcon as FileText, Maximize2Icon as Maximize2 } from '@kition/tessera-icons/react'
+import { FileTextIcon as FileText, Maximize2Icon as Maximize2 } from '@kition/tessera/icons/react'
 import type { DataAttachment } from '../../types/dataDocument'
 import { resolveTableFileURL, useTableHost } from '../ports/TableHost'
 import { findImageLikeString } from '../lib/tableEditorShared'

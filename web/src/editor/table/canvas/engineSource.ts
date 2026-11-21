@@ -9,7 +9,7 @@
  * After a write, `sync` brings the arrangement up to date (`gridSync`: only the records the write
  * touched move) and lays it out again only when its axis changed.
  */
-import type { KitEngine } from '@kition/kit-editor'
+import type { KitEngine } from '@kition/sdk/editor'
 import type { AxesInput } from './axes'
 import type { BandKey } from './displayList'
 import type { GridGroup, GridOpened, GridSource, Skeleton } from './gridView'

@@ -2,7 +2,7 @@ import type { ApiTimestamp } from '../../types/base'
 import { toEpochMs } from '../../lib/timestamps'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDownIcon as ChevronDown, ChevronUpIcon as ChevronUp, ClipboardListIcon as ClipboardList, LinkIcon, TrashIcon as Trash2 } from '@kition/tessera-icons/react'
+import { ChevronDownIcon as ChevronDown, ChevronUpIcon as ChevronUp, ClipboardListIcon as ClipboardList, LinkIcon, TrashIcon as Trash2 } from '@kition/tessera/icons/react'
 import type { DataAttachment, DataField, DataRecord, DataRecordValue, LinkRef, RecordHistoryEntry } from '../../types/dataDocument'
 import { useTableDataSource } from '../ports/TableDataSource'
 import { useTableLocale } from '../ports/TableHost'
@@ -10,7 +10,7 @@ import { displayValue } from '../lib/tableEditorShared'
 import { buildRecordDeepLink } from '../lib/recordUrl'
 
 import { DataInlineCell, LinkFieldEditor } from './TableEditorCells'
-import { Button } from '@kition/kit-editor'
+import { Button } from '@kition/sdk/editor'
 
 export function RecordDetailDrawer({
   record,

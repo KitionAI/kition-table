@@ -14,17 +14,18 @@ export default defineConfig({
   plugins: [react()],
   css: { postcss: { plugins: [tailwindcss(tailwindConfig), autoprefixer()] } },
   resolve: {
-    // One React for the page, also when KITION_LINK=1 links @kition/kit-editor from kition-sdk.
+    // One React for the page, also when KITION_LINK=1 links @kition/sdk from kition-sdk.
     dedupe: ['react', 'react-dom'],
     // ES module builds first, also in the specs, where Node would otherwise take a CommonJS build
     // that requires its own checkout's React.
     mainFields: ['browser', 'module', 'jsnext:main', 'jsnext', 'main'],
   },
-  // kit-editor stays unbundled (it finds its engine worker next to it); the components it takes
-  // from Tessera are bundled with their CommonJS dependencies (use-sync-external-store).
+  // @kition/sdk stays unbundled (its editor finds its engine worker next to it); the components it
+  // takes from Tessera (@kition/tessera/ui) are bundled with their CommonJS dependencies
+  // (use-sync-external-store).
   optimizeDeps: {
-    exclude: ['@kition/kit-editor', '@kition/kit-host', '@kition/kit-ui-protocol', '@kition/kit-dev-host'],
-    include: ['@kition/kit-editor > @kition/tessera-ui'],
+    exclude: ['@kition/sdk'],
+    include: ['@kition/sdk > @kition/tessera/ui'],
   },
   worker: { format: 'es' },
   server: {

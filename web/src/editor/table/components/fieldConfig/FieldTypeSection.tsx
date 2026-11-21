@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { fieldTypes } from '../../lib/tableEditorShared'
 import type { DataFieldType } from '../../../types/dataDocument'
-import { Select } from '@kition/kit-editor'
+import { Select } from '@kition/sdk/editor'
 
 const SUBTITLE_KEYS: Partial<Record<DataFieldType, string>> = {
   attachment: 'fieldTypeSubtitles.attachment',

@@ -32,7 +32,7 @@ these third-party libraries. Versions are the ones `Cargo.lock` and `web/pnpm-lo
 | [i18next](https://www.i18next.com), [react-i18next](https://react.i18next.com) | 26.5.2, 17.1.0 | MIT | Editor: translations |
 | [clsx](https://github.com/lukeed/clsx), [tailwind-merge](https://github.com/dcastil/tailwind-merge) | 2.1.1, 3.7.0 | MIT | Editor: class names |
 | [zod](https://zod.dev) | 4.1.13 | MIT | Editor: data validation |
-| `@kition/kit-editor`, `@kition/kit-host`, `@kition/kit-ui-protocol` ([kition-sdk](https://github.com/KitionAI/kition-sdk)), `@kition/tessera-icons` ([kition-tessera](https://github.com/KitionAI/kition-tessera)) | 0.1.0, from npm | Apache-2.0; tessera-icons' Lucide icons ISC (Feather-derived ones MIT), texts in [NOTICE](../NOTICE) | Editor |
+| `@kition/sdk` ([kition-sdk](https://github.com/KitionAI/kition-sdk)), `@kition/tessera` ([kition-tessera](https://github.com/KitionAI/kition-tessera)) | 0.5.2 and 0.1.1 (rehearsal copies `@kitionstage/sdk`, `@kitionstage/tessera` until their first release), from npm | Apache-2.0; Tessera's Lucide icons ISC (Feather-derived ones MIT), texts in [NOTICE](../NOTICE) | Editor |
 
 ## Assets
 
