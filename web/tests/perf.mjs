@@ -5,7 +5,7 @@
 // target/perf/ when missing). Scenarios: (a) a steady 6,000 px/s scroll for 5 s, (b) a 20,000 px/s
 // fling, (c) the scroll bar dragged from top to bottom in 1 s, (d) across the 50 columns, (e) (a) in
 // a grouped and sorted view, (f) (a) with 88 px rows. Edits (g) belong to the interactive grid.
-// The jumps (b, c) run three times each and are checked on the median of the runs.
+// The jumps (b, c) run five times each and are checked on the median of the runs.
 //
 // PERF_TIER=ci (default) checks every line relaxed three times, the headless tier that catches
 // regressions; PERF_TIER=strict checks the lines themselves, on the owner's machine with a headed
@@ -165,22 +165,25 @@ function summarize(name, run) {
   return summary
 }
 
+/** How many times each jump (b, c) runs. */
+const JUMP_RUNS = 5
+
 /**
- * A jump (b, c) measured three times from the top of the table, settled first (where the person
+ * A jump (b, c) measured JUMP_RUNS times from the top of the table, settled first (where the person
  * starts it), and the median of each line's value over the runs: a jump's skeleton run is a few
  * round trips to the worker, and one slow round trip on a shared runner does not decide the line.
  */
 async function jumps(name, page, script, args) {
   const runs = []
-  for (let index = 1; index <= 3; index += 1) {
+  for (let index = 1; index <= JUMP_RUNS; index += 1) {
     await page.evaluate(() => window.__ktableGrid.view.scrollTo(0, 0))
     await settled(page)
-    runs.push(summarize(`${name} (run ${index} of 3)`, await measure(page, script, args)))
+    runs.push(summarize(`${name} (run ${index} of ${JUMP_RUNS})`, await measure(page, script, args)))
   }
   const median = (pick) => quantile(runs.map(pick), 0.5)
   const summary = { runs, longestSkeleton: median((run) => run.longestSkeleton), interval: { max: median((run) => run.interval.max) } }
   results[name] = summary
-  console.log(`${name}: median of 3 runs: longest skeleton run ${summary.longestSkeleton} frames, max interval ${summary.interval.max.toFixed(1)} ms`)
+  console.log(`${name}: median of ${JUMP_RUNS} runs: longest skeleton run ${summary.longestSkeleton} frames, max interval ${summary.interval.max.toFixed(1)} ms`)
   return summary
 }
 
