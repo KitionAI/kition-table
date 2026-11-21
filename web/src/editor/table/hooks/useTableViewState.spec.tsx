@@ -62,6 +62,27 @@ describe('useTableViewState', () => {
     }
   }
 
+  /** Runs the timers due in `ms`, and what their promises do. */
+  async function advance(ms: number) {
+    await act(async () => {
+      vi.advanceTimersByTime(ms)
+      await Promise.resolve()
+    })
+  }
+
+  /** Answers save `index` (its promise resolves with the view it was given) and lets the answer land, no timer run. */
+  async function answer(answers: Array<() => void>, index: number) {
+    answers[index]()
+    for (let round = 0; round < 3; round += 1) await act(async () => await Promise.resolve())
+  }
+
+  /** Saves that answer only when the test says so. */
+  function heldSaves(): Array<() => void> {
+    const answers: Array<() => void> = []
+    update.mockImplementation(({ config }: { config: DataView['config'] }) => new Promise<DataView>((resolve) => answers.push(() => resolve(view(config)))))
+    return answers
+  }
+
   beforeEach(() => {
     vi.useFakeTimers()
     container = document.createElement('div')
@@ -101,6 +122,50 @@ describe('useTableViewState', () => {
     act(() => state.setRowHeightKey('medium'))
     await settle()
     expect(update).not.toHaveBeenCalled()
+  })
+
+  // regressions/issue-view-save-race: a sort rule added, saved, and removed while that save was
+  // under way came back with the save's answer, and the removal was never saved.
+  it('keeps a change made while an earlier one is saving, and saves it after', async () => {
+    mount({})
+    await settle()
+    const answers = heldSaves()
+    const rule = { id: 'sort_1', field_name: 'received_at', direction: 'desc' as const }
+    act(() => state.setSortItems([rule]))
+    // The first save starts half a second after the change, and is under way.
+    await advance(500)
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(update.mock.calls[0][0].config.sort_items).toEqual([rule])
+    // The rule is removed before that save answers; then it answers with the view holding the rule.
+    act(() => state.setSortItems([]))
+    await answer(answers, 0)
+    expect(state.sortItems).toEqual([])
+    // The removal is saved half a second later, and its answer is the view's.
+    await advance(500)
+    expect(update).toHaveBeenCalledTimes(2)
+    expect(update.mock.calls[1][0].config.sort_items).toBeUndefined()
+    await answer(answers, 1)
+    await settle()
+    expect(state.sortItems).toEqual([])
+    expect(update).toHaveBeenCalledTimes(2)
+  })
+
+  it('takes the latest save, not an earlier one that answers after it', async () => {
+    mount({})
+    await settle()
+    const answers = heldSaves()
+    act(() => state.setRowHeightKey('tall'))
+    await advance(500)
+    act(() => state.setRowHeightKey('short'))
+    await advance(500)
+    expect(update).toHaveBeenCalledTimes(2)
+    expect(update.mock.calls[1][0].config.row_height).toBe('short')
+    // The second save answers first, then the first one.
+    await answer(answers, 1)
+    await answer(answers, 0)
+    await settle()
+    expect(state.rowHeightKey).toBe('short')
+    expect(update).toHaveBeenCalledTimes(2)
   })
 })
 

@@ -108,6 +108,15 @@ export function useTableViewState({
   const [rowHeightKey, setRowHeightKey] = useState<GridRowHeightKey>('medium')
   const [frozenColumnCount, setFrozenColumnCount] = useState(1)
   const skipNextViewConfigPersistRef = useRef<number | null>(null)
+  // A view change made while an earlier one is saving is the latest: the earlier save's answer
+  // must not take it back (regressions/issue-view-save-race). The saves are numbered; only the
+  // latest one's answer is taken, and when the settings changed after it was sent, the answer only
+  // updates the document (the stored view) and the settings stay, to be saved next.
+  const latestSaveRef = useRef(0)
+  /** The view the settings are for, and the config they hold now (as JSON). */
+  const settingsRef = useRef<{ viewId: number | null; config: string }>({ viewId: null, config: '' })
+  /** Views a save answered with while the settings had moved on: they do not reset the settings. */
+  const keepSettingsForRef = useRef(new WeakSet<DataView>())
 
   const viewMode: DataInlineViewMode = activeView?.type || 'grid'
 
@@ -116,8 +125,12 @@ export function useTableViewState({
   }, [activeTable?.id, setActiveViewId, tableViews])
 
   useEffect(() => {
+    // A save's answer that came after a later change: the settings are newer than the view (once:
+    // shown again later, after another view, the view gives the settings as usual).
+    if (activeView && keepSettingsForRef.current.delete(activeView)) return
     if (activeView) skipNextViewConfigPersistRef.current = activeView.id
     const settings = viewSettingsOf(activeView)
+    settingsRef.current = { viewId: activeView?.id ?? null, config: JSON.stringify(viewConfigOf(settings)) }
     setHiddenFieldNames(new Set(settings.hiddenFieldNames))
     setFilterFieldName(settings.filterFieldName)
     setFilterOperator(settings.filterOperator)
@@ -159,12 +172,19 @@ export function useTableViewState({
       rowHeightKey,
       frozenColumnCount,
     })
+    const sent = JSON.stringify(config)
+    settingsRef.current = { viewId: activeView.id, config: sent }
     if (viewConfigUnchanged(activeView, config)) return
     const documentId = document.id
     const tableId = activeTable.id
     const viewId = activeView.id
     const timer = window.setTimeout(() => {
+      const save = ++latestSaveRef.current
       void dataSource.views.update({ documentId, tableId, viewId, config }).then((updated) => {
+        // A later save was sent: its answer is the one to take.
+        if (save !== latestSaveRef.current) return
+        const settings = settingsRef.current
+        if (settings.viewId === updated.id && settings.config !== sent) keepSettingsForRef.current.add(updated)
         setDocument((current) => current ? {
           ...current,
           tables: current.tables?.map((table) => table.id === tableId ? {

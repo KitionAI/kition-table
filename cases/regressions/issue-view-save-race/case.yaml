@@ -1,0 +1,24 @@
+format: 1
+id: regressions/issue-view-save-race
+feature: table.views
+intent: >-
+  A view's settings are saved half a second after a change, and a change made while an earlier one
+  is saving is the latest: the earlier save's answer no longer takes it back. A sort rule added,
+  saved, and removed while that save was under way came back with the save's answer, and the
+  removal was never saved (the flow's sort step, in WebKit on a hosted runner). Only the latest
+  save's answer is taken; when the settings changed after it was sent, it updates the stored view
+  and the settings stay, and are saved next.
+layer: gate
+source:
+  kind: issue
+  from: Kit CI, the flow's sort step (WebKit, hosted runner)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/hooks/useTableViewState.spec.tsx]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-21"

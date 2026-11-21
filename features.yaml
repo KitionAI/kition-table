@@ -145,7 +145,7 @@ features:
     status: has
     commands: [table.views.list, table.views.create, table.views.update, table.views.delete, table.views.getFilterTree, table.views.putFilterTree, table.views.getSorts, table.views.putSorts, table.views.getGroups, table.views.putGroups, table.views.patchConfig, table.views.listFields, table.views.patchField]
     gap: "table.views.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
-    cases: [table.views/save-reopen]
+    cases: [table.views/save-reopen, regressions/issue-view-save-race]
     since: "2026-11-16"
   - id: table.views.arrangement
     title: "One arrangement of a view's records in the engine (filter, sorts, groups, search), kept up to date edit by edit, for the editor's views, the agent's read and the picture"
