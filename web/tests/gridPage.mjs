@@ -54,8 +54,13 @@ export async function startServer() {
   return { server, origin: `http://127.0.0.1:${server.httpServer.address().port}` }
 }
 
+// Headless Chromium on Linux hints glyphs and rounds every advance to a whole pixel, whatever the
+// device pixel ratio, so its text is not the unhinted text the engine lays out (and macOS draws).
+// Without hinting its advances are the font's own, as on macOS.
+const CHROMIUM_ARGS = process.platform === 'linux' ? ['--font-render-hinting=none'] : []
+
 export async function launch(which, headless = true) {
-  return (which === 'webkit' ? webkit : chromium).launch({ headless })
+  return which === 'webkit' ? webkit.launch({ headless }) : chromium.launch({ headless, args: CHROMIUM_ARGS })
 }
 
 /**

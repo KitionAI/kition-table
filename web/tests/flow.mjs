@@ -313,7 +313,8 @@ try {
   // it, any field, case ignored, and clearing it shows them all again.
   await test('the search keeps the records that hold it', async () => {
     const search = kit.getByTestId('ktable-toolbar-search')
-    const footer = kit.locator('.data-inline-footer')
+    // The footer's first part is the count; the edit hint follows it with no space between in textContent.
+    const footer = kit.locator('.data-inline-footer > span').first()
     // "1 record", "2 records" (the footer's plural, regressions/issue-footer-count-plural).
     const shows = (count) => until(async () => new RegExp(`(^|\\D)${count} ${count === 1 ? 'record\\b' : 'records'}`).test(await footer.textContent()))
     await search.fill('PHASE')
