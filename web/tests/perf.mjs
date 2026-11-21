@@ -5,6 +5,7 @@
 // target/perf/ when missing). Scenarios: (a) a steady 6,000 px/s scroll for 5 s, (b) a 20,000 px/s
 // fling, (c) the scroll bar dragged from top to bottom in 1 s, (d) across the 50 columns, (e) (a) in
 // a grouped and sorted view, (f) (a) with 88 px rows. Edits (g) belong to the interactive grid.
+// The jumps (b, c) run three times each and are checked on the median of the runs.
 //
 // PERF_TIER=ci (default) checks every line relaxed three times, the headless tier that catches
 // regressions; PERF_TIER=strict checks the lines themselves, on the owner's machine with a headed
@@ -164,6 +165,25 @@ function summarize(name, run) {
   return summary
 }
 
+/**
+ * A jump (b, c) measured three times from the top of the table, settled first (where the person
+ * starts it), and the median of each line's value over the runs: a jump's skeleton run is a few
+ * round trips to the worker, and one slow round trip on a shared runner does not decide the line.
+ */
+async function jumps(name, page, script, args) {
+  const runs = []
+  for (let index = 1; index <= 3; index += 1) {
+    await page.evaluate(() => window.__ktableGrid.view.scrollTo(0, 0))
+    await settled(page)
+    runs.push(summarize(`${name} (run ${index} of 3)`, await measure(page, script, args)))
+  }
+  const median = (pick) => quantile(runs.map(pick), 0.5)
+  const summary = { runs, longestSkeleton: median((run) => run.longestSkeleton), interval: { max: median((run) => run.interval.max) } }
+  results[name] = summary
+  console.log(`${name}: median of 3 runs: longest skeleton run ${summary.longestSkeleton} frames, max interval ${summary.interval.max.toFixed(1)} ms`)
+  return summary
+}
+
 /** The lines of section 4.2 for a steady scroll (a, e, f), relaxed by `k`. */
 function steadyLines(name, s) {
   step(`${name} frame interval`, s.interval.p95 <= LINES.interval.p95 * k && s.interval.p99 <= LINES.interval.p99 * k && s.interval.max <= LINES.interval.max * k, `p95 ${s.interval.p95.toFixed(1)} ≤ ${at(LINES.interval.p95)}, p99 ${s.interval.p99.toFixed(1)} ≤ ${at(LINES.interval.p99)}, max ${s.interval.max.toFixed(1)} ≤ ${at(LINES.interval.max)}`)
@@ -216,15 +236,13 @@ try {
     results.bands = bench
     step('band generation', bench.warm.p95 <= LINES.bandWarmP95 * k && bench.cold.p95 <= LINES.bandColdP95 * k, `warm p95 ${bench.warm.p95.toFixed(2)} ≤ ${at(LINES.bandWarmP95)}, cold p95 ${bench.cold.p95.toFixed(2)} ≤ ${at(LINES.bandColdP95)} ms`)
 
-    await page.evaluate(() => window.__ktableGrid.view.scrollTo(0, 0))
-    await settled(page)
-    const b = summarize('b fling 20000 px/s', await measure(page, steady, { speed: 20000, seconds: 1.5, axis: 'y' }))
-    step('b skeleton runs', b.longestSkeleton <= LINES.skeletonRun * k, `longest ${b.longestSkeleton} ≤ ${at(LINES.skeletonRun)} frames`)
-    step('b frame interval', b.interval.max <= LINES.interval.max * k, `max ${b.interval.max.toFixed(1)} ≤ ${at(LINES.interval.max)} ms`)
+    const b = await jumps('b fling 20000 px/s', page, steady, { speed: 20000, seconds: 1.5, axis: 'y' })
+    step('b skeleton runs', b.longestSkeleton <= LINES.skeletonRun * k, `median longest ${b.longestSkeleton} ≤ ${at(LINES.skeletonRun)} frames`)
+    step('b frame interval', b.interval.max <= LINES.interval.max * k, `median max ${b.interval.max.toFixed(1)} ≤ ${at(LINES.interval.max)} ms`)
 
-    const c = summarize('c scroll bar top to bottom', await measure(page, drag, { seconds: 1 }))
-    step('c skeleton runs', c.longestSkeleton <= LINES.skeletonRun * k, `longest ${c.longestSkeleton} ≤ ${at(LINES.skeletonRun)} frames`)
-    step('c frame interval', c.interval.max <= LINES.interval.max * k, `max ${c.interval.max.toFixed(1)} ≤ ${at(LINES.interval.max)} ms`)
+    const c = await jumps('c scroll bar top to bottom', page, drag, { seconds: 1 })
+    step('c skeleton runs', c.longestSkeleton <= LINES.skeletonRun * k, `median longest ${c.longestSkeleton} ≤ ${at(LINES.skeletonRun)} frames`)
+    step('c frame interval', c.interval.max <= LINES.interval.max * k, `median max ${c.interval.max.toFixed(1)} ≤ ${at(LINES.interval.max)} ms`)
 
     await page.evaluate(() => window.__ktableGrid.view.scrollTo(0, 0))
     await settled(page)
