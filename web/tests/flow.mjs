@@ -222,8 +222,8 @@ const cellEditor = () => kit.locator('.data-inline-grid-canvas textarea[data-kta
 const editorShown = () => until(() => cellEditor().evaluate((element) => element.style.pointerEvents === 'auto'))
 /**
  * Waits for the cell editor to hold `text`, the cell's value, which it reads from the engine after
- * it shows: a person sees the value before typing over it (what is typed before it arrives is
- * replaced by it, and the cell keeps its value).
+ * it shows: a person sees the value before typing over it (what is typed before it arrives goes
+ * after it, regressions/issue-cell-editor-early-typing, so a fill made then would not replace it).
  */
 const editorHolds = (text) => until(async () => (await cellEditor().inputValue()) === text)
 /** The engine commands the editor's worker was sent since `from` (a count from `mark()`), with their answers. */

@@ -120,7 +120,30 @@ export function editText(field: DataField, value: DataRecordValue): string {
   return displayValue(value)
 }
 
-type Session = { kind: 'text' | 'popup'; cell: CellRef; recordId: number; field: DataField; original: string; popup?: CellPopup; draft?: DataRecordValue }
+type Session = {
+  kind: 'text' | 'popup'
+  cell: CellRef
+  recordId: number
+  field: DataField
+  original: string
+  popup?: CellPopup
+  draft?: DataRecordValue
+  /** An Enter, F2 or double click edit whose value is still being read: it answers the value's text. */
+  loading?: Promise<string>
+  /** The value's text that arrived during a composition: it goes before the text once the composition ends. */
+  before?: string
+}
+
+/**
+ * The text and caret of an Enter, F2 or double click edit once the cell's value arrives, when keys
+ * were typed before it did (regressions/issue-cell-editor-early-typing). Such an edit shows the
+ * value with the caret at its end, so typing adds to the value; what was typed before the value
+ * arrived goes after it, as it would have had the value been there, and the caret stays where it
+ * was in what was typed.
+ */
+export function withValueBefore(value: string, typed: string, caret: { start: number; end: number }): { text: string; start: number; end: number } {
+  return { text: value + typed, start: value.length + caret.start, end: value.length + caret.end }
+}
 
 export class GridEditing {
   private grid: GridInteraction | null = null
@@ -209,6 +232,7 @@ export class GridEditing {
     on(input, 'compositionend', (event) => {
       this.composing = false
       if (!this.session && event.data) this.startTyping(event.data, false)
+      else if (this.session?.before != null) this.putValueBefore(this.session.before)
     })
     on(input, 'input', () => {
       // Text that reached the hidden textarea without a key the grid saw (a dead key, dictation).
@@ -463,7 +487,8 @@ export class GridEditing {
 
   private openText(cell: CellRef, recordId: number, field: DataField, text: string | null, keep = false) {
     const grid = this.interaction
-    this.session = { kind: 'text', cell, recordId, field, original: '' }
+    const session: Session = { kind: 'text', cell, recordId, field, original: '' }
+    this.session = session
     grid.setEditing(true)
     if (!keep) this.input.value = text ?? ''
     this.place()
@@ -471,22 +496,45 @@ export class GridEditing {
     if (text !== null || keep) {
       // Typing replaces the cell: what was there counts as the original for the change check.
       void this.value(recordId, field).then((value) => {
-        if (this.session?.recordId === recordId && this.session.field.id === field.id) this.session.original = editText(field, value)
+        if (this.session === session) session.original = editText(field, value)
       })
       return
     }
+    // Enter, F2 or a double click: the editor shows at once and reads the cell's value after. The
+    // value goes before whatever was typed meanwhile (`withValueBefore`), never over it.
     this.busy += 1
-    void this.value(recordId, field)
-      .then((value) => {
-        if (this.session?.recordId !== recordId || this.session.field.id !== field.id) return
-        const original = editText(field, value)
-        this.session.original = original
-        this.input.value = original
-        this.input.setSelectionRange(original.length, original.length)
-      })
+    const loading = this.value(recordId, field).then((value) => editText(field, value))
+    session.loading = loading
+    void loading
+      .then(
+        (original) => {
+          if (this.session !== session) return
+          session.original = original
+          session.loading = undefined
+          // Not in the middle of an input method's composition: changing the text would end it.
+          if (this.composing) session.before = original
+          else this.putValueBefore(original)
+        },
+        (error: unknown) => {
+          if (this.session === session) session.loading = undefined
+          if (this.handlers.onError) this.handlers.onError(error)
+          else console.error('grid: a cell could not be read', error)
+        },
+      )
       .finally(() => {
         this.busy -= 1
       })
+  }
+
+  /** Puts the cell's value (its text) before what was typed in the open editor. */
+  private putValueBefore(value: string) {
+    const session = this.session
+    if (session) session.before = undefined
+    const input = this.input
+    const typed = input.value
+    const next = withValueBefore(value, typed, { start: input.selectionStart ?? typed.length, end: input.selectionEnd ?? typed.length })
+    input.value = next.text
+    input.setSelectionRange(next.start, next.end)
   }
 
   private async openPopup(cell: CellRef, recordId: number, field: DataField, text: string | null) {
@@ -532,9 +580,19 @@ export class GridEditing {
       else this.close()
       return
     }
-    const text = this.input.value
-    const { recordId, field, original } = session
+    const typed = this.input.value
+    const { recordId, field, original, loading, before } = session
     this.close()
+    if (loading) {
+      // Committed before the cell's value arrived: what was typed goes after it once it does.
+      void loading.then((value) => this.store(recordId, field, value, value + typed), () => {})
+      return
+    }
+    this.store(recordId, field, original, before != null ? before + typed : typed)
+  }
+
+  /** Writes `text` to a text cell that held `original`, when it changed. */
+  private store(recordId: number, field: DataField, original: string, text: string) {
     if (text === original) return
     const value = coerceValue(field, text)
     void this.write(() => this.data.update(recordId, { [field.name]: value }), cells([recordId]))

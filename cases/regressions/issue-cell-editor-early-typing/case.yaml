@@ -1,0 +1,25 @@
+format: 1
+id: regressions/issue-cell-editor-early-typing
+feature: table.editor.grid
+intent: >-
+  Keys typed in a cell's text editor are never lost. An Enter, F2 or double click edit shows the
+  editor at once and reads the cell's value after; the value arriving replaced what was typed
+  meanwhile (the flow's typing step on a hosted runner). Such an edit shows the value with the
+  caret at its end, so typing adds to it: what was typed before the value arrived now goes after
+  it, the caret where it was in the typing, and an edit committed before the value arrives writes
+  the value with the typing after it. A typed character that opens the editor still replaces the
+  cell, as before.
+layer: gate
+source:
+  kind: issue
+  from: Kit CI, the flow's typing step (hosted runner)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/editor/table/canvas/gridEditingText.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-21"
