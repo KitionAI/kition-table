@@ -427,6 +427,9 @@ try {
 
   // 14. Undo and Redo keys run the engine's undo and redo.
   await test('Undo and Redo keys run the engine', async () => {
+    // A fresh copy of the file: the sort step before saved a sort to the view and removed it
+    // again, two writes Undo would take back.
+    await open('Tasks.ktable', SMALL)
     const disabled = (await kit.getByTestId('table-undo').isDisabled()) && (await kit.getByTestId('table-redo').isDisabled())
     step('Undo and Redo start disabled', disabled)
     const [table] = await tables()
