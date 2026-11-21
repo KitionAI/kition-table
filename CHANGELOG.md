@@ -7,6 +7,7 @@ each package is published with a `package-v<version>` tag.
 
 - A host tells a table file's document id (`document.identity`) and makes a copied table a new document (`document.fork`): the fork keeps the tables, fields, views, records, their ids and the attachments its records name, and carries a new id and none of the source's history (no change log, record history, deleted rows or unreferenced attachments; Kit Process Protocol section 5.6, kition-sdk 6b4d471). Two copies of the same `.ktable` were one document until now.
 - The headless program speaks Kit Process Protocol version 1 (`headless.protocol` is `kition-kit/1`), as hosts on kition-sdk from bb1b07b require.
+- kition-sdk 6672663: undo and redo pass over a step whose changes came to nothing, instead of stopping on it.
 
 ## 0.5.7
 
