@@ -160,6 +160,15 @@ await context.addInitScript(() => {
       }
     }
   }
+  // The clipboard events each frame saw, after the editor's handlers (for the copy step's report).
+  const clipboardEvents = []
+  window.__clipboardEvents = clipboardEvents
+  for (const type of ['beforecopy', 'copy', 'paste']) {
+    window.addEventListener(type, (event) => {
+      if (clipboardEvents.length > 50) clipboardEvents.splice(0, 25)
+      clipboardEvents.push(`${type}${event.defaultPrevented ? ' handled' : ''}${event.clipboardData ? ` [${[...event.clipboardData.types].join(', ')}]` : ''}`)
+    })
+  }
   const draws = []
   window.__textDraws = draws
   const fillText = CanvasRenderingContext2D.prototype.fillText
@@ -393,7 +402,7 @@ try {
     const seen = consoleErrors.length
     // Which clipboard the frame offers a copy made before the editor has read the cells (then the
     // copy writes through navigator.clipboard once it has them).
-    const api = await frame().evaluate(() => ({ write: typeof navigator.clipboard?.write, item: typeof ClipboardItem }))
+    const api = await frame().evaluate(() => ({ write: typeof navigator.clipboard?.write, item: typeof ClipboardItem, focus: document.activeElement?.tagName ?? null }))
     // In WebKit the person copies once the selection has settled (the editor reads a small
     // selection's text 30 ms after it changes, and the copy event then carries it).
     if (which === 'webkit') await page.waitForTimeout(300)
@@ -422,7 +431,8 @@ try {
     } else {
       await until(async () => (copied = await page.evaluate(() => navigator.clipboard.readText())) === 'Phase 2 wrap')
     }
-    step('copies the selected cell to the system clipboard', copied === 'Phase 2 wrap', JSON.stringify({ copied, api, consoleErrors: consoleErrors.slice(seen, seen + 3) }))
+    const events = { editor: await frame().evaluate(() => window.__clipboardEvents.slice(-4)), host: await page.evaluate(() => window.__clipboardEvents.slice(-2)) }
+    step('copies the selected cell to the system clipboard', copied === 'Phase 2 wrap', JSON.stringify({ copied, api, events, consoleErrors: consoleErrors.slice(seen, seen + 3) }))
   })
 
   // 14. Undo and Redo keys run the engine's undo and redo.
