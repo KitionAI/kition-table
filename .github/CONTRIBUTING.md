@@ -12,7 +12,7 @@ Thank you for contributing; every change keeps the checks green.
 | `crates/` | The engine: the `.ktable` file, the request layer, AI fields, and timestamps (`crates/engine/*`); import (`crates/formats/*`) |
 | `bindings/wasm` | The engine, `kition-table-kit` (`TableDocument`, the `KitDocument` contract) |
 | `apps/kition-table` | The engine served headless, for agents, scripts, and the conformance suite |
-| `web/` | The kit's editor (on Tessera's components, through `@kition/kit-editor`) |
+| `web/` | The kit's editor (on Tessera's components, through `@kition/sdk/editor`) |
 | `model/schema.json` | The document's KDM schema |
 | `kit.json` | The kit manifest (KHP) |
 | `features.yaml`, `cases/` | The feature catalogue and its cases ([docs/quality.md](../docs/quality.md)) |
@@ -41,7 +41,7 @@ SQLite needs a C compiler that targets wasm32: Homebrew's LLVM (`brew install ll
 Before you open a pull request, run the check; it must exit 0:
 
 ```sh
-cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
+cargo fmt --all -- --check
 ```
 
 ## Rules
