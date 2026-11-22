@@ -103,6 +103,12 @@ files (`bindings/wasm/tests/`, `apps/kition-table/tests/`); `--test <name>` runs
 `KITION_TABLE_WRITE_COMMANDS=1 cargo test -p kition-table-kit shipped_commands_file` rewrites
 `agent/commands.json` after a command changes.
 
+On a developer machine, run only the fast checks (`cargo fmt --all -- --check`, `cargo check -p
+<touched crates> --all-targets`, the wasm `cargo check`, `pnpm typecheck` in `web/`). Clippy,
+`cargo test --workspace` and every `test:*` script of `web/` run in the kit's CI run on GitHub
+(`.github/workflows/ci.yml`, which calls Kition's reusable `kit-ci.yml`); a change is done when
+the CI run of HEAD passes and HEAD is on `origin/main` (Kition's `scripts/kit-ci.sh`).
+
 The cases under `cases/` are run by kition-sdk's case runner; eval cases (`cases/table.agent.*`)
 have a real model edit a table through the kits' MCP server and are started only by a maintainer
 (docs/quality.md). Check them without a model from a kition-sdk checkout beside this repository:

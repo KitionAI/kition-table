@@ -9,4 +9,4 @@
 # kition-quality:end
 
 # Expected results outside cases/ (docs/quality.md, "Expected results in this repository").
-/conformance/expected/ @yoeren
+/conformance/expected/ @KitionAI/owners
