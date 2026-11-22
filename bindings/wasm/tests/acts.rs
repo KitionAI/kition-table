@@ -83,6 +83,7 @@ fn what_each_command_reads_and_the_parameter_on_fills_follow_from_the_code() {
         let text = match id {
             "table.file.render" => render.to_owned(),
             "table.file.export" => branch("export::EXPORT_COMMAND"),
+            "table.file.outline" => branch("outline::OUTLINE_COMMAND"),
             "edit.undo" | "edit.redo" => run.get(if id == "edit.undo" { "undo" } else { "redo" }).cloned().unwrap_or_default(),
             _ => run.get(method).cloned().unwrap_or_default(),
         };

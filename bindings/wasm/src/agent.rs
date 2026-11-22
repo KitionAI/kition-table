@@ -223,6 +223,9 @@ fn raw_input_schema(command: &str) -> Option<Value> {
     if command == crate::preview::RENDER_COMMAND {
         return Some(crate::preview::input_schema());
     }
+    if command == crate::outline::OUTLINE_COMMAND {
+        return Some(crate::outline::input_schema());
+    }
     let method = command.strip_prefix(COMMAND_PREFIX)?;
     let route = DOCUMENT_METHODS.iter().chain(METHODS).chain(ENGINE_METHODS).find(|(name, _)| *name == method).map(|(_, route)| *route)?;
     let mut params = Map::new();
@@ -1100,6 +1103,10 @@ pub fn output_schema(command: &str) -> Option<Value> {
     if command == crate::preview::RENDER_COMMAND {
         // The PNG at the top level, where the kits server reads it (`agent.render`, K21).
         return Some(crate::preview::output_schema(error_spec()));
+    }
+    if command == crate::outline::OUTLINE_COMMAND {
+        // The outline at the top level, where the host reads it (`outline.command`, K24).
+        return Some(crate::outline::output_schema(error_spec()));
     }
     let method = match command {
         "edit.undo" => "undo",

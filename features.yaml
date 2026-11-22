@@ -192,6 +192,15 @@ features:
     paths: [crates/view/fonts/**, crates/view/picture/**, bindings/wasm/src/preview.rs, bindings/wasm/tests/picture.rs, bindings/wasm/tests/preview.rs, bindings/wasm/tests/thumbnails.rs, apps/kition-table/src/main.rs, apps/kition-table/tests/render.rs, conformance/expected/**]
     cases: [regressions/issue-4, regressions/issue-render-command, regressions/issue-emoji-cuts-cell, regressions/issue-picture-filter-as-editor, regressions/issue-file-chip, table.picture/thumbnails, table.picture/gallery-and-formats]
     since: "2026-11-16"
+  - id: table.outline
+    title: "The document's outline: the file's tables and dashboards as a host lists them under the file and opens the file at each"
+    dimension: [function, platform]
+    priority: P1
+    status: has
+    commands: [table.file.outline]
+    paths: [bindings/wasm/src/outline.rs, bindings/wasm/tests/outline.rs, kit.json, docs/features/engine-commands.md]
+    cases: [table.outline/items]
+    since: "2026-11-22"
   - id: table.attachments
     title: "Attachments stored in the file"
     dimension: [function, data-safety]

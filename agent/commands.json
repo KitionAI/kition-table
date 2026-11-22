@@ -14326,6 +14326,91 @@
       }
     },
     {
+      "command": "table.file.outline",
+      "tool": "table_table_file_outline",
+      "title": "List the file's tables and dashboards as its outline",
+      "description": "Lists the file's tables and dashboards as its outline, each with its id, its title, what it is and the place the editor opens the file at; changes nothing.",
+      "mutates": false,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "The file's tables, then its dashboards, in the document's order.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The table's or dashboard's id."
+                },
+                "title": {
+                  "type": "string",
+                  "description": "What people call it."
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "table",
+                    "dashboard"
+                  ]
+                },
+                "view": {
+                  "description": "The place, as the editor opens the file at it: { path }."
+                }
+              }
+            }
+          },
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Why the call failed (A18); the file is as it was.",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "invalid-params",
+                  "invalid-op",
+                  "invalid-value",
+                  "not-found",
+                  "read-only",
+                  "unknown-command",
+                  "command-failed",
+                  "not-open",
+                  "draft-required",
+                  "not-allowed",
+                  "unsupported",
+                  "unavailable",
+                  "failed"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "index": {
+                "type": "integer",
+                "description": "The failing step or operation."
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        }
+      }
+    },
+    {
       "command": "table.file.export",
       "tool": "table_table_file_export",
       "title": "Export a table as a CSV or Markdown file",

@@ -188,6 +188,18 @@ views, records }` (`records` as `read` answers it, at most 20 a table and 100 in
 dashboards as `{ id, title, label, widgets, sourceTableId? }`. Hosts that relay `inspect()` over the
 Kit Protocol leave out every `title` key, so `label` carries each title to agents.
 
+## `table.file.outline`
+
+The document's outline, and the manifest's `outline.command` (Kition platform K24): the parts of
+the file a host lists under it and opens the file at. It takes no parameters, reads only, and like
+`table.file.export` answers at the top level, not as `{ "result", "change" }`, since the host reads
+`items` there: the tables, then the dashboards, each in the document's order, as
+`{ "id", "title", "kind", "view" }`. `kind` is `table` or `dashboard`; a table without a title goes
+by its name; `view` is the place as the editor takes it in `document.view` and `document/reveal`
+(`{ "path": "tables/<id>" }`, `{ "path": "dashboards/<id>" }`, `web/src/shown.ts`). A host needs
+nothing else to list a table file's parts: it does not read `table.tables.list` or
+`table.dashboards.list` for that.
+
 ## `table.file.render`
 
 The agent's preview (KHP A39), and the manifest's `agent.render` (Kition platform K21): the

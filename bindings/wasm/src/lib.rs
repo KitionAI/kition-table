@@ -59,6 +59,7 @@ mod grid_edit;
 pub mod inspect;
 #[cfg(feature = "headless")]
 mod model;
+pub mod outline;
 mod params;
 mod place;
 mod preview;
@@ -887,6 +888,9 @@ fn describe(method: &str) -> &'static str {
         "file.export" => {
             "Answers one table as a CSV or Markdown file's bytes (base64, in data) for the host to write as a new file, without changing anything."
         }
+        "file.outline" => {
+            "Lists the file's tables and dashboards as its outline, each with its id, its title, what it is and the place the editor opens the file at; changes nothing."
+        }
         "file.render" => {
             "Draws the table, a view, some of its rows, a field, one record's cell or a dashboard as the editor shows them, as a PNG at a scale up to 2, such as the target a diagnostic names; changes nothing."
         }
@@ -942,6 +946,9 @@ impl TableDocument {
         }
         if command == preview::RENDER_COMMAND {
             return preview::render(&self.file, &params);
+        }
+        if command == outline::OUTLINE_COMMAND {
+            return outline::outline(&self.file);
         }
         let method = match command {
             "edit.undo" => "undo",
@@ -1103,6 +1110,7 @@ impl KitDocument for TableDocument {
         // Its parameters are in its schema alone: kition-headless once read a `target` named in a
         // command's notes as a file.
         commands.push(command(preview::RENDER_COMMAND, "Render a preview image", None, false));
+        commands.push(command(outline::OUTLINE_COMMAND, "List the file's tables and dashboards as its outline", None, false));
         commands.push(command(
             export::EXPORT_COMMAND,
             "Export a table as a CSV or Markdown file",

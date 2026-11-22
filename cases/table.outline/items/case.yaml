@@ -1,0 +1,24 @@
+format: 1
+id: table.outline/items
+feature: table.outline
+intent: >-
+  table.file.outline (kit.json outline.command, Kition platform K24) answers the file's tables,
+  then its dashboards, each in the document's order, as { id, title, kind, view } at the top level
+  (items): kind is table or dashboard, and view is the
+  place the editor opens the file at ({ path: tables/<id> } or { path: dashboards/<id> }). It takes
+  no parameters (one it does not take is refused by name), is no edit (a read-only session runs
+  it), and leaves the document, its revision and its saved bytes as they were. kit.json names the
+  command, so a host lists a table file's parts without knowing the kit.
+layer: gate
+source:
+  kind: synthetic
+  from: the host kit neutrality plan, D2 (the document outline)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: outline }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-22"
