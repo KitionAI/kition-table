@@ -181,7 +181,7 @@ is run. The agent's guide is [agent/guide.md](agent/guide.md).
 
 ## Maturity
 
-Version 0.1.1 (`kit.json`, changes in [CHANGELOG.md](CHANGELOG.md)); KHP 1.0, conformance level `basic`.
+Version 0.1.2 (`kit.json`, changes in [CHANGELOG.md](CHANGELOG.md)); KHP 1.0, conformance level `basic`.
 
 The feature catalogue (`features.yaml`) lists every feature with its status and the cases that
 prove it; known gaps are in [docs/gaps.md](docs/gaps.md).
