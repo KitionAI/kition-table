@@ -279,7 +279,7 @@ anything it lists goes to the maintainers and is never merged automatically.
 ## Expected results in this repository
 
 Besides `cases/**/expected/`, these are expected results: only a maintainer approves a change
-to them, and kition-sdk's `tools/check-expected.mjs` lists every change (its `**/golden/**`
+to them, and kition-sdk's `tools/check-expected.mjs` lists every change (its `**/expected/**`
 glob covers them).
 
-- `conformance/golden/`: the reference renders of the conformance documents and their tolerance.
+- `conformance/expected/`: the reference renders of the conformance documents and their tolerance.

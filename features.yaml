@@ -189,7 +189,7 @@ features:
     priority: P1
     status: has
     commands: [table.file.render, table.preview.show]
-    paths: [crates/view/fonts/**, crates/view/picture/**, bindings/wasm/src/preview.rs, bindings/wasm/tests/picture.rs, bindings/wasm/tests/preview.rs, bindings/wasm/tests/thumbnails.rs, apps/kition-table/src/main.rs, apps/kition-table/tests/render.rs, conformance/golden/**]
+    paths: [crates/view/fonts/**, crates/view/picture/**, bindings/wasm/src/preview.rs, bindings/wasm/tests/picture.rs, bindings/wasm/tests/preview.rs, bindings/wasm/tests/thumbnails.rs, apps/kition-table/src/main.rs, apps/kition-table/tests/render.rs, conformance/expected/**]
     cases: [regressions/issue-4, regressions/issue-render-command, regressions/issue-emoji-cuts-cell, regressions/issue-picture-filter-as-editor, regressions/issue-file-chip, table.picture/thumbnails, table.picture/gallery-and-formats]
     since: "2026-11-16"
   - id: table.attachments

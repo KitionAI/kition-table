@@ -1,8 +1,8 @@
 //! The agent's preview (`table.file.render`, KHP A39) of `conformance/basic.ktable`: not uniform,
 //! framed to the table's fields and records, of a diagnostic's target (`target`), at a scale up to 2 and a
-//! size budget, and equal to `conformance/golden/` within `golden/tolerance.json`. The picture's
+//! size budget, and equal to `conformance/expected/` within `expected/tolerance.json`. The picture's
 //! faces come from the kition-fonts checkout beside this repository (or `KITION_FONTS_DIR`).
-//! `KITION_TABLE_WRITE_GOLDEN=1 cargo test -p kition-table-kit --test preview` rewrites the goldens.
+//! `KITION_TABLE_WRITE_EXPECTED=1 cargo test -p kition-table-kit --test preview` rewrites the expected previews.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 
 use std::collections::BTreeSet;
@@ -122,13 +122,13 @@ fn a_target_moves_the_preview_to_it() {
     render(&mut broken, json!({ "target": target }));
 }
 
-fn golden(name: &str) -> PathBuf {
-    repo().join("conformance/golden").join(name)
+fn expected(name: &str) -> PathBuf {
+    repo().join("conformance/expected").join(name)
 }
 
 #[test]
-fn the_previews_equal_the_goldens() {
-    let tolerance: Value = serde_json::from_str(&std::fs::read_to_string(golden("tolerance.json")).unwrap()).unwrap();
+fn the_previews_equal_the_expected_previews() {
+    let tolerance: Value = serde_json::from_str(&std::fs::read_to_string(expected("tolerance.json")).unwrap()).unwrap();
     let (max_delta, max_pixels) = (tolerance["maxChannelDelta"].as_u64().unwrap(), tolerance["maxDifferentPixels"].as_u64().unwrap());
     let mut doc = basic();
     let (table, record, status) = ids(&mut doc);
@@ -137,14 +137,14 @@ fn the_previews_equal_the_goldens() {
         ("basic-scale-2.png", json!({ "scale": 2 })),
         ("basic-target.png", json!({ "target": { "path": format!("tables/{table}/records/{record}/fields/{status}") } })),
     ];
-    let write = std::env::var_os("KITION_TABLE_WRITE_GOLDEN").is_some();
+    let write = std::env::var_os("KITION_TABLE_WRITE_EXPECTED").is_some();
     for (name, params) in cases {
         let (_, image, bytes) = render(&mut doc, params);
         if write {
-            std::fs::write(golden(name), &bytes).unwrap();
+            std::fs::write(expected(name), &bytes).unwrap();
             continue;
         }
-        let expected = decode(&std::fs::read(golden(name)).unwrap_or_else(|error| panic!("{name}: {error}")));
+        let expected = decode(&std::fs::read(expected(name)).unwrap_or_else(|error| panic!("{name}: {error}")));
         assert_eq!((image.width, image.height), (expected.width, expected.height), "{name}");
         let different = image
             .rgba
@@ -154,6 +154,6 @@ fn the_previews_equal_the_goldens() {
             .zip(expected.rgba.as_chunks::<4>().0)
             .filter(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| u64::from(x.abs_diff(*y)) > max_delta))
             .count() as u64;
-        assert!(different <= max_pixels, "{name}: {different} pixels differ");
+        assert!(different <= max_pixels, "{name}: {different} pixels differ from expected/{name}");
     }
 }

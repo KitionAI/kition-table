@@ -218,7 +218,7 @@ the picture shrinks so its longer side is at most `maxSize` (1 to 4096).
 
 Answer: `{ "png": "<base64>", "mimeType": "image/png", "width", "height", "scale", "tableId",
 "viewId" }`. An unknown table, view, field, record, or dashboard, or rows outside the records
-shown, is a `not found` error. `conformance/golden/` holds the expected previews of
+shown, is a `not found` error. `conformance/expected/` holds the expected previews of
 `conformance/basic.ktable` (`bindings/wasm/tests/preview.rs`, and through the headless kit with
 its embedded faces, `apps/kition-table/tests/render.rs`).
 

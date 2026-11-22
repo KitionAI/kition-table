@@ -2,7 +2,7 @@
 //! manifest's `agent.render` command takes `scale`, `maxSize`, `target` (a diagnostic's, or a
 //! table, a view, and a range of its rows) and `slide`, and answers a top-level base64 `png`,
 //! drawn with the faces the executable embeds: the text a person sees, equal to
-//! `conformance/golden/`. Before, the render command was `table.preview.render`, answering
+//! `conformance/expected/`. Before, the render command was `table.preview.render`, answering
 //! `{change, result: {png}}` and taking `focus`, not declared as `agent.render`, so the kits
 //! server previewed with the screenshot (no scale, no target); and the executable drew text only
 //! when its host set `KITION_FONTS_DIR`, which the kits server does not.
@@ -112,22 +112,22 @@ impl Kit {
     }
 }
 
-fn golden(name: &str) -> Image {
-    decode(&std::fs::read(repo().join("conformance/golden").join(name)).unwrap())
+fn expected(name: &str) -> Image {
+    decode(&std::fs::read(repo().join("conformance/expected").join(name)).unwrap())
 }
 
 #[test]
-fn the_render_command_draws_the_goldens_with_the_embedded_faces() {
-    let mut k = open("goldens");
+fn the_render_command_draws_the_expected_previews_with_the_embedded_faces() {
+    let mut k = open("expected");
     assert_eq!(k.command, "table.file.render");
     for (name, value) in [
         ("basic.png", json!({ "scale": 1 })),
         ("basic-scale-2.png", json!({ "scale": 2 })),
         ("basic-target.png", json!({ "target": { "sheet": "Table", "path": "tables/1/records/2/fields/2" }, "scale": 1 })),
     ] {
-        let (image, expected) = (k.render(value), golden(name));
+        let (image, expected) = (k.render(value), expected(name));
         assert_eq!((image.width, image.height), (expected.width, expected.height), "{name}");
-        assert!(image.rgba == expected.rgba, "{name}: the picture is not the golden (its text is missing or moved)");
+        assert!(image.rgba == expected.rgba, "{name}: the picture differs from expected/{name} (its text is missing or moved)");
     }
 }
 
