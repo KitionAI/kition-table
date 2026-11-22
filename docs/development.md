@@ -159,6 +159,28 @@ node tests/perfEdit.mjs chromium   # 50 edits, then a whole column cleared, the 
 node tests/restAfterJump.mjs chromium   # the scroll bar dragged to the end in slow frames: the view rests with its exact bands
 ```
 
+`test:perf` checks the lines of `cases/table.editor.grid/scroll-perf/expected/lines.json` (relaxed
+by its `relax` in the default `ci` tier). On a GitHub-hosted runner, where GitHub sets
+`GITHUB_ACTIONS=true` in every job, it still measures every line and prints each number against
+its line, but the lines that depend on the runner's speed (frame intervals, content play, skeleton
+frames and skeleton runs, band generation) are informational: one over its line prints `INFO`
+and does not fail the job. The lines that do not depend on its speed (the axes' size, the bytes
+transferred, page errors) still fail there. A shared runner's speed varies from run to run, so
+the speed lines are checked where the speed is known: the strict tier
+(`PERF_TIER=strict PERF_HEADED=1 pnpm run test:perf`) runs on the owner's machine before a
+release.
+
+The grid's text is measured by the engine and only drawn by the page, so the engine must set
+Inter's optical size (`opsz`) as the page's Canvas does. Chromium's Canvas follows the font size
+(as CSS text does everywhere); WebKit's Canvas (Playwright's WebKit on Linux, and WebKitGTK by
+the same engine) keeps Inter's default optical size, 14, at every size. Once Inter is loaded the
+grid measures a probe at 14 and 32 px (`canvasOpticalSizing` in `canvas/gridFonts.ts`) and, when
+its Canvas keeps the default, tells the engine (`gridOpticalSizing fixed-default`) before it asks
+for any band; the bands, drafts, `gridMeasure` and `gridRaster` then use the default optical size.
+The headless picture, previews and exports always follow the font size. The grid's own text is 10
+to 13 px, under the axis's floor, where both settings are the same; `tests/widths.mjs` checks 16
+and 20 px too and prints what the page found.
+
 The editor depends on kition-sdk's `@kition/sdk` and Kition Tessera's `@kition/tessera` from npm,
 at the versions the committed `web/pnpm-lock.yaml` pins. To work against local checkouts instead,
 clone `kition-sdk` and `kition-tessera` beside this repository (or set `KITION_SDK` and
