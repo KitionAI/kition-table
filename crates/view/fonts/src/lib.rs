@@ -12,8 +12,10 @@
 //!
 //! Shaping keeps the browsers' default features (kerning, ligatures, contextual alternates): a
 //! Canvas cannot turn them off, and the grid's runs must measure as the page's `measureText`
-//! does. Inter's optical size axis follows the font size (clamped to the axis), as a Canvas sets
-//! it.
+//! does. Inter's optical size axis follows the font size (clamped to the axis), as Chromium's Canvas
+//! and every browser's CSS text set it ([`OpticalSizing::Auto`]), unless the caller measures for a
+//! Canvas that keeps the face's default optical size at every size, as WebKit's does
+//! ([`OpticalSizing::FixedDefault`]; the editor finds out which its page's Canvas does).
 //!
 //! Emoji draw in color from Noto Color Emoji (COLRv1): a character with emoji presentation, or one
 //! an emoji variation selector follows, and the joiners and modifiers of an emoji sequence shape
@@ -74,6 +76,39 @@ pub enum Role {
 /// A tofu box's advance, in em.
 pub const TOFU_ADVANCE: f32 = 0.6;
 
+/// How a face with an optical size axis (`opsz`, Inter's) is set at a font size. Every function
+/// that shapes, measures or draws text takes it, so a layout and its drawing agree.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum OpticalSizing {
+    /// The optical size is the font size, clamped to the axis: CSS's `font-optical-sizing: auto`,
+    /// and Chromium's Canvas. The headless picture and exports always use it.
+    #[default]
+    Auto,
+    /// The axis's default optical size at every font size: Playwright's WebKit Canvas on Linux
+    /// (and, by its engine, WebKitGTK's), which measures and draws Inter at its default `opsz` 14
+    /// whatever the size.
+    FixedDefault,
+}
+
+impl OpticalSizing {
+    /// The setting's name in the editor's requests: `auto` or `fixed-default`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::FixedDefault => "fixed-default",
+        }
+    }
+
+    /// The setting a name ([`OpticalSizing::name`]) names.
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "auto" => Some(Self::Auto),
+            "fixed-default" => Some(Self::FixedDefault),
+            _ => None,
+        }
+    }
+}
+
 /// A face's shaper instance and design-space location at one weight and optical size.
 type Instance = (Option<Arc<harfrust::ShaperInstance>>, Arc<Location>);
 
@@ -89,8 +124,8 @@ struct Face {
     descent: f32,
     /// Whether the face has a `wght` axis.
     variable: bool,
-    /// The range of its `opsz` axis, if it has one.
-    opsz: Option<(f32, f32)>,
+    /// Its `opsz` axis (smallest, default, largest), if it has one.
+    opsz: Option<(f32, f32, f32)>,
     shaper: harfrust::ShaperData,
     /// Shaper instances and design-space locations per weight and optical size, made on first use.
     instances: Mutex<HashMap<InstanceKey, Instance>>,
@@ -123,9 +158,13 @@ impl Face {
     }
 
     /// The instance key for `weight` at `size` px: the optical size is the font size clamped to
-    /// the face's `opsz` axis, as a browser sets it.
-    fn key(&self, weight: u16, size: f32) -> InstanceKey {
-        let opsz = self.opsz.map_or(0.0, |(min, max)| size.clamp(min, max));
+    /// the face's `opsz` axis ([`OpticalSizing::Auto`]), or the axis's default
+    /// ([`OpticalSizing::FixedDefault`]).
+    fn key(&self, weight: u16, size: f32, sizing: OpticalSizing) -> InstanceKey {
+        let opsz = self.opsz.map_or(0.0, |(min, default, max)| match sizing {
+            OpticalSizing::Auto => size.clamp(min, max),
+            OpticalSizing::FixedDefault => default,
+        });
         (if self.variable { weight } else { 0 }, opsz.to_bits())
     }
 
@@ -227,7 +266,11 @@ pub fn add_font(bytes: Vec<u8>) -> Result<String, String> {
         let font = skrifa::FontRef::new(&bytes).map_err(|error| format!("not a font: {error}"))?;
         let metrics = font.metrics(Size::unscaled(), LocationRef::default());
         let variable = font.axes().iter().any(|axis| axis.tag() == skrifa::Tag::new(b"wght"));
-        let opsz = font.axes().iter().find(|axis| axis.tag() == skrifa::Tag::new(b"opsz")).map(|axis| (axis.min_value(), axis.max_value()));
+        let opsz = font
+            .axes()
+            .iter()
+            .find(|axis| axis.tag() == skrifa::Tag::new(b"opsz"))
+            .map(|axis| (axis.min_value(), axis.default_value(), axis.max_value()));
         let charmap = font.charmap();
         let mut bmp = Box::new([0u64; 1024]);
         for (code, _) in charmap.mappings() {
@@ -478,25 +521,29 @@ enum Slot {
     Tofu,
 }
 
-/// Shapes `text` in `family` at `weight` and `size` px: runs of one face each (or tofu runs), in
-/// text order, with clusters as byte offsets into `text`. Without a face the result is empty.
-pub fn shape(text: &str, family: Family, weight: u16, size: f32) -> Vec<Run> {
-    runs(text, family, weight, size, shape_run)
+/// Shapes `text` in `family` at `weight` and `size` px with `sizing`'s optical size: runs of one
+/// face each (or tofu runs), in text order, with clusters as byte offsets into `text`. Without a
+/// face the result is empty.
+pub fn shape(text: &str, family: Family, weight: u16, size: f32, sizing: OpticalSizing) -> Vec<Run> {
+    runs(text, family, (weight, size, sizing), shape_run)
 }
 
 /// `text` split into runs as [`shape`] splits it, each glyph the character's own (its character
-/// map's glyph and its advance at `weight` and `size`), without shaping: no kerning, ligatures or
-/// marks placed. Several times cheaper than shaping, for a draft of a layout (the grid while its
-/// view jumps); a run's width is near its shaped width, not equal to it.
-pub fn advances(text: &str, family: Family, weight: u16, size: f32) -> Vec<Run> {
-    runs(text, family, weight, size, advance_run)
+/// map's glyph and its advance at `weight`, `size` and `sizing`), without shaping: no kerning,
+/// ligatures or marks placed. Several times cheaper than shaping, for a draft of a layout (the grid
+/// while its view jumps); a run's width is near its shaped width, not equal to it.
+pub fn advances(text: &str, family: Family, weight: u16, size: f32, sizing: OpticalSizing) -> Vec<Run> {
+    runs(text, family, (weight, size, sizing), advance_run)
 }
 
-/// What makes one run: the faces, the run's face, the text and the run's range of it, the weight
-/// and the size.
-type RunMaker = fn(&[Arc<Face>], usize, &str, std::ops::Range<usize>, u16, f32) -> Run;
+/// The weight, the size in px and the optical sizing a run is set at.
+type Setting = (u16, f32, OpticalSizing);
 
-fn runs(text: &str, family: Family, weight: u16, size: f32, make: RunMaker) -> Vec<Run> {
+/// What makes one run: the faces, the run's face, the text and the run's range of it, and its
+/// setting.
+type RunMaker = fn(&[Arc<Face>], usize, &str, std::ops::Range<usize>, Setting) -> Run;
+
+fn runs(text: &str, family: Family, setting: Setting, make: RunMaker) -> Vec<Run> {
     let faces = faces();
     let Some(first) = first_face(&faces, family).or_else(|| emoji_face(&faces)) else { return Vec::new() };
     let mut runs = Vec::new();
@@ -505,7 +552,7 @@ fn runs(text: &str, family: Family, weight: u16, size: f32, make: RunMaker) -> V
     let emoji = emoji_face(&faces);
     let mut chars = text.char_indices().peekable();
     let flush = |runs: &mut Vec<Run>, slot: Option<Slot>, range: std::ops::Range<usize>| match slot {
-        Some(Slot::Face(index)) if !range.is_empty() => runs.push(make(&faces, index, text, range, weight, size)),
+        Some(Slot::Face(index)) if !range.is_empty() => runs.push(make(&faces, index, text, range, setting)),
         Some(Slot::Tofu) if !range.is_empty() => runs.push(tofu_run(first, text, range)),
         _ => {}
     };
@@ -541,9 +588,9 @@ fn runs(text: &str, family: Family, weight: u16, size: f32, make: RunMaker) -> V
 }
 
 /// Shapes `text` in one face only (a display list's text run, whose face the engine chose), at
-/// `weight` and `size` px.
-pub fn shape_in(face: FaceId, text: &str, weight: u16, size: f32) -> Run {
-    shape_run(&faces(), face.0, text, 0..text.len(), weight, size)
+/// `weight` and `size` px with `sizing`'s optical size.
+pub fn shape_in(face: FaceId, text: &str, weight: u16, size: f32, sizing: OpticalSizing) -> Run {
+    shape_run(&faces(), face.0, text, 0..text.len(), (weight, size, sizing))
 }
 
 /// Whether a registered face covers `c`.
@@ -561,11 +608,11 @@ fn tofu_run(face: usize, text: &str, range: std::ops::Range<usize>) -> Run {
     Run { face: FaceId(face), tofu: true, upem: 1000.0, glyphs }
 }
 
-fn advance_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Range<usize>, weight: u16, size: f32) -> Run {
+fn advance_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Range<usize>, (weight, size, sizing): Setting) -> Run {
     let Some(face) = faces.get(index) else { return Run { face: FaceId(index), tofu: false, upem: 1000.0, glyphs: Vec::new() } };
     let mut glyphs = Vec::new();
     if let (Some(font), Some(part)) = (face.skrifa(), text.get(range.clone())) {
-        let (_, location) = face.at(face.key(weight, size));
+        let (_, location) = face.at(face.key(weight, size, sizing));
         let location: LocationRef<'_> = location.as_ref().into();
         let metrics = font.glyph_metrics(Size::unscaled(), location);
         let charmap = font.charmap();
@@ -583,11 +630,11 @@ fn advance_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::R
     Run { face: FaceId(index), tofu: false, upem: face.upem, glyphs }
 }
 
-fn shape_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Range<usize>, weight: u16, size: f32) -> Run {
+fn shape_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Range<usize>, (weight, size, sizing): Setting) -> Run {
     let Some(face) = faces.get(index) else { return Run { face: FaceId(index), tofu: false, upem: 1000.0, glyphs: Vec::new() } };
     let mut glyphs = Vec::new();
     if let (Some(hb), Some(part)) = (face.hb(), text.get(range.clone())) {
-        let instance_key = face.key(weight, size);
+        let instance_key = face.key(weight, size, sizing);
         let (instance, _) = face.at(instance_key);
         let shaper = face.shaper.shaper(&hb).instance(instance.as_deref()).build();
         let mut buffer = UnicodeBuffer::new();
@@ -623,10 +670,10 @@ fn shape_run(faces: &[Arc<Face>], index: usize, text: &str, range: std::ops::Ran
     Run { face: FaceId(index), tofu: false, upem: face.upem, glyphs }
 }
 
-/// The outline of glyph `id` in `face` at `weight` and `size` px (the optical size), in font
-/// units with y pointing down.
-pub fn outline(face: FaceId, weight: u16, size: f32, id: u32) -> Arc<BezPath> {
-    let instance_key = faces().get(face.0).map_or((weight, 0), |found| found.key(weight, size));
+/// The outline of glyph `id` in `face` at `weight` and `size` px with `sizing`'s optical size, in
+/// font units with y pointing down.
+pub fn outline(face: FaceId, weight: u16, size: f32, sizing: OpticalSizing, id: u32) -> Arc<BezPath> {
+    let instance_key = faces().get(face.0).map_or((weight, 0), |found| found.key(weight, size, sizing));
     let key = (face.0, instance_key, id);
     let cache = &store().outlines;
     if let Some(found) = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(&key) {

@@ -347,7 +347,13 @@ fn the_list_survives_its_bytes_and_draws() {
     assert_eq!(grid.width, 900.0);
     let decoded = kition_table_display::decode(&kition_table_display::encode(&grid.list)).expect("decodes");
     assert_eq!(decoded, grid.list);
-    let pixels = kition_table_display::raster(&decoded, &grid.resources, 0.0, 0.0, 1.0, 900, grid.geometry.height as u32);
+    let pixels = kition_table_display::raster(
+        &decoded,
+        &grid.resources,
+        (0.0, 0.0, 1.0),
+        (900, grid.geometry.height as u32),
+        kition_table_fonts::OpticalSizing::Auto,
+    );
     let open: Vec<usize> = pixels.as_chunks::<4>().0.iter().enumerate().filter(|(_, px)| px[3] != 255).map(|(at, _)| at).take(5).collect();
     assert!(open.is_empty(), "the grid covers its area: {open:?} of {}x{}", 900, grid.geometry.height);
     assert!(grid.list.ops.iter().any(|op| matches!(op, Op::Text { align: Align::Left, face: Face::Fallback, .. })));

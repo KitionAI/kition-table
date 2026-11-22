@@ -1,6 +1,6 @@
 //! The editor's grid in bands (grid plan sections 3.4, 3.7, 3.8): the extras `gridAxes`,
-//! `gridRows`, `gridBands`, `gridRaster`, `gridMeasure` and `gridPicture`, and the bands' timings in
-//! `gridStats`.
+//! `gridRows`, `gridBands`, `gridRaster`, `gridMeasure`, `gridPicture` and `gridOpticalSizing`,
+//! and the bands' timings in `gridStats`.
 //!
 //! The page arranges a view with `gridOpen` (`grid.rs`, `kition-table-arrange`) and hands the axis
 //! it got to `gridAxes`, which lays out the arrangement's linear rows (group headers, records, add
@@ -46,12 +46,18 @@
 //! for the parity test; `gridMeasure` answers how the grid's shaping splits and measures text,
 //! for the width test; `gridPicture` decodes a picture the page's browser cannot (an SVG, a HEIC
 //! outside Safari) as the headless picture does.
+//!
+//! The grid measures its text with the optical sizing the page's Canvas draws with
+//! (`gridOpticalSizing`, `kition_table_fonts::OpticalSizing`; `auto` until the page says
+//! otherwise): its bands, drafts, `gridMeasure` and `gridRaster` all use it. The headless picture,
+//! the previews and exports keep `auto`.
 
 use std::collections::{HashMap, HashSet};
 
 use kition_table_arrange::{Arrangement, Axis as Arranged, GroupHeader, Stopwatch};
 use kition_table_display::{Align, Axis, DisplayList, Header, HitKind, IconStyle, Key, Layer, Line, Op, ResourceTable, Resources};
 use kition_table_file::{Field, Record, TableFile, blobs};
+use kition_table_fonts::OpticalSizing;
 use kition_table_grid::overlay::{self, Overlay};
 use kition_table_grid::text::{Kind, Shaper};
 use kition_table_grid::theme::{BODY, Mode, REGULAR, Rgba, TINY, Theme};
@@ -963,12 +969,21 @@ impl Bands {
         let (x, y) = (f64::from(list.header.origin.0), f64::from(list.header.origin.1));
         let width = (f64::from(list.header.size.0) * dpr).round() as u32;
         let height = (f64::from(list.header.size.1) * dpr).round() as u32;
-        let rgba = kition_table_display::raster(&list, &self.resources, x, y, dpr, width, height);
+        let rgba = kition_table_display::raster(&list, &self.resources, (x, y, dpr), (width, height), self.shaper.sizing());
         let mut out = Vec::with_capacity(8 + rgba.len());
         out.extend_from_slice(&width.to_le_bytes());
         out.extend_from_slice(&height.to_le_bytes());
         out.extend_from_slice(&rgba);
         Ok(out)
+    }
+
+    /// `gridOpticalSizing`: the grid measures its text with `sizing` from now on (its bands, drafts,
+    /// `gridMeasure` and `gridRaster`); answers whether it changed, when the page lays the grid out
+    /// and fetches its bands again.
+    pub(crate) fn set_optical_sizing(&mut self, sizing: OpticalSizing) -> bool {
+        let changed = self.shaper.set_sizing(sizing);
+        self.drafter.set_sizing(sizing);
+        changed
     }
 
     /// `gridMeasure`: how the grid's shaping splits `[{text, weight, size}]` into runs of one face
@@ -1113,6 +1128,14 @@ impl crate::TableDocument {
         self.bands.measure(asks)
     }
 
+    /// The optical sizing the grid measures its text with (`gridOpticalSizing`): `auto` or
+    /// `fixed-default`, the one the page's Canvas draws with; answers whether it changed.
+    pub fn grid_optical_sizing(&mut self, sizing: &str) -> Result<bool, String> {
+        let sizing =
+            OpticalSizing::parse(sizing).ok_or_else(|| format!("invalid params: optical sizing is auto or fixed-default, not {sizing:?}"))?;
+        Ok(self.bands.set_optical_sizing(sizing))
+    }
+
     /// A picture's thumbnail decoded as the headless picture decodes it (`gridPicture`), for a
     /// picture the page's browser does not decode (an SVG anywhere, a HEIC outside Safari): width
     /// and height (u32 each), then straight RGBA8, at most `max_side` on its longest side (an SVG
@@ -1177,6 +1200,13 @@ mod web {
         #[wasm_bindgen(js_name = gridPicture)]
         pub fn grid_picture(&self, bytes: &[u8], max_side: u32) -> Vec<u8> {
             self.0.grid_picture(bytes, max_side)
+        }
+
+        /// The optical sizing the grid measures its text with, the page Canvas's: `auto` (the
+        /// default) or `fixed-default`; answers whether it changed.
+        #[wasm_bindgen(js_name = gridOpticalSizing)]
+        pub fn grid_optical_sizing(&mut self, sizing: &str) -> Result<bool, JsError> {
+            self.0.grid_optical_sizing(sizing).map_err(error)
         }
 
         /// How the grid splits `[{text, weight, size}]` into runs and measures them (JSON).

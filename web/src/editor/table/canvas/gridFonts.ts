@@ -59,6 +59,68 @@ export type GridEngineFonts = {
   loadAll(): Promise<void>
 }
 
+/**
+ * How the page's Canvas sets Inter's optical size (`opsz`), which the engine must measure with
+ * (`gridOpticalSizing`; `OpticalSizing` in `kition-table-fonts`): `auto`, the font size clamped to
+ * the axis (Chromium's Canvas, and CSS text everywhere), or `fixed-default`, the axis's default
+ * (14) at every size (Playwright's WebKit Canvas on Linux, WebKitGTK by the same engine). The
+ * grid's own text is 10 to 13 px, under the axis's floor, where both are the same; larger text
+ * differs by up to 9 %.
+ */
+export type OpticalSizing = 'auto' | 'fixed-default'
+
+/** The probe `canvasOpticalSizing` measures (the Rust test `the_pages_probe_tells_the_optical_sizings_apart` reads these three). */
+export const OPSZ_PROBE = 'Quarterly planning review'
+/** The probe's width per em in Inter at 400 and 14 px, as the engine measures it (the same in both settings). */
+export const OPSZ_PROBE_EM = 12.1284
+/**
+ * The probe's width per em at 32 px over its width per em at 14 px: 0.910 when the optical size
+ * follows the size, exactly 1 when it stays at the default; above this, the Canvas keeps it.
+ */
+export const OPSZ_FIXED_ABOVE = 0.955
+
+/** What `canvasOpticalSizing` found: the setting, and the ratio and width it read (for the tests and a report). */
+export type OpticalSizingProbe = { sizing: OpticalSizing; ratio: number; em: number; measured: boolean }
+
+/** The probe's width per em at `size` px in `family`, on `ctx`. */
+function probeEm(ctx: CanvasRenderingContext2D, family: string, size: number): number {
+  ctx.font = `400 ${size}px ${family}`
+  return ctx.measureText(OPSZ_PROBE).width / size
+}
+
+let probed: Promise<OpticalSizingProbe> | null = null
+
+/**
+ * Finds out, once per page, whether the page's Canvas sets Inter's optical size from the font size
+ * (`auto`) or keeps its default (`fixed-default`): it measures `OPSZ_PROBE` in the grid's Inter at
+ * 14 and 32 px (the axis's ends) and compares their widths per em. Call it once Inter is loaded
+ * (`GridFonts.start`: `FontFace.load()` resolved and the face added to `document.fonts`). It does
+ * not misfire while a face is loading: the probe's width at 14 px must be Inter's (within 3 %) for
+ * the ratio to count; otherwise it waits for `document.fonts.ready` and a frame and measures again,
+ * up to three times, and then answers `auto` (the engine's default) with `measured` false.
+ */
+export function canvasOpticalSizing(): Promise<OpticalSizingProbe> {
+  probed ??= (async () => {
+    const ctx = document.createElement('canvas').getContext('2d')
+    if (!ctx || !('fonts' in document)) return { sizing: 'auto', ratio: 0, em: 0, measured: false }
+    if ('fontKerning' in ctx) ctx.fontKerning = 'normal'
+    const family = FAMILIES[Face.Sans]
+    let last = { ratio: 0, em: 0 }
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (document.fonts.check(`400 14px ${family}`, OPSZ_PROBE)) {
+        const em = probeEm(ctx, family, 14)
+        const ratio = probeEm(ctx, family, 32) / em
+        last = { ratio, em }
+        if (Math.abs(em - OPSZ_PROBE_EM) <= 0.03 * OPSZ_PROBE_EM) return { sizing: ratio > OPSZ_FIXED_ABOVE ? 'fixed-default' : 'auto', ratio, em, measured: true }
+      }
+      await document.fonts.ready
+      await new Promise((done) => requestAnimationFrame(() => done(undefined)))
+    }
+    return { sizing: 'auto', ...last, measured: false }
+  })()
+  return probed
+}
+
 export class GridFonts {
   /** The engine's lazy fonts, when the grid's source follows them: tofu waits until they are all in. */
   engine: GridEngineFonts | null = null

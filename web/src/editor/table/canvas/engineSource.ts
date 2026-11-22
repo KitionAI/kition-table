@@ -139,5 +139,6 @@ export function engineSource(engine: KitEngine, initial: GridTarget): EngineSour
       return engine.invoke<Uint8Array>('gridBands', epoch, flat, dpr, session, draft)
     },
     fonts: engineFontsOf(engine),
+    opticalSizing: (sizing) => engine.invoke<boolean>('gridOpticalSizing', sizing),
   }
 }

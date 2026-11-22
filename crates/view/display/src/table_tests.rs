@@ -70,7 +70,7 @@ fn entries_sit_where_the_format_says() {
 #[test]
 fn an_emoji_entry_is_the_rasterizers_tile() {
     assert!(raster_tests::fonts());
-    let runs = kition_table_fonts::shape("\u{1F600}", kition_table_fonts::Family::Sans, 400, 13.0);
+    let runs = kition_table_fonts::shape("\u{1F600}", kition_table_fonts::Family::Sans, 400, 13.0, kition_table_fonts::OpticalSizing::Auto);
     let mut resources = Resources::default();
     let atlas = resources.emoji(runs[0].face, runs[0].glyphs[0].id);
     let Some(Entry::Emoji { tile, dpr, .. }) = resources.emoji_entry(atlas, 13.0, 2.0) else { panic!("an emoji entry") };

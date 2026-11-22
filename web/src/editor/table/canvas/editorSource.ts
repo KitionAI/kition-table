@@ -47,5 +47,6 @@ export function arrangedSource(dataSource: Pick<TableDataSource, 'grid' | 'attac
       return blob ? thumbnail(blob, width, height, dataSource.grid.picture) : null
     },
     fonts: dataSource.grid.fonts,
+    opticalSizing: dataSource.grid.opticalSizing,
   }
 }

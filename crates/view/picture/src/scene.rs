@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use kition_table_display::{DisplayList, Resources};
-use kition_table_fonts::{FaceId, Family};
+use kition_table_fonts::{FaceId, Family, OpticalSizing};
 use kurbo::{Affine, BezPath, Point, Rect, RoundedRect, Shape, Stroke};
 use vello_cpu::peniko::Color;
 use vello_cpu::{PixmapMut, RenderContext};
@@ -75,7 +75,7 @@ pub fn shape(text: &str, size: f64, weight: u16, max: f64) -> Line {
 fn shape_all(text: &str, size: f64, weight: u16) -> Line {
     let mut glyphs = Vec::new();
     let mut x = 0.0;
-    for run in kition_table_fonts::shape(text, Family::Sans, weight, size as f32) {
+    for run in kition_table_fonts::shape(text, Family::Sans, weight, size as f32, OpticalSizing::Auto) {
         let scale = size / f64::from(run.upem);
         for glyph in &run.glyphs {
             let advance = f64::from(glyph.advance) * scale;
@@ -264,7 +264,7 @@ impl Scene {
                 continue;
             }
             if let Item::List { list } = item {
-                kition_table_display::draw(&mut ctx, &list.0, &list.1, x, y, scale);
+                kition_table_display::draw(&mut ctx, &list.0, &list.1, x, y, scale, OpticalSizing::Auto);
                 continue;
             }
             draw(&mut ctx, item, to_screen);
@@ -338,7 +338,7 @@ fn draw(ctx: &mut RenderContext, item: &Item, to_screen: Affine) {
                     ctx.set_paint(paint(*color));
                     continue;
                 }
-                let path = kition_table_fonts::outline(glyph.face, line.weight, line.size as f32, glyph.id);
+                let path = kition_table_fonts::outline(glyph.face, line.weight, line.size as f32, OpticalSizing::Auto, glyph.id);
                 ctx.set_transform(at * Affine::scale(glyph.scale));
                 ctx.fill_path(&path);
             }

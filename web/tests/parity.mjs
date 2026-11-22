@@ -350,6 +350,10 @@ try {
     const query = { file: '/__grid/parity.ktable', view: String(run.view), ...(run.theme ? { theme: run.theme } : {}), ...(run.brand ? { brand: run.brand } : {}) }
     const { context, page, errors } = await openGrid(browser, origin, { dpr: run.dpr, viewport: { width: 1280, height: 800 }, files: { 'parity.ktable': bytes }, query })
     await page.evaluate(() => window.__ktableGrid.view.allFonts())
+    if (run === RUNS[0]) {
+      const sizing = await page.evaluate(() => window.__ktableGrid.view.textSizing)
+      console.log(`INFO optical sizing - the page's Canvas: ${sizing?.sizing} (probe ratio ${sizing?.ratio?.toFixed(4)}${sizing?.measured ? '' : ', not measured'}); the engine lays out and rasterizes with the same`)
+    }
     if (run.scroll) await page.evaluate(([x, y]) => window.__ktableGrid.view.scrollTo(x, y), run.scroll)
     await settled(page)
     // The pictures the bands show, decoded by the page (the engine's raster decodes its own).

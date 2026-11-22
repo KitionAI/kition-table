@@ -26,7 +26,7 @@ import { type Area, Axes, type AxesInput, bandKeys, keyId } from './axes'
 import { decodeBatch, type ImageEntry } from './bandBatch'
 import { BandCache } from './bandCache'
 import { type BandKey, DRAFT, Layer } from './displayList'
-import { GridFonts, type GridEngineFonts } from './gridFonts'
+import { canvasOpticalSizing, GridFonts, type GridEngineFonts, type OpticalSizing, type OpticalSizingProbe } from './gridFonts'
 import type { OverlayStyle } from './overlay'
 import { play } from './player'
 import { GridResources } from './resources'
@@ -83,6 +83,11 @@ export type GridSource = {
   image?(url: string, width: number, height: number): Promise<ImageBitmap | null>
   /** The engine's lazy fonts: each face it gets makes every band stale. */
   fonts?: GridEngineFonts
+  /**
+   * `gridOpticalSizing`: the engine measures the grid's text with the optical sizing the page's
+   * Canvas draws with (`canvasOpticalSizing`); answers whether it changed (the layout is then made again).
+   */
+  opticalSizing?(sizing: OpticalSizing): Promise<boolean>
 }
 
 /** The timings a performance test reads (`window.__ktableGridStats` on the development page). */
@@ -143,6 +148,8 @@ export class GridView {
   private readonly pictures = new Set<number>()
   /** What the latest `open` answered. */
   opened: GridOpened | null = null
+  /** How the page's Canvas sets Inter's optical size, as `open` found it (the engine measures with the same). */
+  textSizing: OpticalSizingProbe | null = null
   /** How many times the overlay canvas was drawn (the interaction tests count redraws). */
   overlayDraws = 0
 
@@ -189,10 +196,17 @@ export class GridView {
     this.watchDpr()
   }
 
-  /** Loads Inter and the axes, then draws. */
+  /**
+   * Loads Inter and the axes, then draws. Once Inter is loaded the page finds out how its Canvas
+   * sets Inter's optical size (`canvasOpticalSizing`) and tells the engine when it is not the
+   * engine's default (`auto`), before any band is asked for; the axes are then laid out again.
+   */
   async open(): Promise<void> {
-    const [opened] = await Promise.all([this.source.open(), this.fonts.start()])
-    this.setAxes(opened)
+    const sizing = this.fonts.start().then(() => canvasOpticalSizing())
+    const [opened, probe] = await Promise.all([this.source.open(), sizing])
+    this.textSizing = probe
+    const changed = probe.sizing !== 'auto' && this.source.opticalSizing ? await this.source.opticalSizing(probe.sizing) : false
+    this.setAxes(changed ? await this.source.open() : opened)
   }
 
   /** Arranges and lays out again (the source's state changed: collapsed groups, an edit). */

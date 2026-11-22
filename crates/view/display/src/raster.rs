@@ -2,7 +2,7 @@
 //! 2D one with the same rules). Text is shaped again from each run's string in its one face, at
 //! its weight and size, and placed from its anchor and the width the engine measured.
 
-use kition_table_fonts::{FaceId, Role};
+use kition_table_fonts::{FaceId, OpticalSizing, Role};
 use kurbo::{Affine, BezPath, Rect, RoundedRect, Shape, Stroke};
 use std::sync::Arc;
 use vello_cpu::peniko::color::PremulRgba8;
@@ -53,8 +53,9 @@ fn rect(x: f32, y: f32, w: f32, h: f32) -> Rect {
 }
 
 /// Draws `list` into `ctx`, whose pixel (0, 0) is the document point (`x`, `y`), at `dpr` device
-/// pixels per document pixel. Leaves the context's transform and paint changed.
-pub fn draw(ctx: &mut RenderContext, list: &DisplayList, resources: &Resources, x: f64, y: f64, dpr: f64) {
+/// pixels per document pixel, its text at `sizing`'s optical size (the one the list was laid out
+/// with). Leaves the context's transform and paint changed.
+pub fn draw(ctx: &mut RenderContext, list: &DisplayList, resources: &Resources, x: f64, y: f64, dpr: f64, sizing: OpticalSizing) {
     let at = At { x, y, dpr };
     let screen = at.screen();
     let mut clips = 0usize;
@@ -110,7 +111,7 @@ pub fn draw(ctx: &mut RenderContext, list: &DisplayList, resources: &Resources, 
             }
             Op::Text { x, y, align, face, weight, size, paint: index, text, width } => {
                 let Some(face) = kition_table_fonts::face(role(*face)) else { continue };
-                let run = kition_table_fonts::shape_in(face, list.text(*text), *weight, *size);
+                let run = kition_table_fonts::shape_in(face, list.text(*text), *weight, *size, sizing);
                 let scale = f64::from(*size) / f64::from(run.upem);
                 let mut pen = f64::from(align.left(*x, *width));
                 // The baseline on a device pixel row, as browsers put it.
@@ -118,7 +119,7 @@ pub fn draw(ctx: &mut RenderContext, list: &DisplayList, resources: &Resources, 
                 ctx.set_paint(paint(list.color(*index)));
                 for glyph in &run.glyphs {
                     let origin = (pen + f64::from(glyph.x_offset) * scale, baseline - f64::from(glyph.y_offset) * scale);
-                    let outline = kition_table_fonts::outline(face, *weight, *size, glyph.id);
+                    let outline = kition_table_fonts::outline(face, *weight, *size, sizing, glyph.id);
                     ctx.set_transform(screen * Affine::translate(origin) * Affine::scale(scale));
                     ctx.fill_path(&outline);
                     pen += f64::from(glyph.advance) * scale;
@@ -293,7 +294,7 @@ fn emoji(ctx: &mut RenderContext, face: FaceId, glyph: u32, pen: Affine, size: f
         None => {
             ctx.set_transform(pen * Affine::scale(scale));
             ctx.set_paint(paint([0, 0, 0, 255]));
-            ctx.fill_path(&kition_table_fonts::outline(face, 400, 0.0, glyph));
+            ctx.fill_path(&kition_table_fonts::outline(face, 400, 0.0, OpticalSizing::Auto, glyph));
         }
     }
 }
@@ -342,11 +343,17 @@ fn finish(ctx: RenderContext, width: u32, height: u32) -> Vec<u8> {
 }
 
 /// `list` drawn on a transparent canvas of `width` x `height` device pixels whose top left is the
-/// document point (`x`, `y`), at `dpr`: straight RGBA8.
-pub fn raster(list: &DisplayList, resources: &Resources, x: f64, y: f64, dpr: f64, width: u32, height: u32) -> Vec<u8> {
+/// document point (`x`, `y`), at `dpr`, its text at `sizing`'s optical size: straight RGBA8.
+pub fn raster(
+    list: &DisplayList,
+    resources: &Resources,
+    (x, y, dpr): (f64, f64, f64),
+    (width, height): (u32, u32),
+    sizing: OpticalSizing,
+) -> Vec<u8> {
     let (w, h) = (u16::try_from(width.max(1)).unwrap_or(u16::MAX), u16::try_from(height.max(1)).unwrap_or(u16::MAX));
     let mut ctx = RenderContext::new(w, h);
-    draw(&mut ctx, list, resources, x, y, dpr);
+    draw(&mut ctx, list, resources, x, y, dpr, sizing);
     finish(ctx, u32::from(w), u32::from(h))
 }
 

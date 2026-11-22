@@ -2,13 +2,20 @@
 // browser measures it, so the page never lays text out and the screen matches the picture:
 // node tests/widths.mjs [chromium|webkit]
 //
-// The engine splits each string into runs of one face (`gridMeasure`, the grid's own shaping) and
-// gives each run's width; the page measures the same run with `measureText` in the same face,
-// weight and size. Every run within 200 px must agree within 0.5 CSS px; above 0.1 px it is
+// The page's engine splits each string into runs of one face (`gridMeasure`, the grid's own
+// shaping, with the optical sizing the page found its Canvas uses: `canvasOpticalSizing`) and gives
+// each run's width; the page measures the same run with `measureText` in the same face, weight and
+// size. The page's finding is printed and must be a measurement (the probe read Inter, not a face
+// still loading). Every run within 200 px must agree within 0.5 CSS px; above 0.1 px it is
 // reported as a warning. The corpus holds Latin, kerning pairs, ligature candidates, numbers and
 // dates, punctuation, CJK, Japanese, Hangul and mixed lines at weights 400, 500 and 600 and sizes
-// 12, 13 and 14 px, and at 16 and 20 px (Inter's optical size follows the size). Characters no
-// face covers are tofu boxes the engine places itself; they are not measured.
+// 12, 13 and 14 px, and at 16 and 20 px (where Inter's optical size follows the size in Chromium's
+// Canvas and stays at its default, 14, in WebKit's). Characters no face covers are tofu boxes the
+// engine places itself; they are not measured.
+//
+// It also reports (INFO, not checked) whether this browser's Canvas would let the page pin Inter's
+// optical size itself instead: a FontFace with a `variationSettings` descriptor, and the canvas
+// element's `font-optical-sizing: none` and `font-variation-settings` styles.
 import fs from 'node:fs'
 import path from 'node:path'
 import { REPO, checkPackage, launch, nodeEngine, openGrid, startServer } from './gridPage.mjs'
@@ -49,12 +56,41 @@ const sdk = await nodeEngine()
 const doc = sdk.TableDocument.create('Widths.ktable', 0, 0)
 const asks = []
 for (const text of CORPUS) for (const size of SIZES) for (const weight of WEIGHTS) asks.push({ text, size, weight })
-const measured = JSON.parse(doc.gridMeasure(JSON.stringify(asks)))
 // The page measures with the faces the development page loads; any table opens it.
 doc.markSaved()
 const bytes = doc.save()
 doc.free()
-const runs = measured.flatMap((runs, index) => runs.map((run) => ({ ...run, size: asks[index].size, weight: asks[index].weight })))
+
+/** Whether this browser's Canvas lets a page pin Inter's optical size (reported, not checked); runs in the page. */
+async function pinnable() {
+  const probe = 'Quarterly planning review'
+  const bytes = await (await fetch('/fonts/inter/Inter-Variable.ttf')).arrayBuffer()
+  const ctx = document.createElement('canvas').getContext('2d')
+  const em = (family, size, target = ctx) => {
+    target.font = `400 ${size}px ${family}`
+    return target.measureText(probe).width / size
+  }
+  const out = { plain: em('KitionTableSans', 32) / em('KitionTableSans', 14) }
+  for (const [name, settings] of [['descriptor opsz 14', "'opsz' 14"], ['descriptor opsz 32', "'opsz' 32"]]) {
+    const family = `OpszProbe${name.replace(/\W/g, '')}`
+    try {
+      const face = new FontFace(family, bytes, { weight: '100 900', variationSettings: settings })
+      await face.load()
+      document.fonts.add(face)
+      out[name] = em(family, 32) / em('KitionTableSans', 14)
+    } catch (error) {
+      out[name] = `error ${error}`
+    }
+  }
+  for (const [name, css] of [['canvas style font-optical-sizing none', 'font-optical-sizing:none'], ["canvas style font-variation-settings 'opsz' 14", "font-variation-settings:'opsz' 14"]]) {
+    const canvas = document.createElement('canvas')
+    canvas.style.cssText = css
+    document.body.append(canvas)
+    out[name] = em('KitionTableSans', 32, canvas.getContext('2d')) / em('KitionTableSans', 14)
+    canvas.remove()
+  }
+  return out
+}
 
 const { server, origin } = await startServer()
 const browser = await launch(which)
@@ -64,6 +100,16 @@ try {
   for (const dpr of [1, 2]) {
     const { context, page } = await openGrid(browser, origin, { dpr, viewport: { width: 800, height: 600 }, files: { 'widths.ktable': bytes }, query: { file: '/__grid/widths.ktable' } })
     await page.evaluate(() => window.__ktableGrid.view.allFonts())
+    const sizing = await page.evaluate(() => window.__ktableGrid.view.textSizing)
+    const detected = Boolean(sizing?.measured)
+    if (!detected) failures += 1
+    console.log(`${detected ? 'PASS' : 'FAIL'} widths @${dpr} optical sizing - the page's Canvas: ${sizing?.sizing} (probe 32/14 px per-em ratio ${sizing?.ratio?.toFixed(4)}, ${sizing?.em?.toFixed(4)} em at 14 px${detected ? '' : ', not measured'})`)
+    if (dpr === 1) {
+      const pins = await page.evaluate(pinnable)
+      console.log(`INFO optical size pinning in this Canvas (32/14 px per-em ratio; 1 = opsz 14 kept, 0.910 = opsz follows size): ${Object.entries(pins).map(([name, value]) => `${name} ${typeof value === 'number' ? value.toFixed(4) : value}`).join('; ')}`)
+    }
+    const measured = JSON.parse(await page.evaluate((asks) => window.__ktableGrid.engine.invoke('gridMeasure', JSON.stringify(asks)), asks))
+    const runs = measured.flatMap((runs, index) => runs.map((run) => ({ ...run, size: asks[index].size, weight: asks[index].weight })))
     const widths = await page.evaluate((runs) => {
       const ctx = document.createElement('canvas').getContext('2d')
       const families = ['KitionTableSans', 'KitionTableFallback', 'KitionTableHangul', 'KitionTableMono']

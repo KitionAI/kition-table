@@ -1,6 +1,7 @@
 //! Each op drawn by the rasterizer: where its pixels land at device pixel ratios 1, 1.5 and 2.
 
 use super::*;
+use kition_table_fonts::OpticalSizing;
 
 /// The `kition-fonts` checkout's faces: `KITION_FONTS_DIR`, else the sibling of this repository.
 pub(crate) fn fonts() -> bool {
@@ -42,7 +43,7 @@ fn one(op: impl FnOnce(&mut DisplayList, u16) -> Op, resources: &Resources, dpr:
     let ink = list.paint(INK);
     let made = op(&mut list, ink);
     list.push(made);
-    Canvas { rgba: raster(&list, resources, 0.0, 0.0, dpr, size, size), width: size }
+    Canvas { rgba: raster(&list, resources, (0.0, 0.0, dpr), (size, size), OpticalSizing::Auto), width: size }
 }
 
 #[test]
@@ -103,7 +104,7 @@ fn rounded_boxes_borders_shadows_and_clips() {
     list.push(Op::Rect { x: 0.0, y: 0.0, w: 20.0, h: 5.0, paint: ink, snap: true });
     list.push(Op::Unclip);
     list.push(Op::Rect { x: 0.0, y: 10.0, w: 20.0, h: 5.0, paint: ink, snap: true });
-    let canvas = Canvas { rgba: raster(&list, &none, 0.0, 0.0, 1.0, 30, 30), width: 30 };
+    let canvas = Canvas { rgba: raster(&list, &none, (0.0, 0.0, 1.0), (30, 30), OpticalSizing::Auto), width: 30 };
     assert_eq!((canvas.at(9, 2), canvas.at(10, 2)[3]), (INK, 0), "clipped to the box");
     assert_eq!(canvas.at(15, 12), INK, "until the unclip");
 }
@@ -222,7 +223,7 @@ fn cover_crops_around_the_pictures_middle() {
 fn text_lands_on_its_baseline_from_its_anchor() {
     assert!(fonts());
     let none = Resources::default();
-    let run = kition_table_fonts::shape("Hamburg", kition_table_fonts::Family::Sans, 400, 13.0);
+    let run = kition_table_fonts::shape("Hamburg", kition_table_fonts::Family::Sans, 400, 13.0, OpticalSizing::Auto);
     let width: f32 = run.iter().map(|run| run.glyphs.iter().map(|glyph| glyph.advance).sum::<f32>() * 13.0 / run.upem).sum();
     for (align, anchor) in [(Align::Left, 10.0), (Align::Center, 10.0 + width / 2.0), (Align::Right, 10.0 + width)] {
         let canvas = one(
@@ -256,7 +257,7 @@ fn text_lands_on_its_baseline_from_its_anchor() {
 #[test]
 fn an_emoji_is_its_tile_at_a_snapped_pen() {
     assert!(fonts());
-    let runs = kition_table_fonts::shape("\u{1F600}", kition_table_fonts::Family::Sans, 400, 13.0);
+    let runs = kition_table_fonts::shape("\u{1F600}", kition_table_fonts::Family::Sans, 400, 13.0, OpticalSizing::Auto);
     let (face, glyph) = (runs[0].face, runs[0].glyphs[0].id);
     let mut resources = Resources::default();
     let atlas = resources.emoji(face, glyph);
@@ -294,7 +295,7 @@ fn every_op_of_a_decoded_list_draws_as_the_original() {
     resources.icon("star");
     let list = tests::every_op();
     let decoded = decode(&encode(&list)).expect("decodes");
-    let at = |list: &DisplayList| raster(list, &resources, 0.0, 1280.0, 2.0, 600, 120);
+    let at = |list: &DisplayList| raster(list, &resources, (0.0, 1280.0, 2.0), (600, 120), OpticalSizing::Auto);
     assert_eq!(at(&list), at(&decoded));
     assert!(at(&list).as_chunks::<4>().0.iter().any(|px| px[3] > 0));
 }
@@ -307,12 +308,12 @@ fn an_emoji_over_a_cell_leaves_it_opaque() {
     let paper = list.paint([255, 255, 255, 255]);
     list.push(Op::Rect { x: 0.0, y: 0.0, w: 60.0, h: 40.0, paint: paper, snap: true });
     for (index, text) in ["\u{1F680}", "\u{2728}", "\u{1F600}", "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"].iter().enumerate() {
-        let runs = kition_table_fonts::shape(text, kition_table_fonts::Family::Sans, 400, 13.0);
+        let runs = kition_table_fonts::shape(text, kition_table_fonts::Family::Sans, 400, 13.0, OpticalSizing::Auto);
         let atlas = resources.emoji(runs[0].face, runs[0].glyphs[0].id);
         list.push(Op::Emoji { atlas, x: 2.0 + 14.0 * index as f32, y: 25.0, size: 13.0 });
     }
     for dpr in [1.0, 2.0] {
-        let pixels = raster(&list, &resources, 0.0, 0.0, dpr, (60.0 * dpr) as u32, (40.0 * dpr) as u32);
+        let pixels = raster(&list, &resources, (0.0, 0.0, dpr), ((60.0 * dpr) as u32, (40.0 * dpr) as u32), OpticalSizing::Auto);
         assert!(pixels.as_chunks::<4>().0.iter().all(|px| px[3] == 255), "dpr {dpr}: an emoji's layers cut into the cell");
     }
 }

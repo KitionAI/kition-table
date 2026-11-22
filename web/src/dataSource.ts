@@ -265,6 +265,7 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
       summary: async (params) => JSON.parse(await engine.invoke<string>('gridSummary', JSON.stringify(params))) as GridFieldSummary[],
       picture: (bytes, maxSide) => engine.invoke<Uint8Array>('gridPicture', bytes, maxSide),
       fonts: engine.fonts,
+      opticalSizing: (sizing) => engine.invoke<boolean>('gridOpticalSizing', sizing),
     },
     command: <T>(method: string, params?: Record<string, unknown>) => call<T>(method, params),
     observe(revision) {

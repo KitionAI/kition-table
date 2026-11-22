@@ -1,0 +1,35 @@
+format: 1
+id: regressions/issue-webkit-optical-size
+feature: table.editor.grid
+intent: >-
+  The engine measures the grid's text with the optical size the page's Canvas draws Inter with.
+  WebKit's Canvas (Playwright's WebKit on Linux; WebKitGTK by the same engine) measures and draws
+  Inter at its default optical size (opsz 14) at every font size, while the engine set the optical
+  size to the font size, so from 16 px up the engine's widths and the drawn text disagreed by up to
+  4 px (widths, WebKit, hosted runner: 49 runs over 0.5 px). The page now measures a probe in the
+  grid's Inter at 14 and 32 px once Inter is loaded (canvasOpticalSizing: the probe's width at
+  14 px must be Inter's, else it waits for the fonts and measures again), and when its Canvas keeps
+  the default it tells the engine (gridOpticalSizing fixed-default) before any band is asked for;
+  the grid's bands, drafts, gridMeasure and gridRaster then measure and draw at the default optical
+  size. Chromium keeps auto, as do the headless picture, previews and exports. The fonts crate
+  shapes, measures and outlines in both settings, and the page's probe constants tell them apart.
+layer: gate
+source:
+  kind: issue
+  from: Kit CI, test:grid widths (WebKit, hosted runner)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-fonts, filter: "tests::" }
+  - exec:
+      cmd: [node, web/tests/widths.mjs, chromium]
+  - exec:
+      cmd: [node, web/tests/widths.mjs, webkit]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+requires: [chromium, webkit]
+tags: [browser]
+timeout_s: 120
+since: "2026-11-21"

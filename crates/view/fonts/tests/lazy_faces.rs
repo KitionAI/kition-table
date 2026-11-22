@@ -5,7 +5,7 @@
 
 #![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 
-use kition_table_fonts::{CHECKOUT_FILES, Family, REGULAR, add_font, generation, role, shape, take_wanted};
+use kition_table_fonts::{CHECKOUT_FILES, Family, OpticalSizing, REGULAR, add_font, generation, role, shape, take_wanted};
 
 fn checkout() -> Option<std::path::PathBuf> {
     let dir = std::env::var_os("KITION_FONTS_DIR")
@@ -19,7 +19,7 @@ fn add(dir: &std::path::Path, file: &str) {
 }
 
 fn tofu(text: &str) -> bool {
-    shape(text, Family::Sans, REGULAR, 13.0).iter().any(|run| run.tofu)
+    shape(text, Family::Sans, REGULAR, 13.0, OpticalSizing::Auto).iter().any(|run| run.tofu)
 }
 
 #[test]
@@ -41,20 +41,20 @@ fn text_wants_the_faces_it_lacks_and_shapes_in_each_once_it_is_registered() {
     add(&dir, droid);
     assert!(generation() > first);
     assert!(!tofu("Hello 世界"));
-    let face = shape("世界", Family::Sans, REGULAR, 13.0)[0].face;
+    let face = shape("世界", Family::Sans, REGULAR, 13.0, OpticalSizing::Auto)[0].face;
     assert_eq!(role(face), Some(kition_table_fonts::Role::Fallback));
 
     assert!(tofu("안녕하세요"), "Droid Sans Fallback has no Hangul");
     assert!(take_wanted(), "Korean without its face");
     add(&dir, nanum);
-    assert_eq!(role(shape("안녕하세요", Family::Sans, REGULAR, 13.0)[0].face), Some(kition_table_fonts::Role::Hangul));
+    assert_eq!(role(shape("안녕하세요", Family::Sans, REGULAR, 13.0, OpticalSizing::Auto)[0].face), Some(kition_table_fonts::Role::Hangul));
 
-    let _ = shape("Launch \u{1F680}", Family::Sans, REGULAR, 13.0);
+    let _ = shape("Launch \u{1F680}", Family::Sans, REGULAR, 13.0, OpticalSizing::Auto);
     assert!(take_wanted(), "an emoji without the emoji face");
     let before = generation();
     add(&dir, emoji);
     assert!(generation() > before);
-    let runs = shape("Launch \u{1F680}", Family::Sans, REGULAR, 13.0);
+    let runs = shape("Launch \u{1F680}", Family::Sans, REGULAR, 13.0, OpticalSizing::Auto);
     assert_eq!(runs.last().and_then(|run| role(run.face)), Some(kition_table_fonts::Role::Emoji));
     assert!(!take_wanted(), "every character has its face now");
 

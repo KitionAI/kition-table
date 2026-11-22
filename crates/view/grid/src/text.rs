@@ -9,7 +9,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use kition_table_display::{Align, DisplayList, Face, Op, Resources};
-use kition_table_fonts::{FaceId, Family, Role};
+use kition_table_fonts::{FaceId, Family, OpticalSizing, Role};
 
 /// The ellipsis a cut line ends with.
 pub const ELLIPSIS: &str = "\u{2026}";
@@ -133,9 +133,14 @@ impl<K: std::hash::Hash + Eq, V: Clone> Recent<K, V> {
 ///
 /// What it remembers was shaped with the faces registered then: a face registered later (the
 /// editor's lazy fonts) drops it all, so text drawn as tofu gets its face.
+///
+/// It measures with one optical sizing ([`OpticalSizing`]; `Auto` unless set): the editor's grid
+/// sets the one its page's Canvas draws with ([`Shaper::set_sizing`]), and every width the grid
+/// derives from text (cuts with an ellipsis, wrapping, chips, badges, buttons) comes from it.
 #[derive(Default)]
 pub struct Shaper {
     draft: bool,
+    sizing: OpticalSizing,
     lines: Recent<(String, u16, u32), Arc<Line>>,
     /// Lines cut to a width: (text, weight, size, width) to the line [`Shaper::line`] answered.
     cuts: Recent<(String, u16, u32, u32), Arc<Line>>,
@@ -149,9 +154,26 @@ impl Shaper {
         Self { draft: true, ..Self::default() }
     }
 
+    /// The optical sizing it measures with.
+    pub fn sizing(&self) -> OpticalSizing {
+        self.sizing
+    }
+
+    /// Measures with `sizing` from now on (what it remembers goes when it changes); answers
+    /// whether it changed.
+    pub fn set_sizing(&mut self, sizing: OpticalSizing) -> bool {
+        if sizing == self.sizing {
+            return false;
+        }
+        self.sizing = sizing;
+        self.lines = Recent::default();
+        self.cuts = Recent::default();
+        true
+    }
+
     /// `text` on one line, measured as this shaper measures (shaped, or from advances).
     fn measure(&self, text: &str, weight: u16, size: f32) -> Line {
-        let mut line = shaped(text, weight, size, self.draft);
+        let mut line = shaped(text, weight, size, self.draft, self.sizing);
         if self.draft {
             for piece in line.pieces.iter_mut().filter(|piece| matches!(piece.kind, Kind::Emoji(_))) {
                 piece.glyphs.clear();
@@ -357,13 +379,14 @@ impl Shaper {
 }
 
 /// `text` on one line (line breaks and tabs as spaces), shaped run by run in the face each
-/// character falls to (or, for a draft, measured from the characters' advances).
-fn shaped(text: &str, weight: u16, size: f32, draft: bool) -> Line {
+/// character falls to (or, for a draft, measured from the characters' advances), at `sizing`'s
+/// optical size.
+fn shaped(text: &str, weight: u16, size: f32, draft: bool, sizing: OpticalSizing) -> Line {
     let flat = text.replace(['\n', '\r', '\t'], " ");
     let runs = if draft {
-        kition_table_fonts::advances(&flat, Family::Sans, weight, size)
+        kition_table_fonts::advances(&flat, Family::Sans, weight, size, sizing)
     } else {
-        kition_table_fonts::shape(&flat, Family::Sans, weight, size)
+        kition_table_fonts::shape(&flat, Family::Sans, weight, size, sizing)
     };
     let mut pieces: Vec<Piece> = Vec::with_capacity(runs.len());
     let mut x = 0.0;
@@ -465,7 +488,8 @@ mod tests {
         }
         let (room, flat) = (max - SLACK, whole.text.clone());
         let ends: Vec<usize> = flat.char_indices().map(|(at, _)| at).skip(1).chain([flat.len()]).collect();
-        let fits = |end: usize| shaped(&cut(&flat, end), weight, size, false).width <= room;
+        let sizing = shaper.sizing();
+        let fits = |end: usize| shaped(&cut(&flat, end), weight, size, false, sizing).width <= room;
         let (mut low, mut high) = (0usize, ends.len());
         while low < high {
             let mid = (low + high).div_ceil(2);
