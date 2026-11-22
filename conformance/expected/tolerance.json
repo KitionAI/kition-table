@@ -1,5 +1,5 @@
 {
   "maxChannelDelta": 0,
   "maxDifferentPixels": 0,
-  "note": "The preview is drawn by the engine (vello_cpu) with the kition-fonts faces, the same on one machine; a renderer or font change re-blesses the goldens."
+  "note": "The preview is drawn by the engine (vello_cpu) with the kition-fonts faces, the same on one machine; a renderer or font change re-blesses the expected previews."
 }
