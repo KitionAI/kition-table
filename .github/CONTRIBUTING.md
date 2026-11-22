@@ -45,7 +45,7 @@ cargo fmt --all -- --check
 ```
 
 The full checks and tests run on GitHub, in the kit's CI run, for your pull request too
-(`.github/workflows/ci.yml`: fmt, clippy, `cargo test --workspace`, `cargo xtask ci` and the
+(`.github/workflows/ci.yml`: fmt, clippy, `cargo test --workspace` and the
 editor's tests); it must pass before the pull request merges.
 
 ## Rules
