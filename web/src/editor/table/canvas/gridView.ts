@@ -98,6 +98,19 @@ export type GridStats = {
   requests: Array<{ bands: number; ms: number; bytes: number }>
   /** When the first frame with every visible band's content was drawn (ms after the page's navigation started). */
   firstContent: number | null
+  /**
+   * Each band as it came into view (keyed by `keyId`, its first frame since `bands` was cleared):
+   * whether it was here (`held`: drawn, exact or draft, not a skeleton), whether the view's
+   * prefetch plan (`wanted`) named it in an earlier frame (`planned`), whether a `gridBands`
+   * request had asked for it (`requested`), and how far the view moved in that frame (`moved`)
+   * against how far beyond the viewport the plan of the frame before reached (`reach`), in CSS
+   * px; `first` for the bands of the first frame. A performance test reads it to tell the prefetch
+   * logic (deterministic) from how fast the bands came (the machine's speed).
+   */
+  bands: Map<string, { at: number; held: boolean; planned: boolean; requested: boolean; moved: number; reach: number; first: boolean }>
+  /** The bands every frame's prefetch plan named, and the bands requests asked for, by `keyId` (for `bands`). */
+  planned: Set<string>
+  requested: Set<string>
 }
 
 type Region = { layer: 'body' | 'frozen' | 'rowHead' | 'header' | 'headerFrozen'; clip: Area; ox: number; oy: number }
@@ -127,6 +140,9 @@ export class GridView {
   private scrollX = 0
   private scrollY = 0
   private velocity = 0
+  /** Where the latest frame was, and how far its prefetch plan reached (for `GridStats.bands`). */
+  private frameY = 0
+  private frameReach = 0
   private lastScroll = { y: 0, at: 0 }
   /** The latest scroll positions with their frames' times (for predicting a jumping view). */
   private samples: Array<{ y: number; at: number }> = []
@@ -158,7 +174,7 @@ export class GridView {
     private readonly source: GridSource,
     options: GridViewOptions,
   ) {
-    this.stats = options.stats ? { frames: [], requests: [], firstContent: null } : null
+    this.stats = options.stats ? { frames: [], requests: [], firstContent: null, bands: new Map(), planned: new Set(), requested: new Set() } : null
     this.fonts = new GridFonts(options.fontsBase, () => this.invalidate())
     const engineFonts = source.fonts
     if (engineFonts) {
@@ -432,12 +448,18 @@ export class GridView {
     return this.keysFor(axes, top, this.scrollY + this.height, left, this.scrollX + this.width)
   }
 
+  /** How far beyond the viewport the prefetch reaches in the direction of the scroll (CSS px). */
+  private reach(axes: Axes): number {
+    const screen = Math.max(1, this.height - axes.headerHeight)
+    return screen * (Math.abs(this.velocity) > FAST_SCROLL ? 2 : 1)
+  }
+
   /** The bands to fetch next: the visible ones missing, then the prefetch, nearest first. */
   private wanted(): BandKey[] {
     const axes = this.axes
     if (!axes) return []
     const screen = Math.max(1, this.height - axes.headerHeight)
-    const ahead = Math.abs(this.velocity) > FAST_SCROLL ? 2 : 1
+    const reach = this.reach(axes)
     const down = this.velocity >= 0
     const top = this.scrollY + axes.headerHeight
     const bottom = this.scrollY + this.height
@@ -446,7 +468,7 @@ export class GridView {
     const viewWidth = Math.max(1, right - left)
     const order = [
       this.keysFor(axes, top, bottom, left, right),
-      down ? this.keysFor(axes, bottom, bottom + screen * ahead, left, right) : this.keysFor(axes, top - screen * ahead, top, left, right),
+      down ? this.keysFor(axes, bottom, bottom + reach, left, right) : this.keysFor(axes, top - reach, top, left, right),
       down ? this.keysFor(axes, top - screen, top, left, right) : this.keysFor(axes, bottom, bottom + screen, left, right),
       this.keysFor(axes, top, bottom, right, right + viewWidth),
       this.keysFor(axes, top, bottom, left - viewWidth, left),
@@ -583,6 +605,7 @@ export class GridView {
       return
     }
     const draft = jump !== null || leap
+    if (this.stats) for (const key of keys) this.stats.requested.add(keyId(key))
     this.inFlight = true
     const dpr = this.dpr
     const epoch = axes.epoch
@@ -678,12 +701,32 @@ export class GridView {
     if (this.stats) {
       this.stats.frames.push({ at, playMs, skeleton, draft, bytes: this.received })
       if (!skeleton && !draft && this.stats.firstContent === null) this.stats.firstContent = performance.now()
+      this.trackBands(axes, at, needed)
     }
     this.received = 0
     this.request()
     // The overlay follows the scroll and the row head controls of the bands that arrived.
     this.drawOverlay()
     for (const listener of this.frameListeners) listener()
+  }
+
+  /**
+   * For `GridStats.bands`: the bands that came into view in this frame, whether they were here,
+   * planned or requested, and the prefetch plan from where the view is now (only with stats).
+   */
+  private trackBands(axes: Axes, at: number, needed: BandKey[]) {
+    const stats = this.stats
+    if (!stats) return
+    const first = stats.bands.size === 0
+    const moved = first ? 0 : Math.abs(this.scrollY - this.frameY)
+    for (const key of needed) {
+      const id = keyId(key)
+      if (stats.bands.has(id)) continue
+      stats.bands.set(id, { at, held: this.cache.peek(key) !== undefined, planned: stats.planned.has(id), requested: stats.requested.has(id), moved, reach: this.frameReach, first })
+    }
+    for (const key of this.wanted()) stats.planned.add(keyId(key))
+    this.frameY = this.scrollY
+    this.frameReach = this.reach(axes)
   }
 
   /** A band not here yet: its background and lines, from the axes. */

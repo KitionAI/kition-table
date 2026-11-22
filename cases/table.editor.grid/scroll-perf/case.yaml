@@ -9,9 +9,17 @@ intent: >-
   show a skeleton; a 20,000 px/s fling and the scroll bar dragged from top to bottom in a second
   show skeletons for at most a few frames in a row (while the view jumps it shows draft bands,
   counted apart); scrolling across the 50 columns keeps its frame
-  intervals; and the worker makes a band within the warm and cold lines. The headless run checks
-  every line relaxed by the file's factor; the lines themselves hold in a headed Chromium on the
-  owner's machine (PERF_TIER=strict PERF_HEADED=1).
+  intervals; and the worker makes a band within the warm and cold lines. In the steady scrolls the
+  prefetch logic is checked apart from the speed: every band that came into view and was not
+  there yet had been in the view's prefetch plan in an earlier frame (unless that frame moved
+  farther than the plan reached), and at least one band was asked for before it came into view.
+  The headless run checks every line relaxed by the file's factor. On a GitHub-hosted runner
+  (RUNNER_ENVIRONMENT=github-hosted) the speed lines (frame intervals of a, b, c, d, e and f,
+  content play, skeleton frames of the steady scrolls, skeleton runs of b and c, band generation)
+  are measured and reported as INFO and do not fail; the axes' size, the transfer, the prefetch
+  plan and ahead lines and page errors still fail there (PERF_SPEED_LINES=fail or report forces
+  either). Every line fails on self-hosted runners and on the owner's machine, where the lines
+  themselves hold in a headed Chromium (PERF_TIER=strict PERF_HEADED=1).
 layer: corpus
 dimension: performance
 source:

@@ -13,13 +13,22 @@
 // WebKit's numbers are measured in Safari and the desktop app, not here (Playwright's WebKit has
 // no JIT on the owner's machine).
 //
-// On a GitHub-hosted runner (GITHUB_ACTIONS=true, which GitHub sets in every job; the kit's CI
-// config has no way to set variables of its own) the lines that depend on the runner's speed
-// (frame intervals, content play, skeleton frames and skeleton runs, band generation) are measured
-// and printed against their lines but do not fail the run: a shared runner's speed varies from run
-// to run. The lines that do not depend on its speed (the axes' size, the bytes transferred, page
-// errors) still fail. The strict tier runs on the owner's machine before a release
-// (docs/development.md).
+// On a GitHub-hosted runner (RUNNER_ENVIRONMENT=github-hosted, which GitHub sets in every job of
+// its own runners; a self-hosted runner has self-hosted) the lines that depend on the runner's
+// speed (frame intervals, content play, skeleton frames and skeleton runs, band generation) are
+// measured and printed against their lines but do not fail the run: a shared runner's speed varies
+// from run to run. The lines that do not depend on its speed (the axes' size, the bytes
+// transferred, the steady scrolls' prefetch plan, page errors) still fail. PERF_SPEED_LINES=fail
+// makes the speed lines fail wherever it runs, PERF_SPEED_LINES=report makes them informational
+// wherever it runs. Self-hosted runners and the owner's machine check every line; the strict tier
+// runs on the owner's machine before a release (docs/development.md).
+//
+// A steady scroll's skeleton frames come from two things: the prefetch logic (which bands the view
+// plans and asks for ahead of the scroll) and how fast the worker answers. The logic is checked
+// apart, and fails everywhere: every band that came into view and was not here yet had been in the
+// view's prefetch plan in an earlier frame (unless the view moved farther in that frame than the
+// plan reached), and at least one band came into view that had been asked for (or was here) before
+// it was visible. The skeleton frames themselves are a speed line.
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -27,8 +36,14 @@ import { REPO, checkPackage, launch, openGrid, quantile, serveFile, settled, sta
 
 const which = process.argv[2] ?? 'chromium'
 const tier = process.env.PERF_TIER ?? 'ci'
-/** A GitHub-hosted runner: the speed lines are informational (see above). */
-const hosted = process.env.GITHUB_ACTIONS === 'true'
+/** Whether the speed lines only report (see above): PERF_SPEED_LINES, else on a GitHub-hosted runner. */
+const speedLines = process.env.PERF_SPEED_LINES ?? (process.env.RUNNER_ENVIRONMENT === 'github-hosted' ? 'report' : 'fail')
+if (speedLines !== 'fail' && speedLines !== 'report') {
+  console.log(`FAIL perf - PERF_SPEED_LINES is fail or report, not ${JSON.stringify(speedLines)}`)
+  process.exit(1)
+}
+const hosted = speedLines === 'report'
+const why = process.env.PERF_SPEED_LINES ? `PERF_SPEED_LINES=${speedLines}` : `RUNNER_ENVIRONMENT=${process.env.RUNNER_ENVIRONMENT}`
 // The lines: the expected result of case table.editor.grid/scroll-perf (only a maintainer changes it).
 const LINES = JSON.parse(fs.readFileSync(path.join(REPO, 'cases', 'table.editor.grid', 'scroll-perf', 'expected', 'lines.json'), 'utf8'))
 const k = tier === 'strict' ? 1 : LINES.relax
@@ -54,11 +69,11 @@ let failures = 0
 /** Speed lines over their line on a hosted runner (reported, not failed). */
 let informational = 0
 const results = {}
-/** A line: `speed` when it depends on the runner's speed (informational on a hosted runner). */
+/** A line: `speed` when it depends on the runner's speed (informational on a GitHub-hosted runner). */
 const step = (name, ok, detail, speed = false) => {
   if (!ok && speed && hosted) {
     informational += 1
-    console.log(`INFO ${name} - ${detail} (over its line; a speed line, informational on a hosted runner)`)
+    console.log(`INFO ${name} - ${detail} (over its line; a speed line, informational here: ${why})`)
     return
   }
   if (!ok) failures += 1
@@ -66,7 +81,7 @@ const step = (name, ok, detail, speed = false) => {
 }
 if (hosted)
   console.log(
-    'INFO hosted runner (GITHUB_ACTIONS=true): the speed lines (frame intervals, content play, skeleton frames and runs, band generation) are reported against their lines and do not fail; axes size, transfer and page errors still fail. The strict tier runs on the owner\'s machine before a release.',
+    `INFO speed lines report (${why}): frame intervals, content play, skeleton frames and runs, and band generation are reported against their lines and do not fail; axes size, transfer, the prefetch plan and page errors still fail. Self-hosted runners and the owner's machine check every line; the strict tier runs on the owner's machine before a release.`,
   )
 
 /** Opens the fixture at `view`; answers the page, how long the first content took and the axes' size. */
@@ -90,6 +105,9 @@ async function measure(page, script, args) {
       const before = (await bands()).count
       stats.frames.length = 0
       stats.requests.length = 0
+      stats.bands.clear()
+      stats.planned.clear()
+      stats.requested.clear()
       const intervals = []
       let last = 0
       let running = true
@@ -105,11 +123,12 @@ async function measure(page, script, args) {
       running = false
       const frames = stats.frames.map((frame) => ({ ...frame }))
       const requests = stats.requests.map((request) => ({ ...request }))
+      const arrivals = [...stats.bands.values()].map((band) => ({ ...band }))
       const after = await bands()
       const made = after.ms.slice(Math.max(0, after.ms.length - (after.count - before)))
       const sorted = [...made].sort((x, y) => x - y)
       const worker = { count: made.length, p95: sorted.length ? sorted[Math.round((sorted.length - 1) * 0.95)] : 0 }
-      return { intervals, frames, requests, seconds, worker }
+      return { intervals, frames, requests, arrivals, seconds, worker }
     },
     { source: script.toString(), args },
   )
@@ -163,6 +182,9 @@ function summarize(name, run) {
   const gaps = run.intervals
   const plays = run.frames.map((frame) => frame.playMs)
   const bytes = run.requests.reduce((sum, request) => sum + request.bytes, 0)
+  // The bands that came into view after the first frame, and what the prefetch had done for them.
+  const came = run.arrivals.filter((band) => !band.first)
+  const missing = came.filter((band) => !band.held)
   const summary = {
     frames: gaps.length,
     interval: { p50: quantile(gaps, 0.5), p95: quantile(gaps, 0.95), p99: quantile(gaps, 0.99), max: Math.max(0, ...gaps) },
@@ -176,6 +198,14 @@ function summarize(name, run) {
     requests: run.requests.length,
     roundTrip: { p50: quantile(run.requests.map((request) => request.ms), 0.5), p95: quantile(run.requests.map((request) => request.ms), 0.95) },
     worker: run.worker,
+    prefetch: {
+      came: came.length,
+      ahead: came.filter((band) => band.held || band.requested).length,
+      // Not here, and not in the plan of an earlier frame though the view moved less than it reached: the logic's miss.
+      unplanned: missing.filter((band) => !band.planned && band.moved <= band.reach).length,
+      // Not here, not planned, after a frame that moved past the plan's reach (the frame's speed, not the logic).
+      outran: missing.filter((band) => !band.planned && band.moved > band.reach).length,
+    },
   }
   results[name] = summary
   const f = (v) => v.toFixed(1)
@@ -213,6 +243,11 @@ async function jumps(name, page, script, args) {
 function steadyLines(name, s) {
   step(`${name} frame interval`, s.interval.p95 <= LINES.interval.p95 * k && s.interval.p99 <= LINES.interval.p99 * k && s.interval.max <= LINES.interval.max * k, `p95 ${s.interval.p95.toFixed(1)} ≤ ${at(LINES.interval.p95)}, p99 ${s.interval.p99.toFixed(1)} ≤ ${at(LINES.interval.p99)}, max ${s.interval.max.toFixed(1)} ≤ ${at(LINES.interval.max)}`, true)
   step(`${name} content play`, s.play.p95 <= LINES.playP95 * k, `p95 ${s.play.p95.toFixed(2)} ≤ ${at(LINES.playP95)} ms`, true)
+  // The prefetch logic, whatever the machine's speed: every band that came into view had been planned
+  // before (bar the frames that outran the plan), and the view asked for bands before they showed.
+  const p = s.prefetch
+  step(`${name} prefetch plan`, p.came > 0 && p.unplanned === 0, `${p.unplanned} of ${p.came} bands came into view unplanned (${p.outran} after a frame that moved past the plan's reach)`)
+  step(`${name} prefetch ahead`, p.ahead > 0, `${p.ahead} of ${p.came} bands asked for or here before they came into view`)
   step(`${name} no skeleton frames`, s.skeletonFrames <= LINES.skeletonSteady * k, `${s.skeletonFrames} ≤ ${at(LINES.skeletonSteady)} skeleton frames`, true)
   step(`${name} transfer`, s.frameBytesMax <= LINES.frameBytes * k && s.bytesPerSecond <= LINES.bytesPerSecond * k, `frame max ${(s.frameBytesMax / 1024).toFixed(0)} ≤ ${(LINES.frameBytes * k) / 1024} KB, ${(s.bytesPerSecond / 1024).toFixed(0)} ≤ ${(LINES.bytesPerSecond * k) / 1024} KB/s`)
 }
@@ -294,8 +329,8 @@ try {
   await server.close()
   await served.close()
 }
-const report = { browser: which, version, tier, relax: k, rows, hosted, informational, results }
+const report = { browser: which, version, tier, relax: k, rows, speedLines, informational, results }
 if (process.env.PERF_OUT) fs.writeFileSync(process.env.PERF_OUT, JSON.stringify(report, null, 1))
-const runner = hosted ? `, hosted runner: ${informational} speed line${informational === 1 ? '' : 's'} over, informational` : ''
+const runner = hosted ? `, ${why}: ${informational} speed line${informational === 1 ? '' : 's'} over, informational` : ''
 console.log(`${failures ? 'FAIL' : 'PASS'} perf (${tier} tier, ${which} ${report.version}${runner})`)
 process.exit(failures ? 1 : 0)

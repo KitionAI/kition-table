@@ -167,14 +167,16 @@ node tests/restAfterJump.mjs chromium   # the scroll bar dragged to the end in s
 
 `test:perf` checks the lines of `cases/table.editor.grid/scroll-perf/expected/lines.json` (relaxed
 by its `relax` in the default `ci` tier). On a GitHub-hosted runner, where GitHub sets
-`GITHUB_ACTIONS=true` in every job, it still measures every line and prints each number against
-its line, but the lines that depend on the runner's speed (frame intervals, content play, skeleton
-frames and skeleton runs, band generation) are informational: one over its line prints `INFO`
-and does not fail the job. The lines that do not depend on its speed (the axes' size, the bytes
-transferred, page errors) still fail there. A shared runner's speed varies from run to run, so
-the speed lines are checked where the speed is known: the strict tier
-(`PERF_TIER=strict PERF_HEADED=1 pnpm run test:perf`) runs on the owner's machine before a
-release.
+`RUNNER_ENVIRONMENT=github-hosted` in every job (a self-hosted runner has `self-hosted`), it still
+measures every line and prints each number against its line, but the lines that depend on the
+runner's speed (frame intervals, content play, skeleton frames and skeleton runs, band
+generation) are informational: one over its line prints `INFO` and does not fail the job. The
+lines that do not depend on its speed (the axes' size, the bytes transferred, the steady scrolls'
+prefetch plan and prefetch ahead, page errors) still fail there. `PERF_SPEED_LINES=fail` or
+`PERF_SPEED_LINES=report` forces either behaviour anywhere. A shared runner's speed varies from
+run to run, so the speed lines are checked where the speed is known: on self-hosted runners and on
+the owner's machine, where the strict tier (`PERF_TIER=strict PERF_HEADED=1 pnpm run test:perf`)
+runs before a release.
 
 The grid's text is measured by the engine and only drawn by the page, so the engine must set
 Inter's optical size (`opsz`) as the page's Canvas does. Chromium's Canvas follows the font size
