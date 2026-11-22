@@ -12,6 +12,14 @@
 // in spike TG-0c; cases/table.editor.grid/parity/expected/tiers.json). Text runs that cross a
 // band's edge are not compared.
 //
+// The grid sets its text at 10 to 13 px, under Inter's optical size axis's floor (14), where the
+// page's Canvas draws Inter alike whether it follows the font size (Chromium: the engine measures
+// with `auto`) or keeps the default optical size (WebKit: `fixed-default`). So in the light grid at
+// both ratios the page also compares a specimen at 16 and at 20 px (weights 400 and 600, Latin and a
+// mixed line): `gridSpecimen` sets the lines with the grid's shaping and text ops in the page's
+// engine, which measures and rasterizes with the optical sizing the page found, and answers its
+// display list and raster; the page plays the list and both are compared with the same tiers.
+//
 // The text tiers that depend on the platform's font rasterizer (mean difference, PSNR) are
 // calibrated for macOS only: elsewhere only the flat, curve, emoji and text geometry tiers run.
 // Every run's widths are checked too: each TEXT run's engine width against the page's
@@ -104,8 +112,15 @@ async function fixture() {
   return { bytes, views: { grid, tall: tallId, grouped: groupedId } }
 }
 
-/** Compares every band the viewport shows; runs in the page. */
-async function compareBands({ dpr, dump }) {
+/** The specimen's lines at `size` px: short runs (the width check takes runs up to 200 px). */
+const specimenLines = (size) => ['Quarterly WAVE', 'office -> 1/2 fi', 'Mixed 中文 한국어'].flatMap((text) => [400, 600].map((weight) => ({ text, weight, size })))
+const SPECIMEN_SIZES = [16, 20]
+
+/**
+ * Compares every band the viewport shows, or, with `specimen` (`[{text, weight, size}]`),
+ * `gridSpecimen`'s list of those lines; runs in the page.
+ */
+async function compareBands({ dpr, dump, specimen }) {
   const { view, engine } = window.__ktableGrid
   const player = await import('/src/editor/table/canvas/player.ts')
   const list = await import('/src/editor/table/canvas/displayList.ts')
@@ -114,10 +129,20 @@ async function compareBands({ dpr, dump }) {
   const widths = []
   const measure = document.createElement('canvas').getContext('2d')
   const families = ['KitionTableSans', 'KitionTableFallback', 'KitionTableHangul', 'KitionTableMono']
-  // The bands the viewport shows (all in the cache once the view has settled).
-  for (const key of view.neededKeys()) {
-    const band = view.cache.peek(key)
-    if (!band) continue
+  // The bands the viewport shows (all in the cache once the view has settled), each rasterized by
+  // gridRaster; or the specimen's list with the raster gridSpecimen made of it.
+  const sources = []
+  if (specimen) {
+    const bytes = await engine.invoke('gridSpecimen', JSON.stringify(specimen), dpr)
+    const length = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true)
+    const band = list.decodeList(bytes.subarray(4, 4 + length))
+    sources.push({ key: band.header.key, band, given: bytes.subarray(4 + Math.ceil(length / 4) * 4) })
+  } else
+    for (const key of view.neededKeys()) {
+      const band = view.cache.peek(key)
+      if (band) sources.push({ key, band, given: null })
+    }
+  for (const { key, band, given } of sources) {
     const h = band.header
     const W = Math.round(h.width * dpr)
     const H = Math.round(h.height * dpr)
@@ -128,7 +153,7 @@ async function compareBands({ dpr, dump }) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
     player.play({ ctx, x: h.x, y: h.y, dpr }, band, view.resources, null)
     const page = ctx.getImageData(0, 0, W, H).data
-    const raster = await engine.invoke('gridRaster', h.epoch, key.layer, key.colBand, key.rowBand, dpr)
+    const raster = given ?? (await engine.invoke('gridRaster', h.epoch, key.layer, key.colBand, key.rowBand, dpr))
     const dv = new DataView(raster.buffer, raster.byteOffset, raster.byteLength)
     const rw = dv.getUint32(0, true)
     const rh = dv.getUint32(4, true)
@@ -331,9 +356,10 @@ const step = (name, ok, detail) => {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` - ${detail}` : ''}`)
 }
 
+/** `specimen`: the run also compares the specimen at 16 and 20 px. */
 const RUNS = [
-  { name: 'grid light', view: views.grid, dpr: 1 },
-  { name: 'grid light', view: views.grid, dpr: 2 },
+  { name: 'grid light', view: views.grid, dpr: 1, specimen: true },
+  { name: 'grid light', view: views.grid, dpr: 2, specimen: true },
   { name: 'grid light scrolled', view: views.grid, dpr: 2, scroll: [900, 700] },
   { name: 'grid dark', view: views.grid, dpr: 1, theme: 'dark' },
   { name: 'grid dark', view: views.grid, dpr: 2, theme: 'dark' },
@@ -369,55 +395,14 @@ try {
       .catch(() => console.log('INFO pictures not all decoded on the page after 10 s'))
     await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
     const result = await page.evaluate(compareBands, { dpr: run.dpr, dump: Boolean(process.env.PARITY_DUMP) })
-    for (const band of result.bands) {
-      for (const [kind, url] of Object.entries(band.images ?? {})) {
-        const name = `${label}-${band.key.layer}-${band.key.colBand}-${band.key.rowBand}-${kind}.png`.replace(/[^\w.-]+/g, '-')
-        fs.writeFileSync(path.join(OUT, name), Buffer.from(url.split(',')[1], 'base64'))
-      }
-      delete band.images
-    }
     await page.screenshot({ path: path.join(OUT, `${label.replace(/\W+/g, '-')}.png`) })
-    const bands = result.bands
-    step(`${label}: bands compared`, bands.length > 0 && bands.every((band) => !band.error), bands.filter((band) => band.error).map((band) => band.error).join('; ') || `${bands.length} bands`)
-    const ok = bands.filter((band) => !band.error)
-    const worst = (pick) => Math.max(0, ...ok.map(pick))
-    const least = (pick) => Math.min(99, ...ok.map(pick))
-    const flatShare = worst((band) => band.tiers.flat.diff0 / Math.max(1, band.tiers.flat.n))
-    step(`${label}: flat`, worst((band) => band.tiers.flat.maxAbs) <= TIERS.flat.maxAbs && flatShare <= TIERS.flat.diffShare, `max_abs ${worst((band) => band.tiers.flat.maxAbs)}, differing ${(flatShare * 100).toFixed(3)}%`)
-    const curveShare = worst((band) => band.tiers.curve.diff2 / Math.max(1, band.tiers.curve.n))
-    const curveMax = worst((band) => band.tiers.curve.maxAbs)
-    const curveAt = ok.find((band) => band.tiers.curve.maxAbs === curveMax)?.worstCurve
-    step(`${label}: curves`, curveMax <= TIERS.curve.maxAbs && curveShare <= TIERS.curve.diff2Share, `max_abs ${curveMax}${curveMax > TIERS.curve.maxAbs && curveAt ? ` (op ${curveAt.op} at ${curveAt.at})` : ''}, > 2 ${(curveShare * 100).toFixed(2)}%`)
-    step(`${label}: icon and emoji tiles, tofu`, worst((band) => band.tiers.glyphTile.maxAbs) <= TIERS.glyphTile.maxAbs, `max_abs ${worst((band) => band.tiers.glyphTile.maxAbs)} over ${ok.reduce((sum, band) => sum + band.tiers.glyphTile.n, 0)} px`)
-    const segments = ok.flatMap((band) => band.segments)
-    const edge = Math.max(0, ...segments.map((segment) => segment.edge))
-    const centroid = Math.max(0, ...segments.map((segment) => segment.centroid))
-    const widestEdge = segments.find((segment) => segment.edge === edge)
-    step(`${label}: text ink box`, edge <= TIERS.inkEdge[run.dpr], `${edge} ≤ ${TIERS.inkEdge[run.dpr]} device px over ${segments.length} runs${edge > TIERS.inkEdge[run.dpr] ? ` ("${widestEdge.text}" at ${widestEdge.at})` : ''}`)
-    step(`${label}: text centroid`, centroid <= TIERS.centroid[run.dpr], `${centroid.toFixed(2)} ≤ ${TIERS.centroid[run.dpr]} device px`)
-    if (process.env.PARITY_DUMP) {
-      const share = (name) => ok.reduce((sum, band) => sum + band.tiers[name].sq, 0)
-      const all = ['flat', 'curve', 'glyphTile', 'text'].map((name) => [name, share(name)])
-      const total = all.reduce((sum, [, sq]) => sum + sq, 0) || 1
-      console.log(`  squared error by region: ${all.map(([name, sq]) => `${name} ${((100 * sq) / total).toFixed(1)}%`).join(', ')}`)
-      const meanest = [...segments].sort((a, b) => b.mean - a.mean).slice(0, 6)
-      console.log(`  largest text differences: ${meanest.map((segment) => `"${segment.text}" (${segment.font}) ${segment.mean.toFixed(1)} at ${segment.at}`).join('; ')}`)
-    }
-    if (macos) {
-      const mean = Math.max(0, ...segments.map((segment) => segment.mean))
-      step(`${label}: text mean difference`, mean <= TIERS.segmentMean, `${mean.toFixed(1)} ≤ ${TIERS.segmentMean}`)
-      step(`${label}: text PSNR`, least((band) => band.textPsnr) >= TIERS.textPsnr, `${least((band) => band.textPsnr).toFixed(1)} ≥ ${TIERS.textPsnr} dB`)
-      // Light text on dark is drawn heavier by macOS than by the engine: the dark theme has its own line.
-      const whole = (run.theme === 'dark' ? TIERS.wholePsnrDark : TIERS.wholePsnr)[run.dpr]
-      step(`${label}: whole PSNR`, least((band) => band.wholePsnr) >= whole, `${least((band) => band.wholePsnr).toFixed(1)} ≥ ${whole} dB`)
-    }
-    const widths = result.widths.map((width) => ({ ...width, diff: Math.abs(width.page - width.engine) }))
-    const widest = widths.reduce((worst, width) => (width.diff > (worst?.diff ?? -1) ? width : worst), null)
-    step(`${label}: text widths`, widths.length > 0 && widths.every((width) => width.diff <= TIERS.width), widest ? `max ${widest.diff.toFixed(3)} px ("${widest.text}" ${widest.weight} ${widest.size}px) over ${widths.length} runs` : 'no runs')
-    const loose = widths.filter((width) => width.diff > TIERS.widthWarn)
-    if (loose.length) {
-      warnings += 1
-      console.log(`WARN ${label}: ${loose.length} runs differ by more than ${TIERS.widthWarn} px`)
+    check(label, run, result)
+    for (const size of run.specimen ? SPECIMEN_SIZES : []) {
+      const lines = specimenLines(size)
+      const compared = await page.evaluate(compareBands, { dpr: run.dpr, dump: Boolean(process.env.PARITY_DUMP), specimen: lines })
+      check(`${label} text ${size} px`, run, compared)
+      const widths = compared.widths.map((width) => `${width.weight} "${width.text}" ${Math.abs(width.page - width.engine).toFixed(3)}`)
+      console.log(`INFO ${label} text ${size} px - ${lines.length} lines; |engine - measureText| per run: ${widths.join(', ')}`)
     }
     step(`${label}: page errors`, errors.length === 0, errors.slice(0, 3).join(' | ') || 'none')
     await context.close()
@@ -431,3 +416,56 @@ try {
 }
 console.log(`${failures ? 'FAIL' : 'PASS'} parity (${which} ${version}${macos ? '' : ', geometry tiers only'}${warnings ? `, ${warnings} width warnings` : ''})`)
 process.exit(failures ? 1 : 0)
+
+/** The tiers of one comparison (the viewport's bands, or a specimen), as steps under `label`. */
+function check(label, run, result) {
+  for (const band of result.bands) {
+    for (const [kind, url] of Object.entries(band.images ?? {})) {
+      const name = `${label}-${band.key.layer}-${band.key.colBand}-${band.key.rowBand}-${kind}.png`.replace(/[^\w.-]+/g, '-')
+      fs.writeFileSync(path.join(OUT, name), Buffer.from(url.split(',')[1], 'base64'))
+    }
+    delete band.images
+  }
+  const bands = result.bands
+  step(`${label}: bands compared`, bands.length > 0 && bands.every((band) => !band.error), bands.filter((band) => band.error).map((band) => band.error).join('; ') || `${bands.length} bands`)
+  const ok = bands.filter((band) => !band.error)
+  const worst = (pick) => Math.max(0, ...ok.map(pick))
+  const least = (pick) => Math.min(99, ...ok.map(pick))
+  const flatShare = worst((band) => band.tiers.flat.diff0 / Math.max(1, band.tiers.flat.n))
+  step(`${label}: flat`, worst((band) => band.tiers.flat.maxAbs) <= TIERS.flat.maxAbs && flatShare <= TIERS.flat.diffShare, `max_abs ${worst((band) => band.tiers.flat.maxAbs)}, differing ${(flatShare * 100).toFixed(3)}%`)
+  const curveShare = worst((band) => band.tiers.curve.diff2 / Math.max(1, band.tiers.curve.n))
+  const curveMax = worst((band) => band.tiers.curve.maxAbs)
+  const curveAt = ok.find((band) => band.tiers.curve.maxAbs === curveMax)?.worstCurve
+  step(`${label}: curves`, curveMax <= TIERS.curve.maxAbs && curveShare <= TIERS.curve.diff2Share, `max_abs ${curveMax}${curveMax > TIERS.curve.maxAbs && curveAt ? ` (op ${curveAt.op} at ${curveAt.at})` : ''}, > 2 ${(curveShare * 100).toFixed(2)}%`)
+  step(`${label}: icon and emoji tiles, tofu`, worst((band) => band.tiers.glyphTile.maxAbs) <= TIERS.glyphTile.maxAbs, `max_abs ${worst((band) => band.tiers.glyphTile.maxAbs)} over ${ok.reduce((sum, band) => sum + band.tiers.glyphTile.n, 0)} px`)
+  const segments = ok.flatMap((band) => band.segments)
+  const edge = Math.max(0, ...segments.map((segment) => segment.edge))
+  const centroid = Math.max(0, ...segments.map((segment) => segment.centroid))
+  const widestEdge = segments.find((segment) => segment.edge === edge)
+  step(`${label}: text ink box`, edge <= TIERS.inkEdge[run.dpr], `${edge} ≤ ${TIERS.inkEdge[run.dpr]} device px over ${segments.length} runs${edge > TIERS.inkEdge[run.dpr] ? ` ("${widestEdge.text}" at ${widestEdge.at})` : ''}`)
+  step(`${label}: text centroid`, centroid <= TIERS.centroid[run.dpr], `${centroid.toFixed(2)} ≤ ${TIERS.centroid[run.dpr]} device px`)
+  if (process.env.PARITY_DUMP) {
+    const share = (name) => ok.reduce((sum, band) => sum + band.tiers[name].sq, 0)
+    const all = ['flat', 'curve', 'glyphTile', 'text'].map((name) => [name, share(name)])
+    const total = all.reduce((sum, [, sq]) => sum + sq, 0) || 1
+    console.log(`  squared error by region: ${all.map(([name, sq]) => `${name} ${((100 * sq) / total).toFixed(1)}%`).join(', ')}`)
+    const meanest = [...segments].sort((a, b) => b.mean - a.mean).slice(0, 6)
+    console.log(`  largest text differences: ${meanest.map((segment) => `"${segment.text}" (${segment.font}) ${segment.mean.toFixed(1)} at ${segment.at}`).join('; ')}`)
+  }
+  if (macos) {
+    const mean = Math.max(0, ...segments.map((segment) => segment.mean))
+    step(`${label}: text mean difference`, mean <= TIERS.segmentMean, `${mean.toFixed(1)} ≤ ${TIERS.segmentMean}`)
+    step(`${label}: text PSNR`, least((band) => band.textPsnr) >= TIERS.textPsnr, `${least((band) => band.textPsnr).toFixed(1)} ≥ ${TIERS.textPsnr} dB`)
+    // Light text on dark is drawn heavier by macOS than by the engine: the dark theme has its own line.
+    const whole = (run.theme === 'dark' ? TIERS.wholePsnrDark : TIERS.wholePsnr)[run.dpr]
+    step(`${label}: whole PSNR`, least((band) => band.wholePsnr) >= whole, `${least((band) => band.wholePsnr).toFixed(1)} ≥ ${whole} dB`)
+  }
+  const widths = result.widths.map((width) => ({ ...width, diff: Math.abs(width.page - width.engine) }))
+  const widest = widths.reduce((worst, width) => (width.diff > (worst?.diff ?? -1) ? width : worst), null)
+  step(`${label}: text widths`, widths.length > 0 && widths.every((width) => width.diff <= TIERS.width), widest ? `max ${widest.diff.toFixed(3)} px ("${widest.text}" ${widest.weight} ${widest.size}px) over ${widths.length} runs` : 'no runs')
+  const loose = widths.filter((width) => width.diff > TIERS.widthWarn)
+  if (loose.length) {
+    warnings += 1
+    console.log(`WARN ${label}: ${loose.length} runs differ by more than ${TIERS.widthWarn} px`)
+  }
+}

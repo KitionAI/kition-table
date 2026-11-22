@@ -12,7 +12,10 @@ intent: >-
   boxes, the
   ink box and centre of each text run, and on macOS the text's mean difference and PSNR and the
   whole band's PSNR (the text tiers are calibrated for macOS only, spike TG-0c). Every text run's
-  width also matches the page's measureText within 0.5 px.
+  width also matches the page's measureText within 0.5 px. The grid's own text is 10 to 13 px,
+  under Inter's optical size floor, so the light grid at both ratios also compares a specimen of
+  text at 16 and 20 px (weights 400 and 600) that gridSpecimen sets and rasterizes in the page's
+  engine: Chromium's Canvas checks the auto optical size, WebKit's the fixed default.
 layer: gate
 source:
   kind: synthetic
