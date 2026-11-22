@@ -154,6 +154,14 @@
       "returns": "string",
       "description": "How the grid splits text into runs of one face and how wide each run is, as JSON, for the width test."
     },
+    "gridSpecimen": {
+      "params": [
+        "asksJson",
+        "dpr"
+      ],
+      "returns": "Uint8Array",
+      "description": "Text of any size and weight ([{text, weight, size}]) set one line each by the grid's shaping and text ops, as one display list (format v1), and that list rasterized as gridRaster rasterizes a band (list length u32, the list padded to 4 bytes, width, height, RGBA8), for the parity test: the grid's own text is under Inter's optical size floor."
+    },
     "gridOpticalSizing": {
       "params": [
         "sizing"

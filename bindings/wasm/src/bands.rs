@@ -1,6 +1,6 @@
 //! The editor's grid in bands (grid plan sections 3.4, 3.7, 3.8): the extras `gridAxes`,
-//! `gridRows`, `gridBands`, `gridRaster`, `gridMeasure`, `gridPicture` and `gridOpticalSizing`,
-//! and the bands' timings in `gridStats`.
+//! `gridRows`, `gridBands`, `gridRaster`, `gridMeasure`, `gridSpecimen`, `gridPicture` and
+//! `gridOpticalSizing`, and the bands' timings in `gridStats`.
 //!
 //! The page arranges a view with `gridOpen` (`grid.rs`, `kition-table-arrange`) and hands the axis
 //! it got to `gridAxes`, which lays out the arrangement's linear rows (group headers, records, add
@@ -43,14 +43,16 @@
 //! Each band's ops are clipped to the band, so a cell across a strip's edge is cut there the same
 //! way on both sides. Coordinates are the whole grid's, unscrolled (the picture's): the row heads
 //! from x = 0, the header from y = 0. `gridRaster` rasterizes a band as the headless picture does,
-//! for the parity test; `gridMeasure` answers how the grid's shaping splits and measures text,
-//! for the width test; `gridPicture` decodes a picture the page's browser cannot (an SVG, a HEIC
-//! outside Safari) as the headless picture does.
+//! for the parity test, and `gridSpecimen` sets text of any size and weight with the grid's shaping
+//! and text ops and rasterizes it the same way (the grid's own text is under Inter's optical size
+//! floor); `gridMeasure` answers how the grid's shaping splits and measures text, for the width
+//! test; `gridPicture` decodes a picture the page's browser cannot (an SVG, a HEIC outside Safari)
+//! as the headless picture does.
 //!
 //! The grid measures its text with the optical sizing the page's Canvas draws with
 //! (`gridOpticalSizing`, `kition_table_fonts::OpticalSizing`; `auto` until the page says
-//! otherwise): its bands, drafts, `gridMeasure` and `gridRaster` all use it. The headless picture,
-//! the previews and exports keep `auto`.
+//! otherwise): its bands, drafts, `gridMeasure`, `gridRaster` and `gridSpecimen` all use it. The
+//! headless picture, the previews and exports keep `auto`.
 
 use std::collections::{HashMap, HashSet};
 
@@ -966,15 +968,81 @@ impl Bands {
                 self.resources.set_image(*key, pixmap);
             }
         }
+        Ok(self.rasterize(&list, dpr))
+    }
+
+    /// A list rasterized as the headless picture draws it, with the optical sizing the grid
+    /// measures with (`gridRaster`, `gridSpecimen`): `width` and `height` (u32 each), then straight
+    /// RGBA8 of its area, `round(size * dpr)` device pixels.
+    fn rasterize(&self, list: &DisplayList, dpr: f64) -> Vec<u8> {
         let (x, y) = (f64::from(list.header.origin.0), f64::from(list.header.origin.1));
         let width = (f64::from(list.header.size.0) * dpr).round() as u32;
         let height = (f64::from(list.header.size.1) * dpr).round() as u32;
-        let rgba = kition_table_display::raster(&list, &self.resources, (x, y, dpr), (width, height), self.shaper.sizing());
+        let rgba = kition_table_display::raster(list, &self.resources, (x, y, dpr), (width, height), self.shaper.sizing());
         let mut out = Vec::with_capacity(8 + rgba.len());
         out.extend_from_slice(&width.to_le_bytes());
         out.extend_from_slice(&height.to_le_bytes());
         out.extend_from_slice(&rgba);
-        Ok(out)
+        out
+    }
+
+    /// `gridSpecimen`: `[{text, weight, size}]` set one line each by the grid's shaping and text
+    /// ops, as a band's text is (left-aligned from x = 8, not cut, in the laid-out theme's text
+    /// color on its paper; light when no grid is laid out), as one display list (layer `View`,
+    /// from the origin), and that list rasterized as `gridRaster` rasterizes a band:
+    ///
+    /// ```text
+    /// list length u32 | the list (format v1), zero-padded to 4 bytes | width u32 | height u32 | RGBA8
+    /// ```
+    ///
+    /// The grid's own text is 10 to 13 px, under Inter's optical size axis's floor (14), where
+    /// `auto` and `fixed-default` set it alike; the parity test sets text above it here.
+    pub(crate) fn specimen(&mut self, asks: &Value, dpr: f64) -> Result<Vec<u8>, String> {
+        let asks = asks.as_array().ok_or("invalid params: a list of {text, weight, size}")?;
+        if !(dpr > 0.0 && dpr <= 8.0) {
+            return Err(format!("invalid params: dpr is above 0 and at most 8, not {dpr}"));
+        }
+        let mut lines = Vec::with_capacity(asks.len());
+        for ask in asks {
+            let text = ask.get("text").and_then(Value::as_str).ok_or("invalid params: text")?;
+            let weight = ask.get("weight").and_then(Value::as_u64).and_then(|weight| u16::try_from(weight).ok()).unwrap_or(REGULAR);
+            let size = ask.get("size").and_then(Value::as_f64).unwrap_or(f64::from(BODY)) as f32;
+            if !(4.0..=96.0).contains(&size) {
+                return Err(format!("invalid params: size is 4 to 96 px, not {size}"));
+            }
+            lines.push((text, weight, size));
+        }
+        const LEFT: f32 = 8.0;
+        let heights: Vec<f32> = lines.iter().map(|(_, _, size)| (size * 1.6).ceil() + 8.0).collect();
+        let widest = lines.iter().map(|(text, weight, size)| self.shaper.width(text, *weight, *size)).fold(0.0f32, f32::max);
+        let (width, height) = ((widest + 2.0 * LEFT).ceil().max(1.0), heights.iter().sum::<f32>().max(1.0));
+        let (epoch, theme) = self.layout.as_ref().map_or((0, Theme::LIGHT), |layout| (layout.epoch, layout.theme));
+        let mut list = DisplayList::new(Header {
+            epoch,
+            theme: match theme.mode {
+                Mode::Light => 0,
+                Mode::Dark => 1,
+            },
+            key: Key { layer: Layer::View, col_band: 0, row_band: 0 },
+            size: (width, height),
+            ..Header::default()
+        });
+        let zone = kition_table_grid::format::Zone::default();
+        let mut out = Out { list: &mut list, resources: &mut self.resources, shaper: &mut self.shaper, theme, zone: &zone };
+        out.rect(kition_table_grid::Area { x: 0.0, y: 0.0, w: width, h: height }, theme.paper);
+        let mut top = 0.0;
+        for ((text, weight, size), line_height) in lines.iter().zip(&heights) {
+            out.text(text, LEFT, top + line_height / 2.0, Align::Left, *size, *weight, theme.text, f32::INFINITY);
+            top += line_height;
+        }
+        list.header.resources = self.resources.version;
+        let encoded = kition_table_display::encode(&list);
+        let mut bytes = Vec::with_capacity(4 + encoded.len() + 8);
+        bytes.extend_from_slice(&u32::try_from(encoded.len()).map_err(|_| "the specimen is too large")?.to_le_bytes());
+        bytes.extend_from_slice(&encoded);
+        bytes.resize(4 + encoded.len().next_multiple_of(4), 0);
+        bytes.extend_from_slice(&self.rasterize(&list, dpr));
+        Ok(bytes)
     }
 
     /// `gridOpticalSizing`: the grid measures its text with `sizing` from now on (its bands, drafts,
@@ -1128,6 +1196,12 @@ impl crate::TableDocument {
         self.bands.measure(asks)
     }
 
+    /// Text set by the grid's shaping as one display list, and its raster (`gridSpecimen`, see
+    /// `Bands::specimen`).
+    pub fn grid_specimen(&mut self, asks: &Value, dpr: f64) -> Result<Vec<u8>, String> {
+        self.bands.specimen(asks, dpr)
+    }
+
     /// The optical sizing the grid measures its text with (`gridOpticalSizing`): `auto` or
     /// `fixed-default`, the one the page's Canvas draws with; answers whether it changed.
     pub fn grid_optical_sizing(&mut self, sizing: &str) -> Result<bool, String> {
@@ -1207,6 +1281,14 @@ mod web {
         #[wasm_bindgen(js_name = gridOpticalSizing)]
         pub fn grid_optical_sizing(&mut self, sizing: &str) -> Result<bool, JsError> {
             self.0.grid_optical_sizing(sizing).map_err(error)
+        }
+
+        /// `[{text, weight, size}]` set one line each by the grid's shaping, as a display list,
+        /// and its raster (for the parity test): list length, the list, width, height, RGBA8.
+        #[wasm_bindgen(js_name = gridSpecimen)]
+        pub fn grid_specimen(&mut self, asks: &str, dpr: f64) -> Result<Vec<u8>, JsError> {
+            let asks: serde_json::Value = serde_json::from_str(asks).map_err(|e| error(e.to_string()))?;
+            self.0.grid_specimen(&asks, dpr).map_err(error)
         }
 
         /// How the grid splits `[{text, weight, size}]` into runs and measures them (JSON).
