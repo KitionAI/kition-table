@@ -4,6 +4,12 @@ Changes to Kition Table, newest first. A version is the kit package version in `
 each version is published once, as the npm packages `@kition/kit-table-ui` and
 `@kition/kit-table-<platform>`.
 
+## 0.1.1
+
+- A host lists a table file's tables and dashboards and opens the file at one through the kit's outline command (`table.file.outline`, `outline.command` in `kit.json`), without knowing the kit.
+- `kit.json` says what an agent makes a table file for (`agent.describe.use`: structured, spreadsheet-like results), so a host's instructions say it from the manifest.
+- The grid's optical sizing and specimen methods, kition-sdk 3970eac, and the editor on `@kitionstage/sdk` 0.5.2-stage.16.
+
 ## 0.1.0
 
 - A host tells a table file's document id (`document.identity`) and makes a copied table a new document (`document.fork`): the fork keeps the tables, fields, views, records, their ids and the attachments its records name, and carries a new id and none of the source's history (no change log, record history, deleted rows or unreferenced attachments; Kit Process Protocol section 5.6, kition-sdk 6b4d471). Two copies of the same `.ktable` were one document until now.

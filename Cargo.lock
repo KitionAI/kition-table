@@ -1299,7 +1299,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "kition-env",
@@ -1321,7 +1321,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-ai"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "kition-kdm",
@@ -1335,7 +1335,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "csv",
@@ -1349,7 +1349,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-arrange"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "js-sys",
@@ -1360,7 +1360,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-display"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "gif",
  "heic-rs",
@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-file"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "kition-kdm",
  "kition-time",
@@ -1394,7 +1394,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-fonts"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "harfrust",
  "kurbo",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-grid"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "kition-table-display",
@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-import"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "calamine",
@@ -1433,7 +1433,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-kit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "gif",
@@ -1459,7 +1459,7 @@ dependencies = [
 
 [[package]]
 name = "kition-table-picture"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "kition-table-arrange",
@@ -1480,7 +1480,7 @@ source = "git+https://github.com/KitionAI/kition-tessera?rev=832f61a5e4b4ac1a508
 
 [[package]]
 name = "kition-time"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "js-sys",
