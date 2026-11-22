@@ -1,0 +1,29 @@
+format: 1
+id: table.from-files/receipts
+feature: table.from-files
+intent: >-
+  A table from files (the editor's "New table from files"): receipts given with a request become
+  one record each in a new table, traced by file name with the receipt attached once; the table's
+  design is asked of the host's model once, under the kit's own purpose table.schema, with the
+  request and the files' names, and is completed and checked (the file name is the first and
+  primary field, there is an attachment field, every AI field has an instruction and reads a field
+  that exists, a design that cannot be built is refused saying what is wrong); every AI field is
+  read from its own record's receipt; a receipt the model cannot read stays a record to review and
+  does not stop the others; the file reopens with all of it. A canceled run, and a design that
+  cannot be built, leave no table behind. Without a host that runs models the table has the plain
+  design and its AI fields stay empty. In the editor, the bar's "New table from files" makes the
+  table from chosen files and shows it. The model is scripted; the engine is the built one.
+layer: gate
+source:
+  kind: synthetic
+  from: Kition's onboarding scenario AI-SCENE-005 (receipt extraction), which Kition's host ran as its scenario builder until 2026-11-22
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/fromFiles.spec.ts, src/aiFields.spec.ts]
+expected:
+  - actual: out:exec
+    compare: exit
+    value: 0
+since: "2026-11-22"

@@ -8,6 +8,9 @@ import { DashboardEditor } from './editor/DashboardEditor'
 import { createWorkerTableDataSource } from './dataSource'
 import { describe, engineManifest } from './engine'
 import { hostServices } from './hostRequests'
+import { engineAIRun } from './aiFields'
+import { tableFromFiles } from './fromFiles'
+import type { FromFilesRun } from './TableFromFilesDialog'
 import { CATALOGS } from './strings'
 import { kitTableHost } from './tableHost'
 import { exportTableThroughHost, type TableExportFormat } from './exportFile'
@@ -117,6 +120,12 @@ export function App({ host, i18n }: { host: HostConnection; i18n: i18n }) {
     )
   }, [host, i18n, source, exportTable])
 
+  // A table from files: the engine's commands, and the host's model for the design and the AI fields.
+  const fromFiles = useMemo<FromFilesRun>(() => {
+    const services = hostServices(host)
+    return (files, request, options) => tableFromFiles({ source, services, runField: engineAIRun(source, services), files, request, ...options })
+  }, [host, source])
+
   // The table or dashboard shown: the one chosen (first the host's `document.view`, then each
   // `document/reveal` and tab), while the document has it, or its first table.
   const tables = session.state?.tables ?? []
@@ -154,7 +163,7 @@ export function App({ host, i18n }: { host: HostConnection; i18n: i18n }) {
                 {session.doc ? (
                   <FrameChrome>
                     <div className="table-kit-tabs">
-                      <TableTabs tables={tables} dashboards={dashboards} shown={shown} onSelect={setChosen} source={source} readOnly={readOnly} documentPath={path} />
+                      <TableTabs tables={tables} dashboards={dashboards} shown={shown} onSelect={setChosen} source={source} readOnly={readOnly} documentPath={path} fromFiles={fromFiles} />
                     </div>
                   </FrameChrome>
                 ) : null}

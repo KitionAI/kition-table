@@ -174,6 +174,15 @@ features:
     gap: "table.markdown.export and table.import.preview are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
     cases: [table.import-export/save-reopen, regressions/issue-6, regressions/issue-export-bytes, regressions/issue-export-through-host]
     since: "2026-11-16"
+  - id: table.from-files
+    title: "A table from files: one record a file, with a design and AI fields made from what the person asked for"
+    dimension: [ai, function]
+    priority: P0
+    status: has
+    paths: [web/src/fromFiles.ts, web/src/fromFiles.spec.ts, web/src/TableFromFilesDialog.tsx, web/src/TableTabs.tsx, web/src/aiFields.ts, web/tests/flow.mjs]
+    gap: "The model is scripted in every test; in the browser flow the host runs no models, so the dialog is tested with the plain design and no AI fill."
+    cases: [table.from-files/receipts]
+    since: "2026-11-22"
   - id: table.dashboards
     title: "Dashboards and record previews"
     dimension: [function]

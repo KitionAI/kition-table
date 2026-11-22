@@ -30,8 +30,9 @@ type RunParams = {
   tableId: number
   fieldId: number
   record_ids: number[]
-  action: string
-  config: unknown
+  /** The run's action and config, as the editor's AI controls give them; without them the field's own. */
+  action?: string
+  config?: unknown
   limit?: number
 }
 
@@ -68,6 +69,39 @@ export function engineAIHost(
   /** The host refused a model call as `unavailable` (no model set up, or not signed in): its message. */
   onUnavailable?: (message: string) => void,
 ): NonNullable<TableHost['ai']> {
+  const run = engineAIRun(source, services, onUnavailable)
+  return {
+    // The host runs the person's model; the kit names no model of its own.
+    resolveRuntimeModel: async () => undefined,
+    loadModelOptions: async () => [],
+    async runCell({ tableId, recordId, fieldId, action, config }, options) {
+      const answer = await run<RunDataAIFieldCellResponse | RunDataAIFieldBatchResponse>(
+        { tableId, fieldId, record_ids: [recordId], action, config },
+        options?.signal,
+      )
+      if ('record' in answer) return answer
+      const item = answer.items.find((entry) => entry.record.id === recordId)
+      if (!item) {
+        const error = answer.errors?.find((entry) => entry.record_id === recordId)
+        throw new Error(error?.message || 'AI generation failed')
+      }
+      return { record: item.record, field: answer.field, state: item.state }
+    },
+    runBatch: ({ tableId, fieldId, record_ids, limit, action, config }, options) =>
+      run<RunDataAIFieldBatchResponse>({ tableId, fieldId, record_ids, limit, action, config }, options?.signal),
+  }
+}
+
+/**
+ * One AI field run over the engine and the host's model: prepares, generates, and applies it, and
+ * answers what `table.ai.apply` answers. `engineAIHost` runs the editor's AI controls with it, and
+ * a table from files (`fromFiles.ts`) fills its AI fields with it.
+ */
+export function engineAIRun(
+  source: EngineTableDataSource,
+  services: Pick<HostServices, 'generate'>,
+  onUnavailable?: (message: string) => void,
+): <T>(params: RunParams, signal?: AbortSignal) => Promise<T> {
   async function part(item: PreparedPart): Promise<GeneratePart | null> {
     if (item.type === 'text') return item
     if (item.hash && source.attachments) {
@@ -135,24 +169,5 @@ export function engineAIHost(
     return source.command<T>('ai.apply', { tableId, fieldId, action, results })
   }
 
-  return {
-    // The host runs the person's model; the kit names no model of its own.
-    resolveRuntimeModel: async () => undefined,
-    loadModelOptions: async () => [],
-    async runCell({ tableId, recordId, fieldId, action, config }, options) {
-      const answer = await run<RunDataAIFieldCellResponse | RunDataAIFieldBatchResponse>(
-        { tableId, fieldId, record_ids: [recordId], action, config },
-        options?.signal,
-      )
-      if ('record' in answer) return answer
-      const item = answer.items.find((entry) => entry.record.id === recordId)
-      if (!item) {
-        const error = answer.errors?.find((entry) => entry.record_id === recordId)
-        throw new Error(error?.message || 'AI generation failed')
-      }
-      return { record: item.record, field: answer.field, state: item.state }
-    },
-    runBatch: ({ tableId, fieldId, record_ids, limit, action, config }, options) =>
-      run<RunDataAIFieldBatchResponse>({ tableId, fieldId, record_ids, limit, action, config }, options?.signal),
-  }
+  return run
 }

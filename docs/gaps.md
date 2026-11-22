@@ -15,6 +15,7 @@ land work, then this list. The comparison with the target application is in
 ## Differences on working features
 
 - `table.dashboards`: table.file.render is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
+- `table.from-files`: the model is scripted in every test; in the browser flow the host runs no models, so the dialog is tested with the plain design and no AI fill.
 - `table.import-export`: table.markdown.export and table.import.preview are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
 - `table.links`: table.links.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
 - `table.schema`: table.tables.delete and table.fields.linkCandidates are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.

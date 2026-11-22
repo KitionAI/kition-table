@@ -14,8 +14,8 @@ export type GeneratePart =
   | { type: 'image'; url: string }
 
 export type GenerateParams = {
-  /** What the kit generates for: an AI field's cell. */
-  purpose: 'ai-field'
+  /** What the kit generates for: an AI field's cell, or the kit's own purpose (`table.<name>`, UI-G4). */
+  purpose: 'ai-field' | `table.${string}`
   output: 'text' | 'image'
   /** The document's preference, a hint only: the host runs the person's model settings. */
   model?: string

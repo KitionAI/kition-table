@@ -4,6 +4,10 @@ Changes to Kition Table, newest first. A version is the kit package version in `
 each version is published once, as the npm packages `@kition/kit-table-ui` and
 `@kition/kit-table-<platform>`.
 
+## Unreleased
+
+- New table from files, in the tables bar: choose files and say what you want from them; the table gets one record a file with the file attached, a design the host's model makes for the request (`host/generate`, the kit's own purpose `table.schema`), and its AI fields filled from each record's own file. A file the model cannot read stays a record to review; canceling leaves no table behind. It is what Kition's host did as its scenario builder.
+
 ## 0.1.1
 
 - A host lists a table file's tables and dashboards and opens the file at one through the kit's outline command (`table.file.outline`, `outline.command` in `kit.json`), without knowing the kit.

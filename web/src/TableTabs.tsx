@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { DownloadIcon as Download, FileUpIcon as FileUp, LayoutDashboardIcon as LayoutDashboard, PlusIcon as Plus } from '@kition/tessera/icons/react'
+import { DownloadIcon as Download, FilesIcon as Files, FileUpIcon as FileUp, LayoutDashboardIcon as LayoutDashboard, PlusIcon as Plus } from '@kition/tessera/icons/react'
 import { useTranslation } from 'react-i18next'
 import { Popover, PopoverContent, PopoverTrigger } from '@kition/sdk/editor'
 import { DATA_TABLE_ACTION_EVENT, type DataImportResult, type TableAction, type TableActionEventDetail } from './editor'
@@ -7,6 +7,7 @@ import { TableFileImportDialog } from './editor/TableFileImportDialog'
 import type { EngineTableDataSource } from './dataSource'
 import { addTemplateToDocument } from './templates/addTemplate'
 import { TemplateLibraryDialog } from './templates/TemplateLibraryDialog'
+import { TableFromFilesDialog, type FromFilesRun } from './TableFromFilesDialog'
 import type { TableTemplateDefinition } from './templates/tableTemplates'
 import type { Shown } from './shown'
 import { cn } from './lib/cn'
@@ -18,8 +19,8 @@ const TAB_CLASS = 'flex h-7 max-w-48 shrink-0 items-center gap-1.5 truncate roun
 /**
  * The document's tables and dashboards in the bar, the one shown highlighted; exporting the table
  * shown (CSV, Markdown: the table editor writes it beside the document through the host); and,
- * unless the document is read-only, adding a table (blank or from a template) and importing a file
- * as a new table.
+ * unless the document is read-only, adding a table (blank or from a template), importing a file
+ * as a new table, and making a table from files (one record a file, `fromFiles`).
  */
 export function TableTabs({
   tables,
@@ -29,6 +30,7 @@ export function TableTabs({
   source,
   readOnly,
   documentPath,
+  fromFiles,
 }: {
   tables: Array<{ id: number; title: string }>
   dashboards: Array<{ id: string; title: string }>
@@ -37,6 +39,8 @@ export function TableTabs({
   source: EngineTableDataSource
   readOnly: boolean
   documentPath: string
+  /** Makes a table from files; the bar offers it when given. */
+  fromFiles?: FromFilesRun
 }) {
   const { t } = useTranslation('table')
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -44,6 +48,7 @@ export function TableTabs({
   const [documentId, setDocumentId] = useState(0)
   const fileInput = useRef<HTMLInputElement | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
+  const [fromFilesOpen, setFromFilesOpen] = useState(false)
 
   /** Asks the table editor showing the table to export it. */
   function exportShown(action: TableAction) {
@@ -148,6 +153,19 @@ export function TableTabs({
           >
             <FileUp className="size-4" />
           </button>
+          {fromFiles ? (
+            <button
+              type="button"
+              className="grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={t('kit.fromFiles.title')}
+              aria-label={t('kit.fromFiles.title')}
+              onClick={() => setFromFilesOpen(true)}
+              data-testid="table-from-files"
+            >
+              <Files className="size-4" />
+            </button>
+          ) : null}
+          {fromFiles ? <TableFromFilesDialog open={fromFilesOpen} onOpenChange={setFromFilesOpen} run={fromFiles} onCompleted={(tableId) => onSelect({ kind: 'table', id: tableId })} /> : null}
           <input
             ref={fileInput}
             type="file"

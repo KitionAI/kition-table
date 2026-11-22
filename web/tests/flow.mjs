@@ -733,6 +733,35 @@ try {
     step('shows the imported table', current === 'page')
   })
 
+  // A table from files: one record a file, the file attached, in a new table the bar then shows.
+  // This host runs no models, so the table has the plain design and its AI fields stay empty.
+  await test('makes a table from files', async () => {
+    const before = await tables()
+    await kit.getByTestId('table-from-files').click()
+    await kit.getByTestId('table-from-files-dialog').waitFor({ timeout: 10000 })
+    const start = kit.getByTestId('table-from-files-start')
+    const idle = await start.isDisabled()
+    await kit.getByTestId('table-from-files-input').setInputFiles([
+      { name: 'cafe.png', mimeType: 'image/png', buffer: Buffer.from('a receipt') },
+      { name: 'books.pdf', mimeType: 'application/pdf', buffer: Buffer.from('another receipt') },
+    ])
+    await kit.getByTestId('table-from-files-request').fill('Archive my receipts')
+    await start.click()
+    await until(async () => (await tables()).length > before.length, 100)
+    await until(async () => (await kit.getByTestId('table-from-files-dialog').count()) === 0, 100)
+    const added = (await tables()).find((table) => !before.some((old) => old.id === table.id))
+    const rows = added ? await records(added.id) : []
+    const names = rows.map((record) => record.values.file_name)
+    const attached = rows.map((record) => (record.values.attachment ?? []).map((item) => item.name).join())
+    step(
+      'makes a table from files, one record a file with the file attached',
+      idle && added?.title === 'Files' && names.join() === 'cafe.png,books.pdf' && attached.join() === 'cafe.png,books.pdf',
+      JSON.stringify({ idle, title: added?.title, names, attached }),
+    )
+    const current = added ? await kit.getByTestId(`table-tab-${added.id}`).getAttribute('aria-current') : null
+    step('shows the table made from files', current === 'page')
+  })
+
   // 17. Active table controls stay readable in dark mode.
   // The host opens the file at one of its tables (`document.view`), then reveals its dashboard
   // and another table (`document/reveal`): the tree's table and dashboard children.
