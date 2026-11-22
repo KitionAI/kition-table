@@ -284,6 +284,7 @@ fn real_answers_and_errors_of_every_command_match_their_schemas() {
     r.ok("table.read", json!({ "tableId": table, "limit": 1 }));
     assert!(r.run("table.read", json!({ "viewId": 999 })).is_err());
     r.ok("table.file.render", json!({ "target": { "path": format!("tables/{table}") }, "scale": 2 }));
+    r.ok("table.file.outline", json!({}));
     r.ok("table.preview.show", json!({ "tableId": table }));
     assert!(r.run("table.preview.show", json!({ "viewId": 999 })).is_err());
 

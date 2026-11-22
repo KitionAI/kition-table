@@ -41,7 +41,7 @@ fn typed(node: &Value) -> bool {
 fn every_listed_command_has_a_description_and_a_typed_output() {
     let (mut kit, id, _folder) = new_document("described");
     let listed = kit.commands(Some(&id)).unwrap();
-    assert_eq!(listed.len(), 57);
+    assert_eq!(listed.len(), 58);
     let mut problems = Vec::new();
     for command in &listed {
         let description = command.description.as_deref().unwrap_or_default();
