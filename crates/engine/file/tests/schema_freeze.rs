@@ -243,17 +243,20 @@ fn a_view_config_names_fields_by_id_and_never_stores_the_search() {
     assert_eq!(updated.config["filter_tree"]["children"][0]["field_name"], json!("title"));
     // The document names them by object id, and holds no search.
     let object = here.replica().objects_of_type("View").into_iter().next().unwrap_or_else(|| panic!("no view"));
-    let stored = ok(here.replica().get(&object, "config"));
+    let register = ok(here.replica().get(&object, "config"));
+    let stored = ok(kition_table_file::kdm::view_store::assemble(here.replica(), &object));
     let status = status_object(&here);
     assert_eq!(stored["sort_items"], json!([{ "field": status, "direction": "desc" }]));
-    assert_eq!(stored["group_field"], json!(status));
-    assert!(stored.get("search_query").is_none() && stored.get("group_field_name").is_none());
+    assert_eq!(ok(here.replica().list(&object, "sortItems")).len(), 1, "the editor's sorts are Sort objects");
+    assert!(register.get("sort_items").is_none(), "not in the config register: {register}");
+    assert_eq!(register["group_field"], json!(status));
+    assert!(register.get("search_query").is_none() && register.get("group_field_name").is_none());
     assert!(!String::from_utf8_lossy(&ok(here.replica().snapshot())).contains("secret words"), "the search is in no byte of the replica");
     // The API's sorts name the field by its integer id; the document does not.
     let est = ok(here.create_field(c.table, &field("Est", "number"))).id;
     ok(here.replace_view_sorts(view, &[kition_table_file::ViewSort { field_id: est, direction: "asc".into() }]));
     assert_eq!(ok(here.list_view_sorts(view)), vec![kition_table_file::ViewSort { field_id: est, direction: "asc".into() }]);
-    let stored = ok(here.replica().get(&object, "config"));
+    let stored = ok(kition_table_file::kdm::view_store::assemble(here.replica(), &object));
     assert!(stored["sorts"][0].get("field_id").is_none() && stored["sorts"][0]["field"].is_string(), "{stored}");
 }
 
