@@ -941,8 +941,9 @@ fn every_write_rests_on_what_its_handler_reads() {
 /// `model/schema.json`): `map.set` of `$R1`'s `cells` under `$Notes`' id writes that one cell,
 /// is projected only while the field exists, and its value is read through the field's `type`
 /// and `options`, so it rests on that cell and on those two facts of
-/// `$Notes`: no position, no other cell, not the field's name or title. A key that is no field
-/// holds only the cell.
+/// `$Notes`: no position, no other cell, not the field's name or title. The cell holds a long
+/// text's `CellText` (`$N1`), whose characters the write replaces: it rests on its `text` too. A
+/// key that is no field holds only the cell.
 #[test]
 fn the_raw_cell_contract_rests_on_its_cell_and_its_field() {
     let (doc, roles) = fixture();
@@ -955,6 +956,7 @@ fn the_raw_cell_contract_rests_on_its_cell_and_its_field() {
     let expected = BTreeMap::from([
         (record.clone(), (Some(vec![format!("cells.{field}")]), Some(vec![]))),
         (field.clone(), (Some(vec!["options".to_owned(), "type".to_owned()]), Some(vec![]))),
+        (tool("$N1"), (Some(vec!["text".to_owned()]), Some(vec![]))),
     ]);
     assert_eq!(holds, expected);
     assert!(under.objects.is_empty() && under.within.is_empty() && under.covers.is_none());

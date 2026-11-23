@@ -64,7 +64,7 @@ fn with_texts(file: &TableFile, mut premises: Vec<Premise>) -> Vec<Premise> {
         }
         let cells = file.replica().map_entries(&record, "cells").unwrap_or_default();
         for (key, raw) in cells {
-            let held = premise.fields.as_ref().is_none_or(|fields| fields.iter().any(|field| *field == format!("cells.{key}")));
+            let held = premise.fields.as_ref().is_none_or(|fields| fields.iter().any(|field| field == "cells" || *field == format!("cells.{key}")));
             if held && let Some(text) = kition_table_file::kdm::cells::cell_text_of(file.replica(), &raw) {
                 texts.push(text.to_string());
             }

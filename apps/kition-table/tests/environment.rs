@@ -111,10 +111,11 @@ async fn seed_seven_one_hundred_tasks_and_create_classification() {
     println!("kit-env given up: {}; excluded: {:?}", json!(generated.given_up), generated.excluded);
     assert_eq!(generated.tasks.len(), 100, "{:?}", generated.given_up);
     assert!(generated.skipped.is_empty(), "{:?}", generated.skipped);
-    let creates = generate(&kit, dir.path(), &GenerateOptions { count: 20, kinds: Some(vec!["create".into()]), ..options }).await.unwrap();
+    // A field's choices are two more lists to create in: enough tasks to reach every type.
+    let creates = generate(&kit, dir.path(), &GenerateOptions { count: 40, kinds: Some(vec!["create".into()]), ..options }).await.unwrap();
     // Creation tasks replay with the SDK's raw `direct` contracts and creation replay.
     println!("create-only tasks {}; given up {}", creates.tasks.len(), json!(creates.given_up));
-    assert_eq!(creates.tasks.len(), 20, "{:?}", creates.given_up);
+    assert_eq!(creates.tasks.len(), 40, "{:?}", creates.given_up);
     assert!(creates.given_up.is_empty(), "{:?}", creates.given_up);
     assert!(creates.tasks.iter().all(|task| task.kind == "create" && !task.solution.is_empty()));
     let types: std::collections::BTreeSet<_> = creates
@@ -123,5 +124,9 @@ async fn seed_seven_one_hundred_tasks_and_create_classification() {
         .flat_map(|task| task.ground_truth["created"].as_array().cloned().unwrap_or_default())
         .filter_map(|item| item["type"].as_str().map(str::to_owned))
         .collect();
-    assert_eq!(types, ["Dashboard", "Field", "Record", "Table", "View"].map(str::to_owned).into(), "every stored type is created and replayed");
+    assert_eq!(
+        types,
+        ["Choice", "Dashboard", "Field", "Record", "Table", "View"].map(str::to_owned).into(),
+        "every stored type is created and replayed"
+    );
 }
