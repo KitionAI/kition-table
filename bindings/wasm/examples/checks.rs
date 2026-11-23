@@ -65,7 +65,7 @@ fn main() -> Result<(), String> {
 }
 
 /// Every `.ktable` fixture, by file name.
-fn fixtures() -> Result<Vec<(&'static str, Vec<u8>)>, String> {
+pub fn fixtures() -> Result<Vec<(&'static str, Vec<u8>)>, String> {
     Ok(vec![
         (
             "basic.ktable",

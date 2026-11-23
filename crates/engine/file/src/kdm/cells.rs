@@ -380,6 +380,7 @@ impl Encoder {
     /// The value to store for the plain `value` (not `null`) of `field`'s cell of `record`, which
     /// holds `current` now: what the cell should hold (unchanged when it is `current`). A long
     /// text's characters are written into its `CellText` (made when the cell has none).
+    #[allow(clippy::too_many_arguments, reason = "the cell's place, its kind, its value before and after, and the texts read first")]
     pub fn encode(
         &mut self,
         tx: &mut Tx<'_>,
