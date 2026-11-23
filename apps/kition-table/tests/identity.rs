@@ -151,7 +151,7 @@ async fn a_table_tells_its_identity_and_forks_into_a_new_document_without_histor
     assert_eq!(count(&forked, "SELECT COUNT(*) FROM kition_documents WHERE id <> (SELECT value FROM kition_meta WHERE key = 'document_id')"), 0);
     assert_eq!(count(&forked, "SELECT COUNT(*) FROM kition_kdm_changes"), 0, "a fork has no change rows");
     assert_eq!(count(&forked, "SELECT COUNT(*) FROM kition_record_history"), 0, "no record history");
-    assert_eq!(count(&forked, "SELECT COUNT(*) FROM kition_change_log"), 0, "no change log");
+    assert_eq!(count(&forked, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'kition_change_log'"), 0, "no change log");
     assert_eq!(count(&forked, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'kition_kdm_origins'"), 0, "no origin log");
     assert_eq!(count(&forked, "SELECT COUNT(*) FROM kition_records WHERE deleted_at IS NOT NULL"), 0, "no deleted rows");
     assert_eq!(count(&forked, "PRAGMA freelist_count"), 0, "no free pages");

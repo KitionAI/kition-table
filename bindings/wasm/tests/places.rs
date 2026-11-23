@@ -68,10 +68,10 @@ fn deriving_context_changes_no_editor_or_document_state() {
 #[test]
 fn effective_view_settings_have_derived_values_even_without_stored_config() {
     let doc = doc();
-    let values = doc.derived(&[object(&doc, "View")], &["rowHeight".into(), "searchQuery".into()]).unwrap();
+    let values = doc.derived(&[object(&doc, "View")], &["rowHeight".into(), "frozenColumnCount".into()]).unwrap();
     assert_eq!(values.len(), 1);
     assert_eq!(values[0].values["rowHeight"], Value::Null);
-    assert_eq!(values[0].values["searchQuery"], Value::Null);
+    assert_eq!(values[0].values["frozenColumnCount"], Value::Null);
 }
 
 #[test]

@@ -14,8 +14,8 @@
 //! `covered` refuses for (`TableDocument::covered_facts`): name membership (`~names:est`,
 //! `~tableNames:plan`), link membership (`~linkCells:<record>.<field>`, every link of a record,
 //! `~linkCells:*.<field>` every link of a field), partners (`~mirrors`), row identities
-//! (`~rowIds`), field lists (`~lists`; the kit holds one as its table's `~fieldOrder`), layout entries and select labels
-//! (`options.choices:Done`). Every row runs twice: with tool ids, and with every table, field,
+//! (`~rowIds`), field lists (`~lists`; the kit holds one as its table's `~fieldOrder`) and layout
+//! entries; a select label is held as its choice's `name` (`$Done`). Every row runs twice: with tool ids, and with every table, field,
 //! view and record as its local integer, which must hold the same and the window of each
 //! integer's place in its list (integers are local projection addresses).
 //!
@@ -67,7 +67,9 @@ struct Role {
 ///   `$R3` (Three); views `$V` (grid "All": filter Status is To do, sort Est desc) and `$K`
 ///   (kanban grouped by Status);
 /// - `$P` (`people`): fields `$Name` (primary), `$PTasks` (link to `$T`); records `$P1` (Ada),
-///   `$P2` (Grace); view `$PV`.
+///   `$P2` (Grace); view `$PV`;
+/// - the choices of `$Status` (`$ToDo`, `$InProgress`, `$Done`) and of `$Tags` (`$TagA`,
+///   `$TagB`), and the long texts of `$R1`'s and `$R2`'s notes (`$N1`, `$N2`).
 fn fixture() -> (TableDocument, Vec<Role>) {
     let mut doc = TableDocument::create("Read.ktable", 0, 0).unwrap();
     let p = run(&mut doc, "table.tables.create", json!({"title":"People","fields":[{"title":"Name","type":"text","primary":true}]}));
@@ -138,6 +140,21 @@ fn fixture() -> (TableDocument, Vec<Role>) {
     for (role, record) in [("$P1", &p1), ("$P2", &p2), ("$R1", &r1), ("$R2", &r2), ("$R3", &r3)] {
         roles.push(Role { role, tool: tool(record), local: Some(int(record)), name: None });
     }
+    let tool_of = |role: &str| roles.iter().find(|r| r.role == role).map(|r| r.tool.clone()).unwrap();
+    let mut held = Vec::new();
+    for (field, names) in [("$Status", &["$ToDo", "$InProgress", "$Done"][..]), ("$Tags", &["$TagA", "$TagB"][..])] {
+        let field = kition_kit::kdm::ObjectId::from_string(tool_of(field));
+        let choices = kition_table_file::kdm::cells::listed_choices(doc.file().replica(), &field).unwrap();
+        assert_eq!(choices.len(), names.len());
+        for (choice, role) in choices.iter().zip(names) {
+            held.push(Role { role: *role, tool: choice.id.to_string(), local: None, name: None });
+        }
+    }
+    for (record, role) in [("$R1", "$N1"), ("$R2", "$N2")] {
+        let raw = doc.file().replica().map_get(&kition_kit::kdm::ObjectId::from_string(tool_of(record)), "cells", &tool_of("$Notes")).unwrap();
+        held.push(Role { role, tool: raw.as_str().unwrap().to_owned(), local: None, name: None });
+    }
+    roles.extend(held);
     let _ = (ptasks, tags, look, calc, summary);
     (doc, roles)
 }
@@ -408,15 +425,17 @@ const ROWS: &[Row] = &[
         &[("$T", "~names:who", "-"), ("$Owner", "~owner", "-"), ("$Name", "~owner", "-")],
     ),
     // fields.update: each supplied property is replaced (readonly is re-derived from the values at
-    // write time). A type change writes only `type`: no stored cell is converted, so a cell
-    // written meanwhile is not lost. A formula names fields by name. `is_primary` replaces the
-    // table's primaryField. pinned: `~owner` of the addressed field.
+    // write time). A type change writes `type` and stores the cells again in the new type's shape
+    // from what they hold when it runs, so a cell written meanwhile is not lost. New options name
+    // the choices: each choice is kept, renamed or left out by its name. A formula names fields
+    // by name. `is_primary` replaces the table's primaryField. pinned: `~owner` of the addressed
+    // field.
     r("table.fields.update", r#"{"tableId":"$T","fieldId":"$Notes","title":"Remarks"}"#, &[("$T", "-", "-"), ("$Notes", "title,~owner", "-")]),
     r("table.fields.update", r#"{"tableId":"$T","fieldId":"$Est","type":"text"}"#, &[("$T", "-", "-"), ("$Est", "type,~owner", "-")]),
     r(
         "table.fields.update",
         r#"{"tableId":"$T","fieldId":"$Status","options":{"choices":["To do","Done","Later"]}}"#,
-        &[("$T", "-", "-"), ("$Status", "options,~owner", "-")],
+        &[("$T", "-", "-"), ("$Status", "choices,options,~owner", "-"), ("$ToDo", "name", "-"), ("$InProgress", "name", "-"), ("$Done", "name", "-")],
     ),
     r(
         "table.fields.update",
@@ -497,7 +516,6 @@ const ROWS: &[Row] = &[
         r#"{"tableId":"$T","viewId":"$V","frozen_column_count":2}"#,
         &[("$T", "-", "-"), ("$V", "~frozenColumnCount,~owner", "-")],
     ),
-    r("table.views.patchConfig", r#"{"tableId":"$T","viewId":"$V","search_query":"x"}"#, &[("$T", "-", "-"), ("$V", "~searchQuery,~owner", "-")]),
     // patchField: the view by id, the field by id; the one entry written. pinned: `~owner`, the
     // table, and the layout entry's key (`.position`).
     r(
@@ -517,16 +535,16 @@ const ROWS: &[Row] = &[
     ),
     // records.create: appended; values keyed by field name (membership), written by the field's
     // type (a computed field's value is dropped); a select label must still be one of the
-    // choices; a link value names target records and is written by the link
+    // choices (its choice's name); a link value names target records and is written by the link
     // field's type and options, mirrored by its partner (its options and type, the target's
     // links in it). Required flags only refuse; readonly is not read.
-    // pinned (spelling): `~names:*`, `options.choices:Done`, `~mirrors`, `~linkCells`, `~owner`;
-    // the field's `type` (computed values are dropped).
+    // pinned (spelling): `~names:*`, the label's choice (`$Done`), `~mirrors`, `~linkCells`,
+    // `~owner`; the field's `type` (computed values are dropped).
     r("table.records.create", r#"{"tableId":"$T","values":{"title":"Four"}}"#, &[("$T", "~names:title", "-"), ("$Title", "name,type", "-")]),
     r(
         "table.records.create",
         r#"{"tableId":"$T","values":{"title":"Four","status":"Done"}}"#,
-        &[("$T", "~names:status,~names:title", "-"), ("$Title", "name,type", "-"), ("$Status", "name,options.choices:Done,type", "-")],
+        &[("$T", "~names:status,~names:title", "-"), ("$Title", "name,type", "-"), ("$Status", "name,type", "-"), ("$Done", "name", "-")],
     ),
     r(
         "table.records.create",
@@ -547,7 +565,7 @@ const ROWS: &[Row] = &[
     r(
         "table.records.update",
         r#"{"tableId":"$T","recordId":"$R1","values":{"notes":"x"}}"#,
-        &[("$T", "~names:notes", "-"), ("$R1", "cells.$Notes,~owner", "-"), ("$Notes", "name,type", "-")],
+        &[("$T", "~names:notes", "-"), ("$R1", "cells.$Notes,~owner", "-"), ("$Notes", "name,type", "-"), ("$N1", "text", "-")],
     ),
     rw(
         "table.records.update",
@@ -621,7 +639,7 @@ const ROWS: &[Row] = &[
     rw(
         "table.transact",
         r#"{"ops":[{"op":"cells.set","tableId":"@T","records":[{"rowKey":"$R1","values":{"notes":"x"}}]}]}"#,
-        &[("$T", "~names:notes", "-"), ("$R1", "cells.$Notes,~owner", "-"), ("$Notes", "name,type", "-")],
+        &[("$T", "~names:notes", "-"), ("$R1", "cells.$Notes,~owner", "-"), ("$Notes", "name,type", "-"), ("$N1", "text", "-")],
         &["$Base.tables[0..1]"],
     ),
     rw(

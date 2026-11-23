@@ -225,8 +225,8 @@ impl TableFile {
             let mut created = Vec::new();
             for op in &resolved {
                 match op {
-                    Resolved::Cells(table, edits, links) => {
-                        model::set_cells_many(tx, table, edits)?;
+                    Resolved::Cells(table, edits, links, texts) => {
+                        model::set_cells_known(tx, table, edits, texts)?;
                         let records: Vec<ObjectId> = edits.iter().map(|(record, _)| record.clone()).collect();
                         link_records(tx, &records, links)?;
                     }
@@ -265,7 +265,8 @@ impl TableFile {
                     edits.push((ObjectId::from_string(edit.row_key.clone()), by_field_id(&names, &cells)));
                     links.push(link_cells);
                 }
-                Resolved::Cells(table, edits, links)
+                let texts = super::cells::Texts::of_records(&self.replica, edits.iter().map(|(record, _)| record));
+                Resolved::Cells(table, edits, links, texts)
             }
             TableOp::RecordsCreate { table_id, at, records } => {
                 let table = table_object(&self.conn, *table_id)?;
@@ -614,7 +615,8 @@ fn live_record_keys(conn: &Connection) -> Result<BTreeSet<(i64, String)>> {
 
 /// An op with its integer ids and field names resolved to object ids.
 enum Resolved {
-    Cells(ObjectId, Vec<(ObjectId, serde_json::Map<String, serde_json::Value>)>, Vec<LinkCells>),
+    /// With the records' long texts as they read before the write.
+    Cells(ObjectId, Vec<(ObjectId, serde_json::Map<String, serde_json::Value>)>, Vec<LinkCells>, super::cells::Texts),
     Create(ObjectId, Option<model::Anchor>, Vec<serde_json::Map<String, serde_json::Value>>, Vec<LinkCells>),
     Delete(ObjectId, Vec<ObjectId>),
     Move(ObjectId, Vec<ObjectId>, Option<ObjectId>),

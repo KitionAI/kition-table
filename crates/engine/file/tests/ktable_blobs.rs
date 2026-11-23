@@ -78,9 +78,9 @@ fn a_stored_blob_reads_back_and_survives_a_reopen() {
     assert_eq!(blob.bytes, bytes);
     assert_eq!(blob.info, info);
     assert_eq!(ok(file.get_record(table_id, record_id)).values[&files][0]["url"], json!(blob_url(&info.hash)));
-    // Blobs need no schema change: the file stays at the schema older builds open.
+    // Blobs need no schema change: the file stays at the one schema this kit reads.
     assert_eq!(ok(file.info()).schema_version, SCHEMA_VERSION);
-    assert_eq!(SCHEMA_VERSION, 4);
+    assert_eq!(SCHEMA_VERSION, 1);
     assert_eq!(ok(file.blob(&blobs::blob_hash(b"other"))), None);
     assert_eq!(ok(file.blob("not a hash")), None);
 }

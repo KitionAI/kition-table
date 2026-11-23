@@ -4,6 +4,10 @@ Changes to Kition Table, newest first. A version is the kit package version in `
 each version is published once, as the npm packages `@kition/kit-table-ui` and
 `@kition/kit-table-<platform>`.
 
+## Unreleased
+
+- The table document's shape is final for the release (schema version 1, and version 1 of the `.ktable` file's own schema): a select's options are `Choice` objects its field lists and its cells hold their ids, so options added at once on two sides are both kept and a renamed option renames every cell; a long text's characters are a `CellText`'s text and a field's AI prompt is a text, so two people typing in one cell or one prompt both keep their typing; a view's config names its fields by object id, not by the projection's integer ids, and never holds the editor's search (`views.patchConfig` no longer takes `search_query`). The unused `kition_change_log` table is gone. Files written before this are not read: there is no migration.
+
 ## 0.1.2
 
 - New table from files, in the tables bar: choose files and say what you want from them; the table gets one record a file with the file attached, a design the host's model makes for the request (`host/generate`, the kit's own purpose `table.schema`), and its AI fields filled from each record's own file. A file the model cannot read stays a record to review; canceling leaves no table behind. It is what Kition's host did as its scenario builder.

@@ -73,7 +73,6 @@ export type DataInlineViewConfig = {
   cover_field_name?: string
   row_height?: GridRowHeightKey
   frozen_column_count?: number
-  search_query?: string
 }
 export type GridCellSelection = { recordId: number | null; fieldName: string } | null
 

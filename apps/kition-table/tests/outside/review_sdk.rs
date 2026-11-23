@@ -80,7 +80,7 @@ async fn batch_index_guards_refuse_an_outside_prefix_change() {
             }
             let op = match form {
                 0 => {
-                    json!({"op":"create","type":"Field","in":format!("{}.fields",table.as_str().unwrap()),"at":2,"fields":{"name":"mine","title":"Mine","type":"text","required":false,"readonly":false,"formula":"","aiPrompt":""}})
+                    json!({"op":"create","type":"Field","in":format!("{}.fields",table.as_str().unwrap()),"at":2,"fields":{"name":"mine","title":"Mine","type":"text","required":false,"readonly":false,"formula":""}})
                 }
                 1 => json!({"op":"list.insert","target":table,"field":"fields","item":notes,"index":2}),
                 _ => json!({"op":"list.move","target":table,"field":"fields","from":1,"to":0}),

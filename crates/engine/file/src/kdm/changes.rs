@@ -19,7 +19,7 @@ use rusqlite::OptionalExtension;
 use serde::Serialize;
 use serde_json::Value;
 
-use super::model::{LINK, RECORD};
+use super::model::{CELL_TEXT, LINK, RECORD};
 use super::read::ModelView;
 use super::store;
 use crate::{Result, TableFile, TableFileError};
@@ -172,11 +172,12 @@ fn is_type(replica: &Replica, id: &ObjectId, ty: &str) -> bool {
     replica.object_type(id).is_ok_and(|found| found == ty)
 }
 
+/// A record's cells as plain values ([`super::cells::decode`]).
 fn cells(replica: &Replica, id: &ObjectId) -> Result<HashMap<String, Value>> {
     if !replica.exists(id) {
         return Ok(HashMap::new());
     }
-    Ok(replica.map_entries(id, "cells")?.into_iter().collect())
+    Ok(replica.map_entries(id, "cells")?.into_iter().map(|(key, raw)| (key, super::cells::decode(replica, &raw))).collect())
 }
 
 /// The record's row (`(id, table id)`), live or deleted, in the file's projection.
@@ -242,6 +243,15 @@ fn diff(file: &TableFile, prev: &Replica, next: &Replica, changed: &BTreeSet<Obj
             };
             if let Some((record_id, table_id)) = record_row(file, id.as_str())? {
                 out.push(kind, RecordChange { table_id, record_id, field_ids: None, origin: origin.to_owned() });
+            }
+        } else if is_type(prev, id, CELL_TEXT) || is_type(next, id, CELL_TEXT) {
+            // A long text's characters changed: its record's cell did.
+            let source = if next.exists(id) { next } else { prev };
+            let end = |name: &str| -> Result<String> { Ok(source.get(id, name)?.as_str().unwrap_or_default().to_owned()) };
+            let (record, field) = (ObjectId::from_string(end("record")?), end("field")?);
+            if before.table_of_record(&record)?.is_some() && after.table_of_record(&record)?.is_some() {
+                let field = field_id(file, &mut fields, &field)?;
+                note(record, field, &mut updated);
             }
         } else if is_type(prev, id, LINK) || is_type(next, id, LINK) {
             let source = if next.exists(id) { next } else { prev };

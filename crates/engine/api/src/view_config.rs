@@ -110,8 +110,6 @@ pub struct ConfigPatch {
     pub row_height: Option<String>,
     #[serde(default)]
     pub frozen_column_count: Option<i64>,
-    #[serde(default)]
-    pub search_query: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
@@ -183,8 +181,8 @@ pub fn put_groups(file: &mut TableFile, view_id: i64, request: ItemsRequest) -> 
     Ok(items_response(&items))
 }
 
-/// `PATCH /views/{viewId}/config`: row height, frozen columns, and search; a blank text value
-/// removes its key.
+/// `PATCH /views/{viewId}/config`: row height and frozen columns; a blank text value removes its
+/// key. The search is the editor's own state, never stored in the document.
 pub fn patch_config(file: &mut TableFile, table_id: i64, view_id: i64, request: ConfigPatch) -> ApiResult<Value> {
     let table = file.get_table(table_id).map_err(|_| ApiError::not_found("Table does not exist"))?;
     let view = table.views.iter().find(|view| view.id == view_id).ok_or_else(|| ApiError::not_found("View does not exist"))?;
@@ -200,7 +198,6 @@ pub fn patch_config(file: &mut TableFile, table_id: i64, view_id: i64, request: 
         }
     };
     set_text("row_height", request.row_height);
-    set_text("search_query", request.search_query);
     if let Some(count) = request.frozen_column_count {
         if count < 0 {
             return Err(ApiError::bad_request("frozen_column_count must be >= 0"));

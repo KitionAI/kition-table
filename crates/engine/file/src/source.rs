@@ -7,6 +7,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::json::{self, encode_default, fallback};
+use crate::kdm::cells::Texts;
 use crate::kdm::commit::{
     LinkFields, any_object, by_field_id, field_id_of, field_object, field_objects_by_name, link_records, record_id_of, record_object, split_links,
     table_id_of, table_object, view_id_of, view_object,
@@ -390,7 +391,16 @@ impl TableFile {
             },
             ..patch.clone()
         };
-        self.commit(|tx| model::update_field(tx, &field, &patch))?;
+        // What the field's texts read now: its prompt, and the long texts of its cells when its
+        // type changes (they are written again in the new type's shape).
+        let mut texts = if patch.field_type.is_some() {
+            let table = table_object(&self.conn, table_id)?;
+            Texts::of_records(&self.replica, &self.model_view().record_ids(&table)?)
+        } else {
+            Texts::default()
+        };
+        texts.read(&self.replica, &field, "aiPrompt");
+        self.commit(|tx| model::update_field_known(tx, &field, &patch, &texts))?;
         self.get_field(table_id, field_id)
     }
 
@@ -405,7 +415,8 @@ impl TableFile {
     pub fn create_view(&mut self, table_id: i64, spec: &ViewSpec) -> Result<View> {
         self.writable()?;
         let table = table_object(&self.conn, table_id)?;
-        let (view, _) = self.commit(|tx| model::create_view(tx, &table, spec))?;
+        let spec = ViewSpec { config: self.config_in(table_id, &spec.config)?, ..spec.clone() };
+        let (view, _) = self.commit(|tx| model::create_view(tx, &table, &spec))?;
         let view_id = view_id_of(&self.conn, &view)?;
         self.get_view(table_id, view_id)
     }
@@ -418,7 +429,7 @@ impl TableFile {
         let view = view_object(&self.conn, table_id, view_id)?;
         let current = self.get_view(table_id, view_id)?;
         let config = match &patch.config {
-            Some(config) => Some(crate::view_config::keep_orderings(&current.config, config)?),
+            Some(config) => Some(self.config_in(table_id, &crate::view_config::keep_orderings(&current.config, config)?)?),
             None => None,
         };
         let patch = ViewPatch { config, ..patch.clone() };
@@ -432,6 +443,19 @@ impl TableFile {
         let view = view_object(&self.conn, table_id, view_id)?;
         self.commit(|tx| model::delete_view(tx, &table, &view))?;
         Ok(())
+    }
+
+    /// A view config of the table as the API writes it, with every field it names only by
+    /// integer id (`field_id`) named by name too, so the model stores the field's object id
+    /// ([`crate::kdm::view_refs`]). A JSON string is decoded first.
+    fn config_in(&self, table_id: i64, config: &Value) -> Result<Value> {
+        let config = match config {
+            Value::String(raw) if raw.trim().is_empty() => Value::Null,
+            Value::String(raw) => serde_json::from_str(raw).map_err(|_| TableFileError::invalid("invalid json string"))?,
+            other => other.clone(),
+        };
+        let names: std::collections::HashMap<i64, String> = self.list_fields(table_id)?.into_iter().map(|field| (field.id, field.name)).collect();
+        Ok(crate::kdm::view_refs::name_local_ids(&config, &|id| names.get(&id).cloned()))
     }
 
     /// The document's base, or [`TableFileError::Invalid`] for a replica without one.
@@ -634,8 +658,9 @@ impl TableFile {
             ),
             None => None,
         };
+        let texts = Texts::of_records(&self.replica, [&record_object]);
         self.commit(|tx| {
-            model::set_cells(tx, &table_object, &record_object, &cells)?;
+            model::set_cells_known(tx, &table_object, &[(record_object.clone(), cells.clone())], &texts)?;
             link_records(tx, std::slice::from_ref(&record_object), std::slice::from_ref(&links))?;
             if let Some(before) = &moved {
                 model::move_records(tx, &table_object, std::slice::from_ref(&record_object), before.as_ref())?;

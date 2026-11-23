@@ -407,7 +407,6 @@ export type DataViewConfig = {
   groups?: GroupItem[]
   row_height?: RowHeight
   frozen_column_count?: number
-  search_query?: string
   hidden_field_names?: string[]
   cover_field_name?: string
   group_field_name?: string
@@ -436,7 +435,6 @@ export type ViewFieldPatchPayload = {
 export type ViewConfigPatchPayload = {
   row_height?: RowHeight | null
   frozen_column_count?: number
-  search_query?: string | null
 }
 
 export type BulkDeleteRecordsPayload = {

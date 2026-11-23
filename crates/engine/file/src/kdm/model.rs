@@ -5,6 +5,11 @@
 //! `Record`'s cells are a map keyed by field object id; record links are `Link` objects
 //! `(from record, field, to record)`, so concurrent link edits merge as a set.
 //!
+//! A select's options are `Choice` objects its `Field.choices` lists, and its cells hold choice
+//! ids; a long text's cell holds a `CellText` id; a field's AI prompt is its `aiPrompt` text (see
+//! [`super::cells`]). The functions here take and give plain values (option names, texts) and
+//! store them in that shape. View configs name fields by object id ([`super::view_refs`]).
+//!
 //! Every function here only stages operations: run them inside [`transact`] (or
 //! [`kition_kdm::Replica::transact`]) so a failure anywhere leaves the document unchanged. Object
 //! ids are UUID v7 except a record's, which is its `row_key` (a UUID v4). Options and configs
@@ -21,6 +26,8 @@ use std::collections::{HashMap, HashSet};
 use kition_kdm::{KdmError, ObjectId, Origin, Replica, Tx};
 use serde_json::{Map, Value, json};
 
+use super::cells::{self, CellKind, Encoder, Texts};
+use super::view_refs;
 use crate::json::{self, fallback};
 use crate::source::{FIELD_TYPES, FieldPatch, FieldSpec, TablePatch, TableSpec, VIEW_TYPES, ViewPatch, ViewSpec};
 use crate::{Result, TableFileError};
@@ -32,6 +39,8 @@ pub const VIEW: &str = "View";
 pub const RECORD: &str = "Record";
 pub const LINK: &str = "Link";
 pub const DASHBOARD: &str = "Dashboard";
+pub const CHOICE: &str = "Choice";
+pub const CELL_TEXT: &str = "CellText";
 
 /// Field types whose values are derived, never stored in `Record.cells`. A `link_to_record`'s
 /// display value is derived from its `Link` objects.
@@ -201,8 +210,15 @@ pub fn delete_table(tx: &mut Tx<'_>, base: &ObjectId, table: &ObjectId) -> Resul
             tx.delete(&link.id)?;
         }
     }
+    let mut doomed: Vec<ObjectId> = Vec::new();
+    for id in tx.objects_of_type(CHOICE).into_iter().chain(tx.objects_of_type(CELL_TEXT)) {
+        let owner = |key: &str| tx.get(&id, key).ok().and_then(|value| value.as_str().map(ObjectId::from_string));
+        if owner("field").is_some_and(|field| field_set.contains(&field)) || owner("record").is_some_and(|record| record_set.contains(&record)) {
+            doomed.push(id);
+        }
+    }
     let mut seen = HashSet::new();
-    for id in fields.iter().chain(&views).chain(&records) {
+    for id in fields.iter().chain(&views).chain(&records).chain(&doomed) {
         if seen.insert(id) && tx.exists(id) {
             tx.delete(id)?;
         }
@@ -246,11 +262,18 @@ fn create_field_as(tx: &mut Tx<'_>, table: &ObjectId, spec: &FieldSpec, check_cy
         "required": spec.required,
         "readonly": readonly,
         "formula": spec.formula.trim(),
-        "aiPrompt": spec.ai_prompt.trim(),
     }));
-    put_json(&mut values, "options", &object_ids_only(decode_json(&spec.options)?)?)?;
+    let (options, choices) = cells::split_choices(&object_ids_only(decode_json(&spec.options)?)?);
+    put_json(&mut values, "options", &options)?;
     put_json(&mut values, "meta", &spec.meta)?;
     let field = tx.create_with_id(FIELD, &crate::ids::object(), values)?;
+    let prompt = spec.ai_prompt.trim();
+    if !prompt.is_empty() {
+        tx.text_insert(&field, "aiPrompt", 0, prompt)?;
+    }
+    if !choices.is_empty() {
+        cells::write_choices(tx, &field, &choices)?;
+    }
     let position = match spec.order {
         Some(order) => usize::try_from(order.max(1) - 1).unwrap_or(usize::MAX),
         None => usize::MAX,
@@ -268,8 +291,22 @@ fn create_field_as(tx: &mut Tx<'_>, table: &ObjectId, spec: &FieldSpec, check_cy
 /// Patches a field. Field names are immutable. `is_primary: Some(true)` makes it its table's
 /// primary field; `Some(false)` on the primary field is refused ([`TableFileError::Invalid`]), and
 /// so is a change that makes a derived field depend on itself ([`check_acyclic`]).
+///
+/// Options that name `choices` make the field list them ([`cells::write_choices`]); a new
+/// `ai_prompt` replaces the text, all of it (see [`update_field_known`]). A new type stores the
+/// cells as the type stores them: a select's names become choices, a long text's text a
+/// `CellText`, and back.
 pub fn update_field(tx: &mut Tx<'_>, field: &ObjectId, patch: &FieldPatch) -> Result<()> {
+    update_field_known(tx, field, patch, &Texts::default())
+}
+
+/// [`update_field`] knowing what the field's texts read now (its `aiPrompt`, and the long texts
+/// of its cells): a new prompt changes only what differs, and a long text field can change type
+/// (its cells' texts are read from `texts`; a text it does not know is
+/// [`TableFileError::Invalid`]).
+pub fn update_field_known(tx: &mut Tx<'_>, field: &ObjectId, patch: &FieldPatch, texts: &Texts) -> Result<()> {
     require(tx, field, FIELD)?;
+    let old_type = string(tx, field, "type")?;
     if let Some(title) = patch.title.as_deref().map(str::trim)
         && !title.is_empty()
     {
@@ -287,13 +324,18 @@ pub fn update_field(tx: &mut Tx<'_>, field: &ObjectId, patch: &FieldPatch) -> Re
     let readonly = patch.readonly.unwrap_or(tx.get(field, "readonly")? == json!(true));
     set_if_changed(tx, field, "readonly", json!(readonly || forces_readonly(&field_type)))?;
     if let Some(options) = &patch.options {
-        set_if_changed(tx, field, "options", object_ids_only(decode_json(options)?)?)?;
+        let (options, choices) = cells::split_choices(&object_ids_only(decode_json(options)?)?);
+        set_if_changed(tx, field, "options", options)?;
+        cells::write_choices(tx, field, &choices)?;
     }
     if let Some(formula) = &patch.formula {
         set_if_changed(tx, field, "formula", json!(formula))?;
     }
     if let Some(prompt) = &patch.ai_prompt {
-        set_if_changed(tx, field, "aiPrompt", json!(prompt))?;
+        cells::write_text(tx, field, "aiPrompt", texts, prompt)?;
+    }
+    if field_type != old_type && !is_computed(&field_type) {
+        convert_cells(tx, field, CellKind::of(&field_type), texts)?;
     }
     if let Some(meta) = &patch.meta {
         set_if_changed(tx, field, "meta", decode_json(meta)?)?;
@@ -310,6 +352,37 @@ pub fn update_field(tx: &mut Tx<'_>, field: &ObjectId, patch: &FieldPatch) -> Re
     // A new primary field changes what link chips of other tables read, so it can close a cycle too.
     if patch.field_type.is_some() || patch.options.is_some() || patch.formula.is_some() || patch.is_primary.is_some() {
         check_acyclic(tx, field)?;
+    }
+    Ok(())
+}
+
+/// Stores every cell of `field` as a field of `kind` stores it, after a change of type: each
+/// record's value, read whatever shape it has ([`cells::decode_in`]), is written again.
+fn convert_cells(tx: &mut Tx<'_>, field: &ObjectId, kind: CellKind, texts: &Texts) -> Result<()> {
+    let Some(table) = table_of_field(tx, field)? else {
+        return Ok(());
+    };
+    let key = field.as_str();
+    let mut encoder = Encoder::default();
+    for record in Listing::read(tx, &table, "records")?.ids() {
+        let current = tx.map_get(&record, "cells", key)?;
+        if current.is_null() {
+            continue;
+        }
+        let old_text = cells::cell_text_in(tx, &current);
+        if kind == CellKind::LongText && old_text.is_some() {
+            continue;
+        }
+        let plain = cells::decode_in(tx, &current, texts)?;
+        // A long text kept as a long text keeps its `CellText`.
+        let keep = if kind == CellKind::LongText { current.clone() } else { Value::Null };
+        let stored = encoder.encode(tx, &record, field, kind, &keep, &plain, texts)?;
+        if !json::equal(&current, &stored) {
+            tx.map_set(&record, "cells", key, stored)?;
+            if let Some(old) = old_text {
+                tx.delete(&old)?;
+            }
+        }
     }
     Ok(())
 }
@@ -434,7 +507,7 @@ pub fn move_fields(tx: &mut Tx<'_>, table: &ObjectId, fields: &[ObjectId], to_in
     }
     let moving: HashSet<&ObjectId> = moved.iter().collect();
     let anchor = listing.ids().into_iter().filter(|item| !moving.contains(item)).nth(to_index);
-    place(tx, table, "fields", listing.raw, &moved, anchor)
+    place_items(tx, table, "fields", listing.raw, &moved, anchor)
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +525,7 @@ pub fn create_view(tx: &mut Tx<'_>, table: &ObjectId, spec: &ViewSpec) -> Result
         "title": fallback(&spec.title, "All"),
         "locked": false,
     }));
-    put_json(&mut values, "config", &spec.config)?;
+    put_json(&mut values, "config", &config_in(tx, table, &decode_json(&spec.config)?)?)?;
     let view = tx.create_with_id(VIEW, &crate::ids::object(), values)?;
     let len = tx.list_items(table, "views")?.len();
     tx.list_insert(table, "views", len, &view)?;
@@ -475,6 +548,10 @@ pub fn update_view(tx: &mut Tx<'_>, view: &ObjectId, patch: &ViewPatch) -> Resul
     }
     if let Some(config) = &patch.config {
         let config = decode_json(config)?;
+        let config = match table_of_view(tx, view)? {
+            Some(table) => config_in(tx, &table, &config)?,
+            None => view_refs::config_to_kdm(&config, &|_| None),
+        };
         // A view without a config reads as `{}`: writing that back changes nothing.
         let unchanged = config.as_object().is_some_and(Map::is_empty) && tx.get(view, "config")?.is_null();
         if !unchanged {
@@ -482,6 +559,26 @@ pub fn update_view(tx: &mut Tx<'_>, view: &ObjectId, patch: &ViewPatch) -> Resul
         }
     }
     Ok(())
+}
+
+/// A view config in the document's form: fields named by name become object ids of `table`'s
+/// fields ([`view_refs::config_to_kdm`]), and the editor's private keys are left out.
+fn config_in(tx: &Tx<'_>, table: &ObjectId, config: &Value) -> Result<Value> {
+    let mut names: HashMap<String, ObjectId> = HashMap::new();
+    for field in Listing::read(tx, table, "fields")?.ids() {
+        names.entry(string(tx, &field, "name")?).or_insert(field);
+    }
+    Ok(view_refs::config_to_kdm(config, &|name| names.get(name).cloned()))
+}
+
+/// The table whose views list holds `view`.
+fn table_of_view(tx: &Tx<'_>, view: &ObjectId) -> Result<Option<ObjectId>> {
+    for table in tx.objects_of_type(TABLE) {
+        if tx.list_items(&table, "views")?.contains(view) {
+            return Ok(Some(table));
+        }
+    }
+    Ok(None)
 }
 
 /// Sets a column width, clamped to [`MIN_WIDTH`]`..=`[`MAX_WIDTH`].
@@ -542,14 +639,19 @@ pub fn create_records(
         Some(Anchor::After(anchor)) => raw_of(anchor)? + 1,
     };
     let mut ids = Vec::with_capacity(rows.len());
+    let mut encoder = Encoder::default();
     for (index, row) in (start..).zip(rows) {
         let id = crate::ids::record();
         let values = registers(json!({ "createdAt": now, "createdBy": created_by }));
         tx.create_with_id(RECORD, &id, values)?;
         tx.list_insert(table, "records", index, &id)?;
         for (key, value) in row {
-            if !value.is_null() && stored.contains(key.as_str()) {
-                tx.map_set(&id, "cells", key, value.clone())?;
+            if let Some(kind) = stored.get(key.as_str()).copied()
+                && !value.is_null()
+            {
+                let field = ObjectId::from_string(key.clone());
+                let value = encoder.encode(tx, &id, &field, kind, &Value::Null, value, &Texts::default())?;
+                tx.map_set(&id, "cells", key, value)?;
             }
         }
         ids.push(id);
@@ -559,11 +661,11 @@ pub fn create_records(
 
 /// Gives every object what a create gives it and a raw model create may leave out (the
 /// schema's `optional` fields of [`TABLE`], [`FIELD`] and [`RECORD`]): a table's `description`
-/// and a field's `formula` and `aiPrompt` are `""` (a receipt leaves empty strings out of a
-/// created object's values), and a record without `createdAt` gets the time now and
-/// `created_by`, as [`create_records`] gives them. Writes nothing when every object has them.
+/// and a field's `formula` are `""` (a receipt leaves empty strings out of a created object's
+/// values), and a record without `createdAt` gets the time now and `created_by`, as
+/// [`create_records`] gives them. Writes nothing when every object has them.
 pub fn settle_created(tx: &mut Tx<'_>, created_by: &str) -> Result<()> {
-    for (ty, fields) in [(TABLE, &["description"][..]), (FIELD, &["formula", "aiPrompt"][..])] {
+    for (ty, fields) in [(TABLE, &["description"][..]), (FIELD, &["formula"][..])] {
         for id in tx.objects_of_type(ty) {
             for field in fields {
                 if tx.get(&id, field).unwrap_or(Value::Null).is_null() {
@@ -591,29 +693,49 @@ pub fn set_cells(tx: &mut Tx<'_>, table: &ObjectId, record: &ObjectId, cells: &M
     set_cells_many(tx, table, &[(record.clone(), cells.clone())])
 }
 
-/// [`set_cells`] for many records of one table, reading the table once.
+/// [`set_cells`] for many records of one table, reading the table once. A long text is written
+/// whole (see [`set_cells_known`]).
 pub fn set_cells_many(tx: &mut Tx<'_>, table: &ObjectId, edits: &[(ObjectId, Map<String, Value>)]) -> Result<()> {
+    set_cells_known(tx, table, edits, &Texts::default())
+}
+
+/// [`set_cells_many`] knowing what the records' long texts read now ([`Texts::of_records`]): a
+/// long text then changes only where it differs, so concurrent typing elsewhere in it stays.
+/// Cleared cells drop their `CellText`.
+pub fn set_cells_known(tx: &mut Tx<'_>, table: &ObjectId, edits: &[(ObjectId, Map<String, Value>)], texts: &Texts) -> Result<()> {
     require(tx, table, TABLE)?;
     // The edited records the table lists and that exist (`Listing::contains`), without looking up
     // every listed record.
     let edited: HashSet<&ObjectId> = edits.iter().map(|(record, _)| record).collect();
     let listed: HashSet<ObjectId> = tx.list_items(table, "records")?.into_iter().filter(|item| edited.contains(item)).collect();
     let stored = stored_fields(tx, table)?;
-    for (record, cells) in edits {
+    let mut encoder = Encoder::default();
+    for (record, values) in edits {
         if !listed.contains(record) || !tx.exists(record) {
             return Err(TableFileError::NotFound);
         }
-        for (key, value) in cells {
-            if !stored.contains(key.as_str()) {
+        for (key, value) in values {
+            let Some(kind) = stored.get(key.as_str()).copied() else {
                 continue;
-            }
+            };
             let current = tx.map_get(record, "cells", key)?;
+            let old_text = cells::cell_text_in(tx, &current);
             if value.is_null() {
                 if !current.is_null() {
                     tx.map_delete(record, "cells", key)?;
                 }
-            } else if !json::equal(&current, value) {
-                tx.map_set(record, "cells", key, value.clone())?;
+                if let Some(old) = old_text {
+                    tx.delete(&old)?;
+                }
+                continue;
+            }
+            let field = ObjectId::from_string(key.clone());
+            let value = encoder.encode(tx, record, &field, kind, &current, value, texts)?;
+            if !json::equal(&current, &value) {
+                tx.map_set(record, "cells", key, value)?;
+                if let Some(old) = old_text {
+                    tx.delete(&old)?;
+                }
             }
         }
     }
@@ -644,6 +766,11 @@ pub fn delete_records(tx: &mut Tx<'_>, table: &ObjectId, records: &[ObjectId]) -
     let mut count = 0;
     for record in &deleted {
         if tx.exists(record) {
+            for (_, raw) in tx.map_entries(record, "cells")? {
+                if let Some(text) = cells::cell_text_in(tx, &raw) {
+                    tx.delete(&text)?;
+                }
+            }
             tx.delete(record)?;
             count += 1;
         }
@@ -671,7 +798,7 @@ pub fn move_records(tx: &mut Tx<'_>, table: &ObjectId, records: &[ObjectId], bef
             live.into_iter().skip(start).find(|item| !moving.contains(item))
         }
     };
-    place(tx, table, "records", listing.raw, &moved, anchor)
+    place_items(tx, table, "records", listing.raw, &moved, anchor)
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,12 +1139,13 @@ fn names_of(tx: &Tx<'_>, ids: &[ObjectId]) -> Result<HashSet<String>> {
     ids.iter().map(|id| string(tx, id, "name")).collect()
 }
 
-/// The ids of the table's live fields whose values are stored in cells.
-fn stored_fields(tx: &Tx<'_>, table: &ObjectId) -> Result<HashSet<String>> {
-    let mut stored = HashSet::new();
+/// The ids of the table's live fields whose values are stored in cells, with how they store them.
+fn stored_fields(tx: &Tx<'_>, table: &ObjectId) -> Result<HashMap<String, CellKind>> {
+    let mut stored = HashMap::new();
     for field in Listing::read(tx, table, "fields")?.ids() {
-        if !is_computed(&string(tx, &field, "type")?) {
-            stored.insert(field.to_string());
+        let field_type = string(tx, &field, "type")?;
+        if !is_computed(&field_type) {
+            stored.insert(field.to_string(), CellKind::of(&field_type));
         }
     }
     Ok(stored)
@@ -1052,7 +1180,14 @@ fn remove_all(tx: &mut Tx<'_>, id: &ObjectId, field: &str, item: &ObjectId) -> R
 /// items not moved keep their order. Every occurrence of a moved item moves, so its first
 /// occurrence (the one readers use) is where it was put; no occurrence is removed, which keeps
 /// concurrent moves from losing an item.
-fn place(tx: &mut Tx<'_>, id: &ObjectId, field: &str, mut items: Vec<ObjectId>, moved: &[ObjectId], anchor: Option<ObjectId>) -> Result<()> {
+pub(crate) fn place_items(
+    tx: &mut Tx<'_>,
+    id: &ObjectId,
+    field: &str,
+    mut items: Vec<ObjectId>,
+    moved: &[ObjectId],
+    anchor: Option<ObjectId>,
+) -> Result<()> {
     let first = |items: &[ObjectId], wanted: &ObjectId| items.iter().position(|item| item == wanted).ok_or(TableFileError::NotFound);
     let mut successor = anchor;
     for item in moved.iter().rev() {

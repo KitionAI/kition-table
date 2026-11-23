@@ -1,8 +1,8 @@
-//! The current (version 3) schema. Every timestamp column is an INTEGER of
-//! Unix milliseconds.
+//! The file's relational schema (schema version 1). Every timestamp column is an INTEGER of Unix
+//! milliseconds.
 
 /// Tables in dependency order, with the time columns each one holds.
-pub const TABLES: [(&str, &str, &[&str]); 16] = [
+pub const TABLES: [(&str, &str, &[&str]); 15] = [
     (
         "kition_meta",
         "CREATE TABLE kition_meta (
@@ -268,18 +268,6 @@ pub const TABLES: [(&str, &str, &[&str]); 16] = [
             FOREIGN KEY(field_id) REFERENCES kition_fields(id) ON DELETE SET NULL
         )",
         &["created_at", "deleted_at"],
-    ),
-    (
-        "kition_change_log",
-        "CREATE TABLE kition_change_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            entity_type TEXT NOT NULL,
-            entity_id TEXT NOT NULL,
-            action TEXT NOT NULL,
-            payload_json TEXT NOT NULL DEFAULT '{}',
-            created_at INTEGER NOT NULL
-        )",
-        &["created_at"],
     ),
 ];
 

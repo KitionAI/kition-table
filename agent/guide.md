@@ -137,9 +137,9 @@ dependency safe. Their direct tests are `places`, `outside`, and `saved`.
 | Commands | Premise |
 |---|---|
 | `tables.update`, `fields.update`, `views.update` | Supplied stored properties; replacing `options`, `meta`, or `config` holds that whole value. Changing the primary field also holds `Table.primaryField`; the new primary field only that it is one of the table's fields. |
-| `views.patchConfig`, `putFilterTree`, `putSorts`, `putGroups` | Effective setting, reported as derived `~rowHeight`, `~frozenColumnCount`, `~searchQuery`, `~filterTree`, `~sorts`, or `~groups`. An absent config and an absent key have the same value. |
+| `views.patchConfig`, `putFilterTree`, `putSorts`, `putGroups` | Effective setting, reported as derived `~rowHeight`, `~frozenColumnCount`, `~filterTree`, `~sorts`, or `~groups`. The search is the editor's own and is never stored. An absent config and an absent key have the same value. |
 | `views.patchField` | The addressed width, visibility, position or frozen value; field existence. Widths are integer pixels, rounded and clamped to 40 through 1200 on model-batch entry. Position and freezing are stored in `config.field_layout`, not SQL-only editor state. |
-| `records.create`, `records.update`, transaction `cells.set` | Each written cell, and its field's name membership and type (a link's or select's options too: a computed field's value is dropped). Required flags and `readonly` are not held: the required check only refuses the call, and no write reads `readonly`. The table need only exist. Repeated transaction operations union their dependencies. |
+| `records.create`, `records.update`, transaction `cells.set` | Each written cell, and its field's name membership and type (a link's options too, a select's choices: the names of the choices its values name, or every choice and the field's list of them when a value names none it lists; a computed field's value is dropped). Required flags and `readonly` are not held: the required check only refuses the call, and no write reads `readonly`. The table need only exist. Repeated transaction operations union their dependencies. |
 | All named cell writes, including transaction values and combined values/order writes | Table-scoped name membership, including prior ownership after a cross-table move; a name swapped, renamed away or moved out changes the address. |
 | Record order changes, field insertion, transaction `fields.move`, positive-position bulk copy | The destination gap, in stored list coordinates. Moves additionally hold the moving object's position. Record anchors hold their position. |
 | Link writes, through cells or `links.replace`/`delete` | Existing membership, target record existence and ownership, the effective symmetric partner, its schema and the reverse membership the write may replace. Target display-cell changes alone are unrelated. |
@@ -167,10 +167,18 @@ Raw model batches (`table_batch`) run under the premise contracts the model decl
 fields they write, their references and the insertion window of an index, so `create`,
 `list.insert` and `list.move` refuse when an outside change moved or removed what was before
 their index. A raw cell write (`map.set` or `map.remove` of `Record.cells` under a field's id)
-holds that one cell and, of the field, that it is there and its `type` and `options` (the
-written value is read through them): a deleted column refuses `deleted`, a changed type or
-option set refuses `changed`, while a rename of the field, the record's place and its other
-cells are independent.
+holds that one cell and, of the field, that it is there, its `type`, `options` and `choices`, and
+every choice's `name` (the written value is read through them): a deleted column refuses
+`deleted`, a changed type or option set refuses `changed`, while a rename of the field, the
+record's place and its other cells are independent.
+
+What the document holds, for raw writes: a select's options are `Choice` objects (`field`,
+`name`, `color`) its `Field.choices` lists in order, and its cells hold choice ids (a
+`multi_select` a list of them); a `long_text` cell holds the id of a `CellText` object (`record`,
+`field`, and its `text`, which merges per character); a field's AI prompt is its `aiPrompt` text.
+A view's `config` names fields by object id (`field` in filter conditions, sorts and groups;
+`group_field`, `cover_field`, `hidden_fields`). The commands take and answer plain values (option
+names, the text, fields by name) and store them in that shape.
 
 A call that reads a table's schema in field order holds that table's own `~fieldOrder`, a
 small hash of its ordered field identities, so the same-server journal keeps its `before`: a
@@ -194,8 +202,7 @@ are given when known and small. The guard's own derived facts (`~fieldOrder`, `~
 Offline kit-env generation makes and replays creation tasks for every stored type (Table,
 Field, View, Record, Dashboard). A raw `create` is given what a create gives: a Record's
 `createdAt` (the time of the write) and `createdBy`, a Table's empty `description`, and a
-Field's empty `formula` and `aiPrompt` (receipts leave empty strings out of a created object's
-values). A creation receipt replayed through `table_batch` (`kition_env::ops_for`) therefore
+Field's empty `formula` (receipts leave empty strings out of a created object's values). A creation receipt replayed through `table_batch` (`kition_env::ops_for`) therefore
 makes the same object under the receipt's id
 (`waiting_for_sdk_creation_replay_and_required_defaults`). Required JSON values
 must remain writable and have a same-type example in the seed file. For command-level record

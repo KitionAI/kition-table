@@ -114,7 +114,7 @@ fn target<'a>(value: &'a mut Value, parent: Option<&str>) -> Option<&'a mut Map<
 }
 
 /// A relational id as the legacy readers accept it: a number or a decimal string; `0`, blank,
-/// and `null` are no id. `pub(crate)` so [`super::migrate`] can tell "not an id at all" (refused
+/// and `null` are no id. `pub(crate)` so `TableFile::options_in` can tell "not an id at all" (refused
 /// here) apart from "an id naming nothing kept" (which it nulls out itself before converting).
 pub(crate) fn local_id(value: &Value) -> Result<Option<i64>> {
     let invalid = || TableFileError::invalid(format!("option value {value} is not an id"));

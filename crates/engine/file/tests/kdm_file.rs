@@ -1,6 +1,5 @@
 //! `TableFile` on the KDM: every mutation is one stored change and one undo step, writes from
-//! several handles and several copies merge, failures leave file and memory consistent, and old
-//! files migrate on open.
+//! several handles and several copies merge, and failures leave file and memory consistent.
 
 #![allow(clippy::disallowed_methods, reason = "native timing tests read the clock")]
 
@@ -442,16 +441,6 @@ fn sequential_write_timings() {
 // ---------------------------------------------------------------------------
 // Review fixes: read-only files, store identity, document ids, resync, repair after undo.
 
-/// A schema-3 file (no replica) at `path` with one table "Tasks" and one record.
-fn legacy_file(dir: &Path, name: &str) -> (PathBuf, i64, i64) {
-    let (path, mut file) = create(dir, name);
-    let (table_id, record_id) = tasks(&mut file);
-    file.close();
-    let mut conn = ok(Connection::open(&path));
-    ok(kition_table_file::kdm::migrate::downgrade(&mut conn));
-    (path, table_id, record_id)
-}
-
 fn set_read_only(path: &Path, read_only: bool) {
     let mut permissions = ok(fs::metadata(path)).permissions();
     permissions.set_readonly(read_only);
@@ -463,21 +452,7 @@ fn assert_refused<T: std::fmt::Debug>(result: kition_table_file::Result<T>) {
 }
 
 #[test]
-fn a_read_only_schema_3_file_opens_read_only() {
-    let dir = temp();
-    let (path, table_id, record_id) = legacy_file(dir.path(), "old.ktable");
-    set_read_only(&path, true);
-    let mut file = open(&path);
-    assert!(file.read_only().is_some());
-    assert_eq!(ok(file.get_record(table_id, record_id)).values.get("title"), Some(&json!("Write")));
-    assert_eq!(ok(file.list_tables()).len(), 1);
-    assert_refused(file.create_record(table_id, &values(json!({ "title": "No" }))));
-    assert_refused(file.update_record(table_id, record_id, &values(json!({ "status": "x" })), None));
-    set_read_only(&path, false);
-}
-
-#[test]
-fn a_read_only_schema_4_file_opens_read_only() {
+fn a_read_only_file_opens_read_only() {
     let dir = temp();
     let (path, mut file) = create(dir.path(), "new.ktable");
     let (table_id, record_id) = tasks(&mut file);
@@ -488,24 +463,6 @@ fn a_read_only_schema_4_file_opens_read_only() {
     assert_eq!(ok(file.list_records(table_id)).len(), 1);
     assert_refused(file.delete_record(table_id, record_id));
     set_read_only(&path, false);
-}
-
-#[test]
-fn a_schema_3_file_that_fails_migration_opens_read_only() {
-    let dir = temp();
-    let (path, table_id, _) = legacy_file(dir.path(), "broken.ktable");
-    {
-        let conn = ok(Connection::open(&path));
-        ok(conn.execute("UPDATE kition_records SET row_key = 'bad key!'", []));
-    }
-    let mut file = open(&path);
-    assert!(file.read_only().is_some());
-    assert_eq!(ok(file.list_records(table_id)).len(), 1);
-    assert_refused(file.create_record(table_id, &values(json!({ "title": "No" }))));
-    file.close();
-    let conn = ok(Connection::open(&path));
-    let version: String = ok(conn.query_row("SELECT value FROM kition_meta WHERE key = 'schema_version'", [], |row| row.get(0)));
-    assert_eq!(version, "3", "a failed migration leaves the file as it was");
 }
 
 #[test]
@@ -539,19 +496,6 @@ fn an_overwrite_by_another_copy_at_the_same_position_is_caught_up() {
     assert_eq!(record.values.get("status"), Some(&json!("here")));
     assert_eq!(record.values.get("title"), Some(&json!("There")));
     assert_eq!(record.values.get("done"), Some(&json!(true)));
-}
-
-#[test]
-fn separately_migrated_copies_are_different_documents() {
-    let dir = temp();
-    let (path, _, _) = legacy_file(dir.path(), "old.ktable");
-    let copy = dir.path().join("copy.ktable");
-    ok(fs::copy(&path, &copy));
-    let mut first = open(&path);
-    open(&copy).close();
-    replace_with(&path, &copy);
-    assert_eq!(ok(first.reopen_merging()), MergeOutcome::DifferentDocument);
-    assert_eq!(ok(first.list_tables()).len(), 1, "no table was duplicated");
 }
 
 #[test]

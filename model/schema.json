@@ -49,8 +49,18 @@
         "readonly": { "kind": "boolean", "label": "read only" },
         "options": { "kind": "json", "optional": true },
         "formula": { "kind": "string", "optional": true },
-        "aiPrompt": { "kind": "string", "optional": true },
+        "aiPrompt": { "kind": "text" },
+        "choices": { "kind": "list", "of": "Choice" },
         "meta": { "kind": "json", "optional": true }
+      }
+    },
+    "Choice": {
+      "batchOps": { "*": { "direct": true } },
+      "label": "name",
+      "fields": {
+        "field": { "kind": "ref", "of": "Field" },
+        "name": { "kind": "string" },
+        "color": { "kind": "string", "optional": true }
       }
     },
     "View": {
@@ -60,7 +70,6 @@
         "owner": { "description": "Owning table UUID", "premiseOnly": true },
         "rowHeight": { "description": "effective row_height setting, null when absent" },
         "frozenColumnCount": { "description": "effective frozen_column_count setting, null when absent" },
-        "searchQuery": { "description": "effective search_query setting, null when absent" },
         "filterTree": { "description": "effective filter_tree setting, null when absent" },
         "sorts": { "description": "effective sorts setting, null when absent" },
         "groups": { "description": "effective groups setting, null when absent" }
@@ -85,6 +94,14 @@
         "cells": { "kind": "map" },
         "createdAt": { "kind": "integer", "readOnly": true, "optional": true, "display": { "kind": "time", "perSecond": 1000 } },
         "createdBy": { "kind": "string", "readOnly": true, "optional": true }
+      }
+    },
+    "CellText": {
+      "batchOps": { "*": { "direct": true } },
+      "fields": {
+        "record": { "kind": "ref", "of": "Record" },
+        "field": { "kind": "ref", "of": "Field" },
+        "text": { "kind": "text" }
       }
     },
     "Link": {

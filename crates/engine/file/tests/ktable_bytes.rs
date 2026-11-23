@@ -7,7 +7,6 @@ use std::path::Path;
 
 use kition_kdm::Origin;
 use kition_table_file::{CreateOptions, FieldSpec, TableFile, TableSpec};
-use rusqlite::Connection;
 use serde_json::{Map, Value, json};
 
 fn ok<T, E: std::fmt::Display>(result: Result<T, E>) -> T {
@@ -114,34 +113,6 @@ fn a_document_created_in_memory_saves_as_a_ktable_file() {
     assert_eq!(ok(native.list_tables()), tables);
     assert_eq!(rows(&native, table_id), rows(&memory, table_id));
     assert_eq!(native.replica().doc_id(), memory.replica().doc_id());
-}
-
-#[test]
-fn bytes_of_a_file_from_before_the_kdm_migrate_in_memory() {
-    let dir = temp();
-    let path = dir.path().join("Old.ktable");
-    let mut file = ok(TableFile::create(&path, &CreateOptions::default()));
-    let (table_id, _, _) = tasks(&mut file, 20);
-    let before = rows(&file, table_id);
-    file.close();
-    let mut conn = ok(Connection::open(&path));
-    ok(kition_table_file::kdm::migrate::downgrade(&mut conn));
-    drop(conn);
-    let old = ok(fs::read(&path));
-
-    let mut memory = ok(TableFile::open_bytes(&old));
-    assert_eq!(memory.read_only(), None);
-    assert_eq!(rows(&memory, table_id), before);
-    let record = ok(memory.list_records(table_id)).remove(0);
-    ok(memory.delete_record(table_id, record.id));
-    assert_eq!(ok(fs::read(&path)), old);
-
-    let saved = dir.path().join("Migrated.ktable");
-    write(&saved, &ok(memory.to_bytes()));
-    let native = ok(TableFile::open(&saved));
-    assert_eq!(native.read_only(), None);
-    assert_eq!(rows(&native, table_id), rows(&memory, table_id));
-    assert_eq!(ok(native.count_records(table_id)), 19);
 }
 
 #[test]

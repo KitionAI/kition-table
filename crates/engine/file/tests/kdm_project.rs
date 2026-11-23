@@ -51,9 +51,7 @@
 //! - Filter trees, sorts, and groups have their own legacy tables, which the model does not have.
 //!
 //! At the end of each sequence, a rebuild into an empty file and a rebuild in place must match
-//! the incremental projection (ids kept), and a migrated copy of the legacy file
-//! ([`migrate::upgrade`]) rebuilt in place must still read like the legacy file, with the ids the
-//! migration recorded.
+//! the incremental projection (ids kept).
 
 #![allow(clippy::disallowed_methods, reason = "native timing tests read the clock")]
 
@@ -64,10 +62,11 @@ use std::time::Instant;
 
 use kition_kdm::testing::Rng;
 use kition_kdm::{ActorId, DocId, ObjectId, Origin, Replica, Tx};
+use kition_table_file::kdm::cells::Texts;
 use kition_table_file::kdm::model::{self, BaseSpec, TableIds};
 use kition_table_file::kdm::project::{self, TableChange};
 use kition_table_file::kdm::read::ModelView;
-use kition_table_file::kdm::{migrate, repair, schema, store};
+use kition_table_file::kdm::{repair, schema, store};
 use kition_table_file::{CreateOptions, Field, FieldPatch, FieldSpec, Table, TableFile, TablePatch, TableSpec, ViewFieldPatch, ViewPatch, ViewSpec};
 use rusqlite::params;
 use serde_json::{Map, Value, json};
@@ -834,7 +833,11 @@ impl Twin {
                 let l_patch = FieldPatch { options: options.as_ref().map(|options| self.l_options(table, options)), ..patch.clone() };
                 let m_patch = FieldPatch { options: options.as_ref().map(|options| self.m_options(table, options)), ..patch };
                 let m_field = self.m_field(table, name);
-                if !self.try_write(|tx| model::update_field(tx, &m_field, &m_patch)) {
+                // What a file's update reads first: the field's prompt and its cells' long texts.
+                let records = ok(ModelView::new(&self.replica).record_ids(&self.m_table(table)));
+                let mut texts = Texts::of_records(&self.replica, &records);
+                texts.read(&self.replica, &m_field, "aiPrompt");
+                if !self.try_write(|tx| model::update_field_known(tx, &m_field, &m_patch, &texts)) {
                     return;
                 }
                 ok(self.legacy.update_field(legacy.table_id, legacy.id, &l_patch));
@@ -1201,25 +1204,6 @@ fn run_equivalence(seed: u64, steps: usize) {
     rebuild_into(&twin.proj, &twin.replica, twin.clock + 2);
     assert_same(&before, &snapshot(&twin.proj, &labels, true), &format!("seed {seed}: rebuild in place"));
     assert_eq!(ids, projected_ids(&twin.proj), "seed {seed}: ids after rebuild");
-
-    // A migrated copy of the legacy file, rebuilt in place, reads like the legacy file and keeps
-    // the ids the migration recorded.
-    let copy = dir.path().join("migrated.ktable");
-    ok(std::fs::copy(twin.legacy.path(), &copy));
-    {
-        let mut conn = ok(rusqlite::Connection::open(&copy));
-        let actor = ok(ActorId::from_u64(9));
-        ok(migrate::upgrade(&mut conn, actor));
-        let replica = some(ok(store::load(&conn, schema(), actor)), "migrated replica");
-        let migrated = connection_ids(&conn);
-        let tx = ok(conn.unchecked_transaction());
-        ok(project::rebuild(&tx, &replica, twin.clock + 3));
-        ok(tx.commit());
-        assert_eq!(migrated, connection_ids(&conn), "seed {seed}: ids after migrating and rebuilding");
-    }
-    let migrated = ok(TableFile::open(&copy));
-    let labels = twin.legacy_labels();
-    assert_same(&snapshot(&twin.legacy, &labels, true), &snapshot(&migrated, &labels, true), &format!("seed {seed}: migrated and rebuilt"));
 }
 
 #[test]

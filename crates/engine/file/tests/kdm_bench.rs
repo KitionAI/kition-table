@@ -16,11 +16,9 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use kition_kdm::Origin;
-use kition_table_file::kdm::migrate;
 use kition_table_file::kdm::project;
 use kition_table_file::kdm::store;
 use kition_table_file::{CellEdit, CreateOptions, FieldSpec, TableFile, TableOp, TableSpec};
-use rusqlite::Connection;
 use serde_json::{Map, Value};
 
 const FIELD_COUNT: usize = 10;
@@ -77,7 +75,6 @@ fn build(path: &Path, count: usize) -> (i64, Vec<String>) {
 struct Timings {
     records: usize,
     open: Duration,
-    open_with_migration: Duration,
     edit: Duration,
     paste_1000: Duration,
     undo_first: Duration,
@@ -159,17 +156,7 @@ fn bench_size(dir: &Path, count: usize) -> Timings {
 
     file.close();
 
-    // First open with migration from schema 3: downgrade (test-only support), then open, which
-    // runs `migrate::upgrade` because the file has no stored replica.
-    let mut conn = Connection::open(&path).unwrap_or_else(|err| panic!("{err}"));
-    ok(migrate::downgrade(&mut conn));
-    drop(conn);
-    let start = Instant::now();
-    let migrated = ok(TableFile::open(&path));
-    let open_with_migration = start.elapsed();
-    migrated.close();
-
-    Timings { records: count, open, open_with_migration, edit, paste_1000, undo_first, undo_later, redo, import, compact, rebuild }
+    Timings { records: count, open, edit, paste_1000, undo_first, undo_later, redo, import, compact, rebuild }
 }
 
 #[test]
@@ -186,13 +173,13 @@ fn kdm_bench() {
 
     println!();
     println!(
-        "{:>9} | {:>10} | {:>14} | {:>9} | {:>10} | {:>11} | {:>11} | {:>11} | {:>11} | {:>9} | {:>9}",
-        "records", "open", "open+migrate", "edit", "1k-paste", "undo 1st", "undo 2nd", "redo", "import", "compact", "rebuild",
+        "{:>9} | {:>10} | {:>9} | {:>10} | {:>11} | {:>11} | {:>11} | {:>11} | {:>9} | {:>9}",
+        "records", "open", "edit", "1k-paste", "undo 1st", "undo 2nd", "redo", "import", "compact", "rebuild",
     );
     for t in &rows {
         println!(
-            "{:>9} | {:>10?} | {:>14?} | {:>9?} | {:>10?} | {:>11?} | {:>11?} | {:>11?} | {:>11?} | {:>9?} | {:>9?}",
-            t.records, t.open, t.open_with_migration, t.edit, t.paste_1000, t.undo_first, t.undo_later, t.redo, t.import, t.compact, t.rebuild,
+            "{:>9} | {:>10?} | {:>9?} | {:>10?} | {:>11?} | {:>11?} | {:>11?} | {:>11?} | {:>9?} | {:>9?}",
+            t.records, t.open, t.edit, t.paste_1000, t.undo_first, t.undo_later, t.redo, t.import, t.compact, t.rebuild,
         );
     }
     println!();

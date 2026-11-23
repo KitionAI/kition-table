@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use kition_kdm::{ObjectId, Replica};
 use serde_json::{Map, Value};
 
+use super::cells;
 use super::model::{BASE, DASHBOARD, FIELD, LINK, RECORD, TABLE, VIEW, is_computed};
 use crate::{Result, TableFileError};
 
@@ -45,8 +46,11 @@ pub struct FieldData {
     pub field_type: String,
     pub required: bool,
     pub readonly: bool,
-    /// `null` when unset.
+    /// `null` when unset. With the field's choices by name (`choices`, and `choice_tones` for
+    /// their colors; see [`cells::options_with_choices`]).
     pub options: Value,
+    /// The choices the field lists, in order.
+    pub choices: Vec<cells::ChoiceData>,
     pub formula: String,
     pub ai_prompt: String,
     /// `null` when unset.
@@ -59,7 +63,8 @@ pub struct ViewData {
     pub view_type: String,
     pub title: String,
     pub locked: bool,
-    /// The UI's view configuration, keyed by field names; `null` when unset.
+    /// The UI's view configuration, its fields by object id ([`super::view_refs`]); `null` when
+    /// unset.
     pub config: Value,
     /// Column widths by field id.
     pub widths: BTreeMap<ObjectId, i64>,
@@ -74,7 +79,7 @@ pub struct RecordData {
     /// Unix milliseconds.
     pub created_at: i64,
     pub created_by: String,
-    /// Stored cells by field id.
+    /// Stored cells by field id, as plain values ([`cells::decode`]).
     pub cells: Map<String, Value>,
 }
 
@@ -188,16 +193,19 @@ impl<'a> ModelView<'a> {
 
     pub fn field(&self, id: &ObjectId) -> Result<FieldData> {
         self.expect(id, FIELD)?;
+        let field_type = self.string(id, "type")?;
+        let choices = cells::listed_choices(self.replica, id)?;
         Ok(FieldData {
             id: id.clone(),
             name: self.string(id, "name")?,
             title: self.string(id, "title")?,
-            field_type: self.string(id, "type")?,
             required: self.replica.get(id, "required")? == Value::Bool(true),
             readonly: self.replica.get(id, "readonly")? == Value::Bool(true),
-            options: self.replica.get(id, "options")?,
+            options: cells::options_with_choices(&self.replica.get(id, "options")?, &field_type, &choices),
+            choices,
+            field_type,
             formula: self.string(id, "formula")?,
-            ai_prompt: self.string(id, "aiPrompt")?,
+            ai_prompt: self.replica.text(id, "aiPrompt")?,
             meta: self.replica.get(id, "meta")?,
         })
     }
@@ -400,7 +408,13 @@ impl<'a> ModelView<'a> {
 
     fn cells_where(&self, record: &ObjectId, keep: impl Fn(&str) -> bool) -> Result<Map<String, Value>> {
         self.expect(record, RECORD)?;
-        Ok(self.replica.map_entries(record, "cells")?.into_iter().filter(|(key, _)| keep(key)).collect())
+        Ok(self
+            .replica
+            .map_entries(record, "cells")?
+            .into_iter()
+            .filter(|(key, _)| keep(key))
+            .map(|(key, raw)| (key, cells::decode(self.replica, &raw)))
+            .collect())
     }
 
     /// The ids of the table's live fields that are not computed.

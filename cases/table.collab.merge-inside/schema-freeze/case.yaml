@@ -1,0 +1,27 @@
+format: 1
+id: table.collab.merge-inside/schema-freeze
+feature: table.collab.merge-inside
+intent: >-
+  Two copies of one table edit it at once and exchange their changes: options added on both
+  sides are both kept, an option renamed on one side renames the cell the other set, typing in
+  two places of one long text keeps both, and so does editing an AI prompt in two places; a
+  view config names its fields by object id and never stores the editor's search.
+layer: gate
+source:
+  kind: synthetic
+  from: the schema freeze (schema version 1)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-file, filter: "options_added_on_both_sides_are_both_kept" }
+  - cargo-test: { package: kition-table-file, filter: "an_option_renamed_on_one_side_renames_the_cell_set_on_the_other" }
+  - cargo-test: { package: kition-table-file, filter: "a_value_that_names_no_option_stays_a_value_the_field_does_not_list" }
+  - cargo-test: { package: kition-table-file, filter: "typing_in_two_places_of_one_long_text_keeps_both" }
+  - cargo-test: { package: kition-table-file, filter: "a_long_text_changes_type_and_back" }
+  - cargo-test: { package: kition-table-file, filter: "editing_an_ai_prompt_in_two_places_keeps_both" }
+  - cargo-test: { package: kition-table-file, filter: "a_view_config_names_fields_by_id_and_never_stores_the_search" }
+  - cargo-test: { package: kition-table-file, filter: "files_from_before_the_schema_freeze_are_refused_untouched" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-23"

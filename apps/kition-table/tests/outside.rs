@@ -202,7 +202,7 @@ async fn off_allows_a_same_field_write_while_epoch_and_premise_refuse() {
 #[tokio::test]
 async fn view_keys_and_field_properties_are_independent() {
     for (command, other, mine) in [
-        ("table.views.patchConfig", json!({"tableId":1,"viewId":1,"search_query":"Theirs"}), json!({"tableId":1,"viewId":1,"row_height":"tall"})),
+        ("table.views.patchConfig", json!({"tableId":1,"viewId":1,"frozen_column_count":2}), json!({"tableId":1,"viewId":1,"row_height":"tall"})),
         ("table.fields.update", json!({"tableId":1,"fieldId":3,"required":true}), json!({"tableId":1,"fieldId":3,"title":"Mine"})),
         ("table.tables.update", json!({"tableId":1,"description":"Theirs"}), json!({"tableId":1,"title":"Mine"})),
     ] {

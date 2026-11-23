@@ -29,17 +29,21 @@ pub fn resolve(file: &TableFile, ty: &str, value: &Value) -> Option<String> {
 
 /// The premise contract of a raw cell write, `map.set` or `map.remove` of a record's `cells`
 /// (`batchOps` in `model/schema.json`; the write itself runs as the raw operation): the one cell
-/// it assigns, and the field its key names: that it is still there, and its `type` and `options`,
-/// through which the written value is read. Neither the record's place nor its other cells, nor
-/// the field's name, title or place.
+/// it assigns, and the field its key names: that it is still there, and its `type`, `options` and
+/// `choices` (with every choice's `name`), through which the written value is read. Neither the
+/// record's place nor its other cells, nor the field's name, title or place.
 pub const RAW_CELL: &str = "model.cell";
 
 pub fn raw_cell(file: &TableFile, params: &Value) -> Result<Under, String> {
     let record = params["target"].as_str().ok_or("a raw cell write names its record by id")?;
     let key = params["key"].as_str().ok_or("a raw cell write names its field by its id, as the map key")?;
     let mut premises = vec![Premise::on(json!(record)).fields([format!("cells.{key}")]).positions(Vec::<String>::new())];
-    if file.replica().object_type(&ObjectId::from_string(key)).is_ok_and(|ty| ty == "Field") {
-        premises.push(Premise::on(json!(key)).fields(["options", "type"].map(str::to_owned)).positions(Vec::<String>::new()));
+    let field = ObjectId::from_string(key);
+    if file.replica().object_type(&field).is_ok_and(|ty| ty == "Field") {
+        premises.push(Premise::on(json!(key)).fields(["choices", "options", "type"].map(str::to_owned)).positions(Vec::<String>::new()));
+        for choice in kition_table_file::kdm::cells::all_choices(file.replica(), &field) {
+            premises.push(Premise::on(json!(choice.as_str())).fields(["name".to_owned()]).positions(Vec::<String>::new()));
+        }
     }
     Ok(Under { premises, ..Under::default() })
 }
@@ -86,9 +90,14 @@ impl Needs {
         }
     }
 
-    pub(crate) fn select_labels(&mut self, id: &str) {
-        if let Some(fields) = self.0.get_mut(id).and_then(|p| p.fields.as_mut()) {
-            fields.retain(|field| field != "options");
+    /// A select whose values all name choices it lists: the write rests on those choices' names,
+    /// not on the field's list of choices nor on its other choices (`keep`).
+    pub(crate) fn select_labels(&mut self, field: &str, others: &[String]) {
+        if let Some(fields) = self.0.get_mut(field).and_then(|p| p.fields.as_mut()) {
+            fields.retain(|name| name != "choices");
+        }
+        for other in others {
+            self.0.remove(other);
         }
     }
 
@@ -105,7 +114,6 @@ impl Needs {
 const SETTINGS: &[(&str, &str)] = &[
     ("row_height", "rowHeight"),
     ("frozen_column_count", "frozenColumnCount"),
-    ("search_query", "searchQuery"),
     ("filter_tree", "filterTree"),
     ("sorts", "sorts"),
     ("groups", "groups"),
@@ -171,12 +179,31 @@ fn cells(file: &TableFile, needs: &mut Needs, table: i64, record: Option<String>
             continue;
         }
         let Some(id) = resolve(file, "Field", &json!(field.id)) else { continue };
-        // A value is written by its field's type (a computed field's is dropped), a link's or a
-        // select's by its options too. The required check only refuses the call, and no write
-        // reads `readonly` or a formula, so neither is held.
-        let link_or_select = matches!(field.field_type.as_str(), "link_to_record" | "single_select" | "multi_select");
-        needs.add(id.clone(), strings(if link_or_select { &["name", "type", "options"] } else { &["name", "type"] }));
+        // A value is written by its field's type (a computed field's is dropped), a link's by its
+        // options too, a select's by its choices (their names: a value names one). The required
+        // check only refuses the call, and no write reads `readonly` or a formula, so neither is
+        // held.
+        let select = matches!(field.field_type.as_str(), "single_select" | "multi_select");
+        let read: &[&str] = match field.field_type.as_str() {
+            "link_to_record" => &["name", "type", "options"],
+            "single_select" | "multi_select" => &["choices", "name", "type"],
+            _ => &["name", "type"],
+        };
+        needs.add(id.clone(), strings(read));
+        if select {
+            for choice in kition_table_file::kdm::cells::all_choices(file.replica(), &ObjectId::from_string(&id)) {
+                needs.add(choice.to_string(), strings(&["name"]));
+            }
+        }
         held.push(format!("cells.{id}"));
+        // A long text's characters are in its `CellText`: a write of the whole value replaces
+        // them, so it holds them too.
+        if let Some(record) = &record
+            && let Ok(raw) = file.replica().map_get(&ObjectId::from_string(record), "cells", &id)
+            && let Some(text) = kition_table_file::kdm::cells::cell_text_of(file.replica(), &raw)
+        {
+            needs.add(text.to_string(), strings(&["text"]));
+        }
         if field.field_type == "link_to_record" {
             for value in values[&field.name].as_array().into_iter().flatten() {
                 let value = value.get("row_key").unwrap_or(value);
@@ -242,7 +269,7 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
         "fields.update" => {
             if let Some(field) = field {
                 needs.set(
-                    field,
+                    field.clone(),
                     patches(
                         params,
                         &[
@@ -251,6 +278,7 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                             ("required", "required"),
                             ("readonly", "readonly"),
                             ("options", "options"),
+                            ("options", "choices"),
                             ("formula", "formula"),
                             ("ai_prompt", "aiPrompt"),
                             ("meta", "meta"),
@@ -263,6 +291,13 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                 {
                     needs.add(table, strings(&["primaryField"]));
                 }
+                // New options name the choices: each of the field's choices is kept, renamed or
+                // left out by its name.
+                if params.get("options").is_some() {
+                    for choice in kition_table_file::kdm::cells::all_choices(file.replica(), &ObjectId::from_string(&field)) {
+                        needs.add(choice.to_string(), strings(&["name"]));
+                    }
+                }
             }
         }
         "views.update" => {
@@ -272,7 +307,7 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
         }
         "views.patchConfig" => {
             if let Some(view) = view {
-                let fields = SETTINGS.iter().take(3).filter(|(key, _)| params.get(*key).is_some()).map(|(_, name)| format!("~{name}")).collect();
+                let fields = SETTINGS.iter().take(2).filter(|(key, _)| params.get(*key).is_some()).map(|(_, name)| format!("~{name}")).collect();
                 needs.set(view, fields, Vec::new());
             }
         }

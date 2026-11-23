@@ -16,8 +16,8 @@ fn now_millis() -> i64 {
 #[tokio::test]
 async fn waiting_for_sdk_creation_replay_and_required_defaults() {
     // A raw create is given what a normal create gives (a Record's
-    // `createdAt` and `createdBy`; the empty `description` of a Table and `formula` and
-    // `aiPrompt` of a Field, which receipts leave out), so every creation receipt replays
+    // `createdAt` and `createdBy`; the empty `description` of a Table and `formula` of a Field,
+    // which receipts leave out), so every creation receipt replays
     // through `table_batch`. The pinned SDK's `kition_env::ops_for` creates with
     // the receipt's id, so the replay makes the same object under the same id, and a saved-state
     // comparison of the two files reports no change at all. The name stays: the case
@@ -40,11 +40,7 @@ async fn waiting_for_sdk_creation_replay_and_required_defaults() {
     let mut failures = Vec::new();
     for (ty, place, fields) in [
         ("Table", "root.tables".to_owned(), json!({"name":"review","title":"Review","description":""})),
-        (
-            "Field",
-            format!("{table}.fields"),
-            json!({"name":"review","title":"Review","type":"text","required":false,"readonly":false,"formula":"","aiPrompt":""}),
-        ),
+        ("Field", format!("{table}.fields"), json!({"name":"review","title":"Review","type":"text","required":false,"readonly":false,"formula":""})),
         ("View", format!("{table}.views"), json!({"title":"Review","type":"grid","locked":false})),
         ("Record", format!("{table}.records"), json!({})),
         ("Dashboard", "root.dashboards".to_owned(), json!({"name":"Review"})),

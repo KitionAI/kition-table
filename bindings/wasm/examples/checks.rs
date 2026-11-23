@@ -51,7 +51,22 @@ fn main() -> Result<(), String> {
     let dir = std::path::PathBuf::from(std::env::args().nth(1).ok_or("usage: checks <conformance folder> [fixture names]")?);
     let only: Vec<String> = std::env::args().skip(2).collect();
     std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
-    let fixtures: Vec<(&str, Vec<u8>)> = vec![
+    for (name, bytes) in fixtures()? {
+        if only.is_empty() || only.iter().any(|wanted| wanted == name) {
+            std::fs::write(dir.join(name), bytes).map_err(|error| error.to_string())?;
+        }
+    }
+    if only.is_empty() || only.iter().any(|wanted| wanted == "edit.json") {
+        let edit = json!({ "steps": [{ "command": "table.records.create", "params": { "tableId": TASKS, "values": { "title": "Ship the plan", "status": "In progress" } } }] });
+        let text = serde_json::to_string_pretty(&edit).map_err(|error| error.to_string())?;
+        std::fs::write(dir.join("edit.json"), format!("{text}\n")).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+/// Every `.ktable` fixture, by file name.
+fn fixtures() -> Result<Vec<(&'static str, Vec<u8>)>, String> {
+    Ok(vec![
         (
             "basic.ktable",
             table("Tasks.ktable", |doc| {
@@ -142,16 +157,5 @@ fn main() -> Result<(), String> {
                 task(doc, json!({ "title": "Write the plan" })).map(|_| ())
             })?,
         ),
-    ];
-    for (name, bytes) in fixtures {
-        if only.is_empty() || only.iter().any(|wanted| wanted == name) {
-            std::fs::write(dir.join(name), bytes).map_err(|error| error.to_string())?;
-        }
-    }
-    if only.is_empty() || only.iter().any(|wanted| wanted == "edit.json") {
-        let edit = json!({ "steps": [{ "command": "table.records.create", "params": { "tableId": TASKS, "values": { "title": "Ship the plan", "status": "In progress" } } }] });
-        let text = serde_json::to_string_pretty(&edit).map_err(|error| error.to_string())?;
-        std::fs::write(dir.join("edit.json"), format!("{text}\n")).map_err(|error| error.to_string())?;
-    }
-    Ok(())
+    ])
 }

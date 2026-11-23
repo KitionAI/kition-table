@@ -6794,9 +6794,6 @@
           "frozen_column_count": {
             "type": "integer"
           },
-          "search_query": {
-            "type": "string"
-          },
           "asOrigin": {
             "type": "string",
             "description": "system:<name> writes as a host feature, outside the undo history. Agents leave it out."

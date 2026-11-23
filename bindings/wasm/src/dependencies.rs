@@ -23,7 +23,6 @@ pub(crate) struct Selection {
     pub record_links: BTreeSet<String>,
     pub field_links: BTreeSet<String>,
     pub layouts: BTreeMap<String, BTreeMap<String, BTreeSet<String>>>,
-    pub select_labels: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Selection {
@@ -62,7 +61,7 @@ impl Selection {
 
     /// What the selection holds, as `(object id, fact)` pairs in the words of the independent
     /// reading's comparison (`tests/declarations_independent.rs`): name membership, link
-    /// membership, partners, row identities, field lists, layout entries and select labels.
+    /// membership, partners, row identities, field lists and layout entries.
     pub fn facts(&self, file: &TableFile) -> Vec<(String, String)> {
         let root = file.replica().objects_of_type("Base").first().map(|id| id.to_string()).unwrap_or_default();
         let table_id = |table: &i64| resolve(file, "Table", &json!(table)).unwrap_or_default();
@@ -84,9 +83,6 @@ impl Selection {
                 facts.extend(keys.iter().map(|key| (view.clone(), format!("config.field_layout.{field}.{key}"))));
             }
         }
-        for (field, labels) in &self.select_labels {
-            facts.extend(labels.iter().map(|label| (field.clone(), format!("options.choices:{label}"))));
-        }
         facts
     }
 
@@ -103,7 +99,6 @@ impl Selection {
             && self.record_links.is_empty()
             && self.field_links.is_empty()
             && self.layouts.is_empty()
-            && self.select_labels.is_empty()
     }
 }
 
@@ -122,24 +117,45 @@ fn definition(file: &TableFile, needs: &mut Needs, field: &Field) -> Option<Stri
     Some(id)
 }
 
-fn select_labels(file: &TableFile, needs: &mut Needs, selected: &mut Selection, table: i64, values: &Value) {
+/// The select values a call writes, by field: the labels, or `None` once one of them names no
+/// choice the field lists.
+type Labels = BTreeMap<String, Option<BTreeSet<String>>>;
+
+fn select_labels(file: &TableFile, labels: &mut Labels, table: i64, values: &Value) {
     for field in file.list_fields(table).unwrap_or_default() {
         if !matches!(field.field_type.as_str(), "single_select" | "multi_select") {
             continue;
         }
         let Some(value) = values.get(&field.name) else { continue };
         let Some(id) = resolve(file, "Field", &json!(field.id)) else { continue };
-        let labels: Vec<String> =
+        let written: Vec<String> =
             value.as_array().map(Vec::as_slice).unwrap_or(std::slice::from_ref(value)).iter().filter_map(Value::as_str).map(str::to_owned).collect();
-        let choices = field.options.get("choices").and_then(Value::as_array);
-        // A label missing now may have left the choices since basis: keep the whole options
-        // premise, so that edit of the field's definition refuses as `changed`. Labels still
-        // present hold only their membership; sibling choices and order stay independent.
-        if !labels.iter().all(|label| choices.is_some_and(|items| items.iter().any(|item| item.as_str() == Some(label)))) {
-            continue;
+        let choices = kition_table_file::kdm::cells::listed_choices(file.replica(), &ObjectId::from_string(&id)).unwrap_or_default();
+        let entry = labels.entry(id).or_insert_with(|| Some(BTreeSet::new()));
+        if !written.iter().all(|label| choices.iter().any(|choice| &choice.name == label)) {
+            *entry = None;
+        } else if let Some(known) = entry {
+            known.extend(written);
         }
-        needs.select_labels(&id);
-        selected.select_labels.entry(id).or_default().extend(labels);
+    }
+}
+
+/// Narrows the premises of the selects a call writes. A label missing now may have left the
+/// choices since basis (renamed, or no longer listed): such a field keeps the whole premise on its
+/// choices and their names, so that edit refuses as `changed`. Labels the field lists hold only
+/// those choices' names; sibling choices, their order and new ones stay independent.
+fn narrow_select_labels(file: &TableFile, needs: &mut Needs, labels: &Labels) {
+    for (id, written) in labels {
+        let Some(written) = written else { continue };
+        let field = ObjectId::from_string(id);
+        let choices = kition_table_file::kdm::cells::listed_choices(file.replica(), &field).unwrap_or_default();
+        let named: Vec<String> = choices.iter().filter(|choice| written.contains(&choice.name)).map(|choice| choice.id.to_string()).collect();
+        let others: Vec<String> = kition_table_file::kdm::cells::all_choices(file.replica(), &field)
+            .into_iter()
+            .map(|choice| choice.to_string())
+            .filter(|choice| !named.contains(choice))
+            .collect();
+        needs.select_labels(id, &others);
     }
 }
 
@@ -600,7 +616,8 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
             }
         }
     }
-    // A type change converts no stored cell, so it does not rest on them; a delete takes them.
+    // A type change writes the stored cells again in the new type's shape, from what they hold
+    // when it runs, so it does not rest on them; a delete takes them.
     if method == "fields.delete"
         && let (Some(table), Some(field)) = (resolve(file, "Table", &params["tableId"]), resolve(file, "Field", &params["fieldId"]))
     {
@@ -630,14 +647,15 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
             }
         }
     }
+    let mut labels = Labels::new();
     match method {
-        "records.create" | "records.update" => select_labels(file, needs, &mut selected, table, &params["values"]),
+        "records.create" | "records.update" => select_labels(file, &mut labels, table, &params["values"]),
         "transact" => {
             for op in params["ops"].as_array().into_iter().flatten() {
                 for row in op["records"].as_array().into_iter().flatten() {
                     match op["op"].as_str() {
-                        Some("cells.set") => select_labels(file, needs, &mut selected, op["tableId"].as_i64().unwrap_or_default(), &row["values"]),
-                        Some("records.create") => select_labels(file, needs, &mut selected, op["tableId"].as_i64().unwrap_or_default(), row),
+                        Some("cells.set") => select_labels(file, &mut labels, op["tableId"].as_i64().unwrap_or_default(), &row["values"]),
+                        Some("records.create") => select_labels(file, &mut labels, op["tableId"].as_i64().unwrap_or_default(), row),
                         _ => {}
                     }
                 }
@@ -645,6 +663,7 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
         }
         _ => {}
     }
+    narrow_select_labels(file, needs, &labels);
     selected
 }
 
@@ -829,17 +848,6 @@ pub(crate) fn covered(file: &TableFile, selected: &Selection, asks: &[CoveredAsk
                 });
                 Some(changed)
             }
-        } else if selected.select_labels.get(id).is_some_and(|labels| {
-            // A select value names a label, not an index in the choices array.
-            let current = file.replica().get(&object, "options").unwrap_or(Value::Null);
-            let before = ask.before.get("options").unwrap_or(&current);
-            let contains = |options: &Value, label: &str| {
-                options["choices"].as_array().is_some_and(|items| items.iter().any(|item| item.as_str() == Some(label)))
-            };
-            labels.iter().any(|label| contains(before, label) != contains(&current, label))
-                || ask.unknown.iter().any(|key| key == "options" || key == "$was")
-        }) {
-            None
         } else if let Some(layouts) = selected.layouts.get(id) {
             if ask.unknown.iter().any(|key| key == "config" || key == "$was") {
                 None

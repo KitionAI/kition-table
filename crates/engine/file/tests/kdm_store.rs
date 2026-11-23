@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use kition_kdm::{ActorId, DocId, ObjectId, Origin, Replica, Schema};
-use kition_table_file::kdm::{migrate, store};
+use kition_table_file::kdm::store;
 use kition_table_file::{CreateOptions, TableFile};
 use rusqlite::{Connection, Transaction, params};
 use serde_json::{Map, json};
@@ -37,7 +37,7 @@ fn temp() -> tempfile::TempDir {
     tempfile::tempdir().unwrap_or_else(|err| panic!("tempdir: {err}"))
 }
 
-/// A schema-3 file (no replica yet), as the store's callers start from.
+/// A file with the KDM tables and no replica stored yet, as the store's callers start from.
 struct RawFile {
     conn: Connection,
 }
@@ -48,13 +48,19 @@ impl RawFile {
     }
 }
 
-/// A fresh `.ktable` file with the KDM tables and columns installed and no replica stored:
-/// files are created with a replica now, so it is stripped back to schema 3 first.
+/// A fresh `.ktable` file with the KDM tables and columns installed and no replica stored: files
+/// are created with a replica, so its store is emptied first.
 fn create_file(dir: &Path) -> RawFile {
     let path = dir.join("doc.ktable");
     TableFile::create(&path, &CreateOptions { title: "Test".into(), ..Default::default() }).unwrap_or_else(|err| panic!("create: {err}")).close();
-    let mut conn = Connection::open(&path).unwrap_or_else(|err| panic!("open: {err}"));
-    migrate::downgrade(&mut conn).unwrap_or_else(|err| panic!("downgrade: {err}"));
+    let conn = Connection::open(&path).unwrap_or_else(|err| panic!("open: {err}"));
+    conn.execute_batch(
+        "DELETE FROM kition_kdm;
+         DELETE FROM kition_kdm_changes;
+         DELETE FROM sqlite_sequence WHERE name = 'kition_kdm_changes';
+         DELETE FROM kition_meta WHERE key LIKE 'kdm\\_%' ESCAPE '\\';",
+    )
+    .unwrap_or_else(|err| panic!("empty the store: {err}"));
     store::ensure_tables(&conn).unwrap_or_else(|err| panic!("ensure_tables: {err}"));
     RawFile { conn }
 }

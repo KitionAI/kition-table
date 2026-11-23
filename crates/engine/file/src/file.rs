@@ -1,10 +1,9 @@
-//! Opening, creating, and migrating `.ktable` files.
+//! Opening and creating `.ktable` files.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use kition_kdm::{DocId, ObjectId, Origin, Replica, Version};
-use kition_time::parse_legacy;
 use kition_time::{Millis, now_millis};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
@@ -13,18 +12,16 @@ use crate::kdm::model::BASE;
 use crate::kdm::model::{self, BaseSpec};
 use crate::kdm::project::{self, TableChange};
 use crate::kdm::repair::RepairIndex;
-use crate::kdm::{migrate, repair, schema, store};
+use crate::kdm::{repair, schema, store};
 use crate::schema::{INDEXES, TABLES};
 use crate::{Result, TableFileError};
 
 pub const FORMAT: &str = "kition-table";
 pub const FORMAT_VERSION: i64 = 1;
-/// Version 3: timestamps are INTEGER Unix milliseconds. Version 4: the file holds its table
-/// document's KDM replica, and the relational tables are its projection.
-pub const SCHEMA_VERSION: i64 = 4;
-
-/// The last schema version without a KDM replica.
-const RELATIONAL_SCHEMA_VERSION: i64 = 3;
+/// The file's own schema: the file holds its table document's KDM replica, and the relational
+/// tables are its projection; every timestamp is INTEGER Unix milliseconds. A file of another
+/// version (one written before the schema freeze) is not read: there is no upgrade.
+pub const SCHEMA_VERSION: i64 = 1;
 
 #[derive(Debug, Default, Clone)]
 pub struct CreateOptions {
@@ -142,7 +139,7 @@ impl TableFile {
 
     /// Writes a new document into the empty database `conn` (at `path`, empty in memory).
     fn create_on(mut conn: Connection, path: PathBuf, options: &CreateOptions) -> Result<Self> {
-        migrate_schema(&mut conn)?;
+        create_schema(&mut conn)?;
         let (doc_id, spec) = initialize_document(&mut conn, &path, options)?;
         let (replica, _) = Replica::create_with(schema(), doc_id, crate::ids::actor(), &Origin::system("create"), |tx| {
             model::create_base(tx, &spec).map_err(|err| kition_kdm::KdmError::Engine(err.to_string()))
@@ -204,7 +201,7 @@ impl TableFile {
     /// Writes the document `replica` holds into the empty database `conn` (at `path`, empty in
     /// memory): its `document_id` is the replica's KDM id and the tables are projected from it.
     fn from_replica_on(mut conn: Connection, path: PathBuf, replica: &Replica) -> Result<Self> {
-        migrate_schema(&mut conn)?;
+        create_schema(&mut conn)?;
         {
             let tx = conn.transaction()?;
             let now = now_millis();
@@ -220,14 +217,12 @@ impl TableFile {
         Self::attach(conn, path)
     }
 
-    /// Opens an existing file, migrating it to the current schema: a file from before the KDM
-    /// gets its replica ([`migrate::upgrade`]), and a projection behind the stored replica is
-    /// rebuilt.
+    /// Opens an existing file; a projection behind the stored replica is rebuilt. A file of
+    /// another schema version, or without a replica, is refused ([`TableFileError::Invalid`]).
     ///
-    /// A file that cannot be written (read-only permissions or mount) or whose migration fails
-    /// opens read-only: it reads as it is, and every write is refused
-    /// ([`TableFileError::ReadOnly`]). Such a file from before the KDM gets an in-memory replica
-    /// only; the file itself is left exactly as it was.
+    /// A file that cannot be written (read-only permissions or mount), or whose projection cannot
+    /// be brought up to date, opens read-only: it reads as it is, and every write is refused
+    /// ([`TableFileError::ReadOnly`]).
     pub fn open(path: &Path) -> Result<Self> {
         if path.as_os_str().is_empty() {
             return Err(TableFileError::invalid("ktable path is required"));
@@ -239,9 +234,9 @@ impl TableFile {
     }
 
     /// Opens a `.ktable` file's bytes (what [`TableFile::to_bytes`] answers, or the file on
-    /// disk) as a document held in memory, exactly as [`TableFile::open`] opens a file: a file
-    /// from before the KDM gets its replica, a projection behind the stored replica is rebuilt,
-    /// and a file that cannot be brought up to date opens read-only. Nothing is written
+    /// disk) as a document held in memory, exactly as [`TableFile::open`] opens a file: a
+    /// projection behind the stored replica is rebuilt, and a file that cannot be brought up to
+    /// date opens read-only. Nothing is written
     /// anywhere; [`TableFile::path`] is empty.
     ///
     /// The bytes are copied page by page into an in-memory database ([`Connection::open_in_memory`],
@@ -295,24 +290,10 @@ impl TableFile {
     }
 
     /// [`TableFile::open`]'s steps once the database is connected.
-    fn open_on(mut conn: Connection, absolute: PathBuf, cannot_write: bool) -> Result<Self> {
+    fn open_on(conn: Connection, absolute: PathBuf, cannot_write: bool) -> Result<Self> {
         // Checked before anything is written: a database that is no table file of this format
-        // (another SQLite file, or a file of an older format) is refused untouched.
-        if schema_version(&conn)? == 0 {
-            return Err(TableFileError::invalid("not a ktable file"));
-        }
-        validate(&conn)?;
-        migrate_schema(&mut conn)?;
-        if !has_replica(&conn)? {
-            if cannot_write {
-                return Self::read_only_relational(conn, absolute, "the file cannot be written");
-            }
-            if let Err(err) = migrate::upgrade(&mut conn, crate::ids::actor()) {
-                tracing::warn!(path = %absolute.display(), error = %err, "ktable migration failed; opening read-only");
-                let reason = format!("the file could not be migrated: {err}");
-                return Self::read_only_relational(conn, absolute, &reason);
-            }
-        }
+        // (another SQLite file, or a file of another version) is refused untouched.
+        check_version(&conn)?;
         if cannot_write {
             let mut file = Self::attach(conn, absolute)?;
             file.read_only = Some("the file cannot be written".into());
@@ -325,32 +306,6 @@ impl TableFile {
             return Ok(file);
         }
         Self::attach(conn, absolute)
-    }
-
-    /// A read-only handle on a file without a stored replica: the replica is built in memory
-    /// from the relational tables (empty when even that fails; reads go to the tables anyway).
-    fn read_only_relational(conn: Connection, path: PathBuf, reason: &str) -> Result<Self> {
-        let actor = crate::ids::actor();
-        let replica = match migrate::replica_from_relational(&conn, actor) {
-            Ok(replica) => replica,
-            Err(_) => Replica::create(schema(), crate::ids::document(), actor)?,
-        };
-        let bases = replica.objects_of_type(BASE);
-        let base = bases.first().cloned();
-        Ok(Self {
-            since: replica.version(),
-            identity: FileIdentity::of(&path),
-            repair_index: RepairIndex::with_bases(&replica, bases),
-            conn,
-            path,
-            replica,
-            origin: Origin::system("unknown"),
-            head: std::cell::RefCell::new(store::Head::default()),
-            base,
-            last_change: None,
-            stale: false,
-            read_only: Some(reason.to_owned()),
-        })
     }
 
     /// Loads the stored replica and the store's head together (one read transaction).
@@ -490,9 +445,8 @@ pub(crate) fn open_sqlite(path: &Path) -> Result<(Connection, PathBuf)> {
 
 /// Rebuilds the projection when it is not at the store's head, under the write lock (positions
 /// re-checked and the replica loaded inside it, so a concurrent writer cannot be rolled back).
-/// Also records the current schema version.
 fn refresh_projection(conn: &Connection) -> Result<()> {
-    if store::projection_is_current(conn)? && schema_version(conn)? == SCHEMA_VERSION {
+    if store::projection_is_current(conn)? {
         return Ok(());
     }
     let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
@@ -500,9 +454,6 @@ fn refresh_projection(conn: &Connection) -> Result<()> {
         let replica = load_replica(&tx)?;
         project::rebuild(&tx, &replica, now_millis())?;
         store::set_projected_position(&tx, store::stored_position(&tx)?)?;
-    }
-    if schema_version(&tx)? != SCHEMA_VERSION {
-        set_meta(&tx, "schema_version", &SCHEMA_VERSION.to_string())?;
     }
     tx.commit()?;
     Ok(())
@@ -520,6 +471,27 @@ pub(crate) fn load_consistent(conn: &Connection) -> Result<(store::Head, Replica
 /// Loads the stored replica with a new random actor.
 pub(crate) fn load_replica(conn: &Connection) -> Result<Replica> {
     store::load(conn, schema(), crate::ids::actor())?.ok_or_else(|| TableFileError::Kdm("the ktable file holds no kdm replica".into()))
+}
+
+/// Refuses a database that is no `.ktable` file this build reads: another SQLite file, a file of
+/// another schema version, or one without its table document's replica.
+pub(crate) fn check_version(conn: &Connection) -> Result<()> {
+    let version = schema_version(conn)?;
+    if version == 0 {
+        return Err(TableFileError::invalid("not a ktable file"));
+    }
+    validate(conn)?;
+    // Versions 2 to 4 were written before the schema freeze, when the file numbered its own
+    // versions: they are older, not newer, and not read either.
+    if version > SCHEMA_VERSION && !(2..=4).contains(&version) {
+        return Err(TableFileError::Newer(version));
+    }
+    if version != SCHEMA_VERSION || !has_replica(conn)? {
+        return Err(TableFileError::invalid(format!(
+            "ktable schema version {version} is not read: this kit reads version {SCHEMA_VERSION} files, with their table document"
+        )));
+    }
+    Ok(())
 }
 
 pub(crate) fn validate(conn: &Connection) -> Result<()> {
@@ -550,86 +522,21 @@ pub(crate) fn schema_version(conn: &Connection) -> Result<i64> {
     Ok(value.map_or(0, |v| atoi(&v)))
 }
 
-/// Brings the relational schema up to date: a new file gets every table (KDM tables included)
-/// at the current version; a version 1 or 2 file is rebuilt into version 3. Adding the replica
-/// to a version 3 file is [`TableFile::open`]'s job.
-fn migrate_schema(conn: &mut Connection) -> Result<()> {
-    let version = schema_version(conn)?;
-    if version > SCHEMA_VERSION {
-        return Err(TableFileError::Newer(version));
+/// Gives a new file every table (KDM tables included) at the current version.
+fn create_schema(conn: &mut Connection) -> Result<()> {
+    let tx = conn.transaction()?;
+    for (_, create, _) in TABLES {
+        tx.execute_batch(&create.replacen("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ", 1))?;
     }
-    if version == 0 {
-        let tx = conn.transaction()?;
-        for (_, create, _) in TABLES {
-            tx.execute_batch(&create.replacen("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ", 1))?;
-        }
-        for index in INDEXES {
-            tx.execute_batch(index)?;
-        }
-        store::ensure_tables(&tx)?;
-        set_meta(&tx, "format", FORMAT)?;
-        set_meta(&tx, "format_version", &FORMAT_VERSION.to_string())?;
-        set_meta(&tx, "schema_version", &SCHEMA_VERSION.to_string())?;
-        tx.commit()?;
-        return Ok(());
+    for index in INDEXES {
+        tx.execute_batch(index)?;
     }
-    if version < RELATIONAL_SCHEMA_VERSION {
-        rebuild_to_v3(conn)?;
-    }
+    store::ensure_tables(&tx)?;
+    set_meta(&tx, "format", FORMAT)?;
+    set_meta(&tx, "format_version", &FORMAT_VERSION.to_string())?;
+    set_meta(&tx, "schema_version", &SCHEMA_VERSION.to_string())?;
+    tx.commit()?;
     Ok(())
-}
-
-/// Rebuilds every table of a version 1 or 2 file into the version 3
-/// schema, converting text timestamps to milliseconds. Foreign keys are
-/// disabled around the rebuild so dropping and renaming does not cascade.
-fn rebuild_to_v3(conn: &mut Connection) -> Result<()> {
-    conn.execute_batch("PRAGMA foreign_keys = OFF")?;
-    let result = (|| -> Result<()> {
-        let tx = conn.transaction()?;
-        for (name, create, time_columns) in TABLES {
-            if name == "kition_meta" {
-                continue;
-            }
-            let old_columns = column_names(&tx, name)?;
-            if old_columns.is_empty() {
-                tx.execute_batch(create)?;
-                continue;
-            }
-            let staging = format!("{name}_v3");
-            tx.execute_batch(&create.replacen(name, &staging, 1))?;
-            let new_columns = column_names(&tx, &staging)?;
-            let shared: Vec<&String> = new_columns.iter().filter(|c| old_columns.contains(c)).collect();
-            let list = shared.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(", ");
-            tx.execute_batch(&format!(
-                "INSERT INTO {staging} ({list}) SELECT {list} FROM {name};
-                 DROP TABLE {name};
-                 ALTER TABLE {staging} RENAME TO {name};"
-            ))?;
-            for column in time_columns {
-                convert_time_column(&tx, name, column)?;
-            }
-        }
-        for index in INDEXES {
-            tx.execute_batch(index)?;
-        }
-        for key in ["created_at", "updated_at"] {
-            let value: Option<String> = tx.query_row("SELECT value FROM kition_meta WHERE key = ?1", [key], |row| row.get(0)).optional()?;
-            if let Some(text) = value
-                && text.parse::<i64>().is_err()
-            {
-                set_meta(&tx, key, &parse_legacy(&text).unwrap_or(0).to_string())?;
-            }
-        }
-        set_meta(&tx, "schema_version", &RELATIONAL_SCHEMA_VERSION.to_string())?;
-        let violations: i64 = tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get(0))?;
-        if violations > 0 {
-            return Err(TableFileError::invalid("ktable migration left foreign key violations"));
-        }
-        tx.commit()?;
-        Ok(())
-    })();
-    conn.execute_batch("PRAGMA foreign_keys = ON")?;
-    result
 }
 
 /// Writes the document row and its bookkeeping; answers the KDM document id and the base the
@@ -648,7 +555,7 @@ fn initialize_document(conn: &mut Connection, path: &Path, options: &CreateOptio
     };
     let meta: Value = match options.meta_json.trim() {
         "" => Value::Null,
-        // Legacy files kept any string; the document holds JSON, so anything else is none.
+        // The document holds JSON: anything else is none.
         raw => serde_json::from_str(raw).unwrap_or(Value::Null),
     };
     let meta_json = if meta.is_null() { "{}".to_owned() } else { meta.to_string() };
@@ -682,16 +589,6 @@ pub(crate) fn column_names(conn: &Connection, table: &str) -> Result<Vec<String>
     let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let names = statement.query_map([], |row| row.get::<_, String>(1))?.collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(names)
-}
-
-fn convert_time_column(conn: &Connection, table: &str, column: &str) -> Result<()> {
-    let mut select = conn.prepare(&format!("SELECT rowid, {column} FROM {table} WHERE typeof({column}) = 'text'"))?;
-    let rows = select.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?.collect::<std::result::Result<Vec<_>, _>>()?;
-    let mut update = conn.prepare(&format!("UPDATE {table} SET {column} = ?1 WHERE rowid = ?2"))?;
-    for (rowid, text) in rows {
-        update.execute(params![parse_legacy(&text).unwrap_or(0), rowid])?;
-    }
-    Ok(())
 }
 
 pub(crate) fn atoi(value: &str) -> i64 {

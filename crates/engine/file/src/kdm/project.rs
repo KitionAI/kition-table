@@ -65,9 +65,11 @@ use serde_json::{Map, Value};
 
 use self::derive::Seed;
 use self::positions::place;
-use super::model::{BASE, DASHBOARD, FIELD, LINK, RECORD, TABLE, VIEW, is_computed};
+use super::cells;
+use super::model::{BASE, CELL_TEXT, CHOICE, DASHBOARD, FIELD, LINK, RECORD, TABLE, VIEW, is_computed};
 use super::options::options_from_kdm;
 use super::read::{LinkData, ModelView};
+use super::view_refs;
 use crate::computed::formula_references;
 use crate::history::{HistoryAction, HistoryWrite, insert_history};
 use crate::source::{FIELD_COLUMNS, Field, field_from_row};
@@ -119,9 +121,7 @@ pub fn project_changes(conn: &Connection, replica: &Replica, changed: &Changes, 
 ///
 /// Refuses ([`TableFileError::Invalid`]) to delete rows the replica never knew: live tables,
 /// fields, or views without a `kdm_id`, links between live records without one, and live records
-/// whose `row_key` is no record of the replica. A file written by the legacy code is migrated
-/// first ([`super::migrate::upgrade`] records every `kdm_id`), and a rebuild right after keeps
-/// every row.
+/// whose `row_key` is no record of the replica.
 pub fn rebuild(conn: &Connection, replica: &Replica, now: i64) -> Result<()> {
     unknown_rows(conn, replica)?;
     let mut projector = Projector::new(conn, replica, "", now, true)?;
@@ -198,7 +198,7 @@ fn unknown_rows(conn: &Connection, replica: &Replica) -> Result<()> {
         if count == 1 { format!("{count} {word}") } else { format!("{count} {word}s") }
     };
     Err(TableFileError::invalid(format!(
-        "rebuild would delete rows the replica does not know: {}, {}, {}, {}, {}; migrate the file first",
+        "rebuild would delete rows the replica does not know: {}, {}, {}, {}, {}",
         plural(tables, "table"),
         plural(fields, "field"),
         plural(views, "view"),
@@ -417,6 +417,19 @@ impl<'a> Projector<'a> {
                 }
                 LINK => {
                     plan.links.insert(id.clone());
+                }
+                // A choice is part of its field's options, and its name of the values of the cells
+                // holding it.
+                CHOICE => {
+                    if let Some(field) = self.replica.get(id, "field")?.as_str() {
+                        plan.fields.insert(ObjectId::from_string(field));
+                    }
+                }
+                // A long text is part of its record's values.
+                CELL_TEXT => {
+                    if let Some(record) = self.replica.get(id, "record")?.as_str() {
+                        plan.records.insert(ObjectId::from_string(record));
+                    }
                 }
                 DASHBOARD => plan.dashboards = true,
                 _ => {}
@@ -891,10 +904,13 @@ impl<'a> Projector<'a> {
                 continue;
             }
             let derived = is_derived_type(&row.field_type) || is_derived_type(&wanted.field_type);
+            // A select's choices are the names its cells show.
+            let select = cells::CellKind::of(&wanted.field_type).is_select();
             let affects_values = !fresh.contains(&row.id)
                 && (row.table_id != *table_id
                     || row.name != wanted.name
                     || is_computed(&row.field_type) != is_computed(&wanted.field_type)
+                    || (select && row.options_json != options_json)
                     || (derived && (row.field_type != wanted.field_type || row.options_json != options_json || row.formula != wanted.formula)));
             self.conn
                 .prepare_cached(
@@ -1077,8 +1093,28 @@ impl<'a> Projector<'a> {
     // -----------------------------------------------------------------------
     // Views.
 
+    /// A view config as the relational tables hold it: its fields by name, and the sorts' and
+    /// groups' by row id too ([`view_refs::config_from_kdm`]). A field that is gone keeps the name
+    /// and id of its last row.
+    fn relational_config(&self, config: &Value) -> Result<Value> {
+        let statement = std::cell::RefCell::new(
+            self.conn.prepare_cached("SELECT name, id FROM kition_fields WHERE kdm_id = ?1 ORDER BY deleted_at IS NOT NULL, id DESC LIMIT 1")?,
+        );
+        let describe = |id: &ObjectId| -> view_refs::Described {
+            statement
+                .borrow_mut()
+                .query_row([id.as_str()], |row| Ok((row.get::<_, String>(0)?, Some(row.get::<_, i64>(1)?))))
+                .optional()
+                .ok()
+                .flatten()
+        };
+        Ok(view_refs::config_from_kdm(config, &describe))
+    }
+
     fn project_views(&mut self, plan: &Plan) -> Result<()> {
-        if plan.views.is_empty() && plan.gone_views.is_empty() && self.reconcile.is_empty() {
+        // A view config names fields by object id and projects them by name: views of a table
+        // whose fields changed are projected again.
+        if plan.views.is_empty() && plan.gone_views.is_empty() && self.reconcile.is_empty() && self.out.schema.is_empty() {
             return Ok(());
         }
         // Live view rows linked to an object, by object id.
@@ -1123,7 +1159,7 @@ impl<'a> Projector<'a> {
                 if self.view_table.get(view) != Some(table) {
                     continue;
                 }
-                if plan.full || plan.views.contains(view) || (reconciled && !rows.contains_key(view)) {
+                if plan.full || plan.views.contains(view) || (reconciled && !rows.contains_key(view)) || self.out.schema.contains(&table_id) {
                     targets.push((view.clone(), table.clone(), table_id));
                 }
             }
@@ -1131,7 +1167,7 @@ impl<'a> Projector<'a> {
         let mut fresh: HashSet<i64> = HashSet::new();
         for (view, table, table_id) in &targets {
             let data = read_view(self.replica, view)?;
-            let config = json_text(&data.config);
+            let config = json_text(&self.relational_config(&data.config)?);
             let id = match rows.get(view) {
                 Some((id, _)) => {
                     let updated = self
@@ -1321,6 +1357,7 @@ impl<'a> Projector<'a> {
         let mut changed: Vec<(&str, i64, Option<&str>, Option<Value>)> = Vec::new();
         for (key, new) in written {
             let Some(name) = schema.stored.get(key) else { continue };
+            let new = &new.as_ref().map(|value| cells::decode(self.replica, value));
             let text = members.iter().find(|(member, _)| *member == name.as_str()).map(|(_, text)| *text);
             let old: Value = text.map(serde_json::from_str).transpose()?.unwrap_or(Value::Null);
             if json::equal(&old, new.as_ref().unwrap_or(&Value::Null)) {
@@ -1639,7 +1676,7 @@ impl<'a> Projector<'a> {
         };
         for (key, value) in cells {
             if let Some(name) = schema.stored.get(&key) {
-                values.insert(name.clone(), value);
+                values.insert(name.clone(), cells::decode(self.replica, &value));
             }
         }
         Ok(values)

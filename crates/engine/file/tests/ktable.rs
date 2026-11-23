@@ -1,5 +1,5 @@
-//! Behavior of the `.ktable` format, ported from the legacy suite plus the
-//! version 3 timestamp migration.
+//! Behavior of the `.ktable` format, ported from the legacy suite. Files written before the
+//! schema freeze are not read (no migration).
 
 use std::path::{Path, PathBuf};
 
@@ -57,22 +57,19 @@ fn create_initializes_metadata_and_schema() {
     assert_eq!(info.format_version, 1);
     assert_eq!(info.schema_version, SCHEMA_VERSION);
     assert_eq!(info.created_at, 1_778_574_600_000);
-    for table in [
-        "kition_meta",
-        "kition_documents",
-        "kition_tables",
-        "kition_fields",
-        "kition_views",
-        "kition_records",
-        "kition_attachments",
-        "kition_change_log",
-    ] {
+    for table in ["kition_meta", "kition_documents", "kition_tables", "kition_fields", "kition_views", "kition_records", "kition_attachments"] {
         let count: i64 = ok(file
             .conn()
             .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1", [table], |r| r.get(0))
             .map_err(TableFileError::from));
         assert_eq!(count, 1, "{table}");
     }
+    // Nothing ever wrote a change log: the file has none.
+    let count: i64 = ok(file
+        .conn()
+        .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='kition_change_log'", [], |r| r.get(0))
+        .map_err(TableFileError::from));
+    assert_eq!(count, 0, "no kition_change_log");
 }
 
 #[test]
@@ -113,50 +110,36 @@ fn open_rejects_missing_file_and_foreign_format() {
     assert!(matches!(TableFile::open(&path), Err(TableFileError::Invalid(_))));
 }
 
+/// No migration: a file written before the schema freeze (an older relational schema without a
+/// replica, or schema version 4 with its replica of the old shape) is refused and left as it was.
 #[test]
-fn migrates_legacy_text_timestamps_to_v3() {
+fn files_from_before_the_schema_freeze_are_refused_untouched() {
     let dir = temp();
-    let path = dir.path().join("legacy.ktable");
-    {
-        let conn = rusqlite::Connection::open(&path).unwrap_or_else(|err| panic!("{err}"));
-        conn.execute_batch(
-            "CREATE TABLE kition_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-             INSERT INTO kition_meta VALUES ('format','kition-table'),('format_version','1'),('schema_version','1'),
-               ('document_id','doc_legacy'),('created_at','2026-10-09T03:57:06.334767Z'),('updated_at','2026-10-09T03:57:06Z');
-             CREATE TABLE kition_documents (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
-               icon TEXT NOT NULL DEFAULT '', color TEXT NOT NULL DEFAULT '', meta_json TEXT NOT NULL DEFAULT '{}',
-               created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT);
-             INSERT INTO kition_documents (id, title, created_at, updated_at) VALUES ('doc_legacy','Old','2026-10-09T03:57:06Z','2026-10-09T03:57:06Z');
-             CREATE TABLE kition_tables (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT NOT NULL, name TEXT NOT NULL,
-               title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0,
-               primary_field_id INTEGER, meta_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,
-               updated_at TEXT NOT NULL, deleted_at TEXT, UNIQUE(document_id, name),
-               FOREIGN KEY(document_id) REFERENCES kition_documents(id) ON DELETE CASCADE);
-             INSERT INTO kition_tables (document_id, name, title, created_at, updated_at, deleted_at)
-               VALUES ('doc_legacy','tasks','Tasks','2026-10-09T03:57:06Z','2026-10-09T03:57:06Z','2026-10-09T04:00:00Z');",
-        )
-        .unwrap_or_else(|err| panic!("{err}"));
+    let mut paths = Vec::new();
+    for (name, version) in [("relational.ktable", "1"), ("kdm.ktable", "4")] {
+        let path = dir.path().join(name);
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap_or_else(|err| panic!("{err}"));
+            conn.execute_batch(&format!(
+                "CREATE TABLE kition_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 INSERT INTO kition_meta VALUES ('format','kition-table'),('format_version','1'),('schema_version','{version}'),
+                   ('document_id','doc_legacy'),('created_at','2026-10-09T03:57:06.334767Z'),('updated_at','2026-10-09T03:57:06Z');
+                 CREATE TABLE kition_documents (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+                   icon TEXT NOT NULL DEFAULT '', color TEXT NOT NULL DEFAULT '', meta_json TEXT NOT NULL DEFAULT '{{}}',
+                   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT);
+                 INSERT INTO kition_documents (id, title, created_at, updated_at) VALUES ('doc_legacy','Old','2026-10-09T03:57:06Z','2026-10-09T03:57:06Z');"
+            ))
+            .unwrap_or_else(|err| panic!("{err}"));
+        }
+        paths.push(path);
     }
-    let file = ok(TableFile::open(&path));
-    let info = ok(file.info());
-    // Opening also adds the KDM replica (schema 4) after the rebuild into schema 3.
-    assert_eq!(info.schema_version, SCHEMA_VERSION);
-    assert_eq!(info.created_at, 1_791_518_226_334);
-    assert_eq!(info.title, "Old");
-    let (created, deleted): (i64, i64) = ok(file
-        .conn()
-        .query_row("SELECT created_at, deleted_at FROM kition_tables", [], |r| Ok((r.get(0)?, r.get(1)?)))
-        .map_err(TableFileError::from));
-    assert_eq!(created, 1_791_518_226_000);
-    assert_eq!(deleted, 1_791_518_400_000);
-    // The soft-deleted name can be reused; two live rows still collide.
-    let now = 1_i64;
-    let insert = "INSERT INTO kition_tables (document_id, name, title, created_at, updated_at) VALUES ('doc_legacy','tasks','T',?1,?1)";
-    assert!(file.conn().execute(insert, [now]).is_ok());
-    assert!(file.conn().execute(insert, [now]).is_err());
-    // Tables missing from the legacy file were created.
-    let records: i64 = ok(file.conn().query_row("SELECT COUNT(*) FROM kition_records", [], |r| r.get(0)).map_err(TableFileError::from));
-    assert_eq!(records, 0);
+    for path in &paths {
+        let before = std::fs::read(path).unwrap_or_else(|err| panic!("{err}"));
+        let refused = TableFile::open(path);
+        assert!(matches!(refused, Err(TableFileError::Invalid(_))), "{}: {refused:?}", path.display());
+        assert!(TableFile::open_bytes(&before).is_err(), "the bytes of {} are refused", path.display());
+        assert_eq!(std::fs::read(path).unwrap_or_else(|err| panic!("{err}")), before, "{} is left as it was", path.display());
+    }
 }
 
 #[test]

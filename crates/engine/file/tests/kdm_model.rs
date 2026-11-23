@@ -743,7 +743,7 @@ fn repair_fixes_lists_primary_fields_and_links() {
         let field = tx.create(
             "Field",
             object(json!({ "name": "x", "title": "X", "type": "text", "required": false,
-                "readonly": false, "formula": "", "aiPrompt": "" })),
+                "readonly": false, "formula": "" })),
         )?;
         let table = tx.create("Table", object(json!({ "name": "lost", "title": "Lost", "description": "" })))?;
         let dashboard = tx.create("Dashboard", object(json!({ "name": "lost" })))?;

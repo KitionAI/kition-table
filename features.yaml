@@ -102,6 +102,14 @@ features:
     paths: [apps/kition-table/src/main.rs, crates/engine/file/src/identity.rs, kit.json]
     cases: [table.platform.document-identity/fork, table.platform.document-identity/no-replica]
     since: "2026-11-20"
+  - id: table.collab.merge-inside
+    title: "Concurrent edits merge inside a select's options, a long text and an AI prompt; view configs name fields by id and keep no search (schema version 1)"
+    dimension: [collab, data-safety]
+    priority: P0
+    status: has
+    paths: [model/schema.json, crates/engine/file/src/kdm/cells.rs, crates/engine/file/src/kdm/view_refs.rs, crates/engine/file/tests/schema_freeze.rs]
+    cases: [table.collab.merge-inside/schema-freeze]
+    since: "2026-11-23"
   - id: table.collab.live
     title: Two or more people edit one table at the same time, live
     dimension: [collab, function]

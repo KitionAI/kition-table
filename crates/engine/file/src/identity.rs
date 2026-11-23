@@ -15,18 +15,15 @@ use crate::{Result, TableFile, TableFileError, file};
 
 /// The replica `bytes` (a `.ktable` file) embeds, as one KDM snapshot: the stored snapshot with
 /// the change rows after it imported, or `None` for an empty file (one made for the kit before it
-/// saved a table there) and for a file from before the KDM, which holds no replica yet (an open
-/// gives it one). Refuses bytes that are no `.ktable` file, a file of a newer schema, a broken
-/// change log, and a replica of another document than the one the file records. Never writes.
+/// saved a table there). Refuses bytes that are no `.ktable` file this build reads (another
+/// schema version), a broken change log, and a replica of another document than the one the file
+/// records. Never writes.
 pub fn embedded_replica(bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     if bytes.is_empty() {
         return Ok(None);
     }
     let conn = read_only(bytes)?;
-    check(&conn)?;
-    if !file::has_replica(&conn)? {
-        return Ok(None);
-    }
+    file::check_version(&conn)?;
     let replica =
         store::load(&conn, schema(), crate::ids::actor())?.ok_or_else(|| TableFileError::Kdm("the ktable file holds no kdm replica".into()))?;
     if let Some(recorded) = file::get_meta(&conn, store::DOC_ID_KEY)?
@@ -51,7 +48,7 @@ pub fn embedded_replica(bytes: &[u8]) -> Result<Option<Vec<u8>>> {
 /// file. Refuses bytes that are no `.ktable` file and a snapshot that is no table document.
 pub fn replace_replica(bytes: &[u8], snapshot: &[u8]) -> Result<Vec<u8>> {
     let source = read_only(bytes)?;
-    check(&source)?;
+    file::check_version(&source)?;
     let fork = TableFile::create_from_replica_in_memory(snapshot)?;
     if has_table(&source, "kition_blobs")? {
         let named = {
@@ -89,19 +86,6 @@ fn read_only(bytes: &[u8]) -> Result<Connection> {
     let mut conn = Connection::open_in_memory()?;
     conn.deserialize_read_exact(rusqlite::MAIN_DB, bytes, bytes.len(), true)?;
     Ok(conn)
-}
-
-/// Refuses a database that is no `.ktable` file of a schema this build reads.
-fn check(conn: &Connection) -> Result<()> {
-    let version = file::schema_version(conn)?;
-    if version == 0 {
-        return Err(TableFileError::invalid("not a ktable file"));
-    }
-    file::validate(conn)?;
-    if version > file::SCHEMA_VERSION {
-        return Err(TableFileError::Newer(version));
-    }
-    Ok(())
 }
 
 fn has_table(conn: &Connection, name: &str) -> Result<bool> {
