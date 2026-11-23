@@ -282,6 +282,37 @@ pub fn compact(conn: &Connection, replica: &Replica, now: i64) -> Result<()> {
     new_epoch(conn)
 }
 
+/// The epoch of a content file's store ([`write_content`]): fixed, so a file saved twice from one
+/// state holds the same bytes.
+const CONTENT_EPOCH: &str = "content";
+
+/// Makes the store a content file's: `content` (a sealed content snapshot: the document's state
+/// and, of its history, only the seal) as generation 1, no change rows and no origin log, a fixed
+/// epoch, and the projection recorded as current. For a copy of the file being saved, whose
+/// projection is the state `content` holds.
+pub(crate) fn write_content(conn: &Connection, content: &[u8]) -> Result<()> {
+    conn.execute("UPDATE kition_kdm SET snapshot = x'' WHERE id = 1", [])?;
+    conn.execute("DELETE FROM kition_kdm_changes", [])?;
+    conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('kition_kdm_changes', 'kition_kdm_origins')", [])?;
+    conn.execute_batch("DROP TABLE IF EXISTS kition_kdm_origins")?;
+    conn.execute("DELETE FROM kition_meta WHERE key = ?1", [ORIGIN_LOG_FLOOR_KEY])?;
+    let updated =
+        conn.execute("UPDATE kition_kdm SET snapshot = zeroblob(?1), generation = 1, updated_at = 0 WHERE id = 1", params![blob_len(content)?])?;
+    if updated == 0 {
+        return Err(TableFileError::invalid("kdm replica is not initialized"));
+    }
+    put_snapshot(conn, content)?;
+    file::set_meta(conn, EPOCH_KEY, CONTENT_EPOCH)?;
+    set_projected_position(conn, (1, 0))
+}
+
+/// The stored snapshot (a content file's content entry) and the number of change rows after it.
+pub fn stored(conn: &Connection) -> Result<(Vec<u8>, i64)> {
+    let snapshot: Vec<u8> = conn.query_row("SELECT snapshot FROM kition_kdm WHERE id = 1", [], |row| row.get(0))?;
+    let changes: i64 = conn.query_row("SELECT COUNT(*) FROM kition_kdm_changes", [], |row| row.get(0))?;
+    Ok((snapshot, changes))
+}
+
 /// Whether the change log has grown enough that [`compact`] is worth running: more than 500
 /// change rows, or more bytes of them than 1 MiB or a quarter of the snapshot, whichever is more.
 pub fn should_compact(conn: &Connection) -> Result<bool> {

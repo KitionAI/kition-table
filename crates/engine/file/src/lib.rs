@@ -8,6 +8,7 @@
 pub mod blobs;
 mod bulk;
 mod computed;
+mod content;
 mod dashboards;
 mod file;
 mod history;

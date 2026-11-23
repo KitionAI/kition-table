@@ -110,6 +110,14 @@ features:
     paths: [model/schema.json, crates/engine/file/src/kdm/cells.rs, crates/engine/file/src/kdm/view_refs.rs, crates/engine/file/tests/schema_freeze.rs]
     cases: [table.collab.merge-inside/schema-freeze]
     since: "2026-11-23"
+  - id: table.file.content-only
+    title: "A saved .ktable holds the table's content, not its history (the sealed content snapshot; no change log, record history, deleted rows or free pages)"
+    dimension: [data-safety, collab]
+    priority: P0
+    status: has
+    paths: [crates/engine/file/src/content.rs, crates/engine/file/src/kdm/store.rs, bindings/wasm/src/lib.rs, bindings/wasm/tests/content_file.rs, apps/kition-table/tests/content_file.rs]
+    cases: [table.file.content-only/no-history]
+    since: "2026-11-23"
   - id: table.collab.live
     title: Two or more people edit one table at the same time, live
     dimension: [collab, function]

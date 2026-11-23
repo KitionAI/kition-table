@@ -146,6 +146,57 @@ impl TableFile {
         }
     }
 
+    /// Runs `f` as one transaction of the replica as `origin`, stored and projected like every
+    /// write: for writes the model has no function for, such as a file's state written over the
+    /// replica (`kition_kit::session::write_state`, when a file read again was saved from changes
+    /// this replica lacks).
+    pub fn transact_as<R>(&mut self, origin: &Origin, f: impl FnOnce(&mut Tx<'_>) -> Result<R>) -> Result<(R, TableChange)> {
+        self.commit_as(origin, f)
+    }
+
+    /// Seals the replica for a save (kition-sdk data model 7.3): unless its last change already is
+    /// a seal, one `system` change (`content-seal`) that depends on every head, stored like any
+    /// write; no edit, no undo step. A saved file then holds the replica's content snapshot
+    /// ([`TableFile::content_bytes`]). Answers whether it sealed.
+    pub fn seal(&mut self) -> Result<bool> {
+        if self.replica.is_sealed() {
+            return Ok(false);
+        }
+        let label = Origin::system("content-seal").encode();
+        self.write(&label, false, |replica| Ok(replica.seal()?)).map(|(sealed, _, _)| sealed)
+    }
+
+    /// Makes `replica` (the replica a host stored for this document, with its history, the file
+    /// taken into it: `kition_kit::session::take_file`) this handle's: stored in place of the
+    /// file's, repaired, and projected again in place, so the integer ids of rows that stay are
+    /// kept. Undo history starts anew. A replica of another document is
+    /// [`TableFileError::Invalid`].
+    pub fn adopt_replica(&mut self, mut replica: Replica) -> Result<TableChange> {
+        self.writable()?;
+        if replica.doc_id() != self.replica.doc_id() {
+            return Err(TableFileError::invalid("the replica is of another document"));
+        }
+        let changed = replica.take_changed();
+        repair::run(&mut replica, &changed)?;
+        replica.take_changed();
+        let now = now_millis();
+        let tx = Transaction::new_unchecked(&self.conn, TransactionBehavior::Immediate)?;
+        store::compact(&tx, &replica, now)?;
+        project::rebuild(&tx, &replica, now)?;
+        let change = everything(&tx)?;
+        store::set_projected_position(&tx, store::stored_position(&tx)?)?;
+        let head = store::head(&tx)?;
+        tx.commit()?;
+        self.since = replica.version();
+        *self.head.get_mut() = head;
+        self.base = file::find_base(&self.conn, &replica)?;
+        self.repair_index = repair::RepairIndex::default();
+        self.replica = replica;
+        self.identity = FileIdentity::of(&self.path);
+        self.last_change = Some(change.clone());
+        Ok(change)
+    }
+
     /// Refuses writes on a handle opened read-only.
     pub(crate) fn writable(&self) -> Result<()> {
         match &self.read_only {

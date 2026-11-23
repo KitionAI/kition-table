@@ -247,8 +247,9 @@ let bytes = document.save(None)?;
 ## How it fits together
 
 - **One engine.** The engine is Rust. It implements the Kition SDK's `KitDocument` contract on the
-  SDK's Kit Data Model: a `.ktable` file holds the document's replica and a relational projection
-  of it in SQLite.
+  SDK's Kit Data Model: a `.ktable` file holds the document's content (the replica's sealed
+  content snapshot, no history) and a relational projection of it in SQLite; the session keeps the
+  history, which the host stores.
 - **In the page.** The editor (`web/`) is built on the SDK's `@kition/sdk/editor`. The engine runs
   as WebAssembly in a Web Worker; hosts embed the editor in a sandboxed frame over the Kit UI
   protocol, and name a table or dashboard to open with a view (`document.view` when the editor

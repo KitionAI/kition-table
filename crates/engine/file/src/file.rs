@@ -247,23 +247,7 @@ impl TableFile {
         if bytes.is_empty() {
             return Err(TableFileError::invalid("ktable bytes are empty"));
         }
-        let mut conn = Connection::open_in_memory()?;
-        {
-            let mut source = Connection::open_in_memory()?;
-            source.deserialize_read_exact(rusqlite::MAIN_DB, bytes, bytes.len(), true)?;
-            // An in-memory database takes a copy only at its own page size.
-            let page_size: i64 = source.query_row("PRAGMA page_size", [], |row| row.get(0))?;
-            conn.execute_batch(&format!("PRAGMA page_size = {page_size}"))?;
-            // The copy allocates its pages one at a time, each with the page cache's header (a
-            // few hundred bytes) on top of the page: make room for all of them at once (see
-            // `reserve_memory`).
-            let pages = bytes.len() / usize::try_from(page_size).unwrap_or(4096).max(512);
-            reserve_memory(bytes.len().saturating_add(pages.saturating_mul(512)));
-            let copy = rusqlite::backup::Backup::new(&source, &mut conn)?;
-            if copy.step(-1)? != rusqlite::backup::StepResult::Done {
-                return Err(TableFileError::invalid("ktable bytes could not be read"));
-            }
-        }
+        let conn = memory_copy(bytes)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         Self::open_on(conn, PathBuf::new(), false)
     }
@@ -275,18 +259,7 @@ impl TableFile {
     /// straight into the answer: the bytes `sqlite3_serialize` answers, without its copy of the
     /// whole document, which for a large table is more memory than the page cache leaves.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        let pages: i64 = self.conn.query_row("PRAGMA page_count", [], |row| row.get(0))?;
-        let page_size: i64 = self.conn.query_row("PRAGMA page_size", [], |row| row.get(0))?;
-        let size = usize::try_from(pages.saturating_mul(page_size)).map_err(|_| TableFileError::invalid("the ktable database is too large"))?;
-        let mut bytes = Vec::with_capacity(size);
-        let mut statement = self.conn.prepare("SELECT data FROM sqlite_dbpage('main') ORDER BY pgno").map_err(|err| {
-            TableFileError::invalid(format!("this build's SQLite has no sqlite_dbpage (SQLITE_ENABLE_DBPAGE_VTAB, set in .cargo/config.toml): {err}"))
-        })?;
-        let mut rows = statement.query([])?;
-        while let Some(row) = rows.next()? {
-            bytes.extend_from_slice(row.get_ref(0)?.as_blob().map_err(|_| TableFileError::invalid("a database page is not a blob"))?);
-        }
-        Ok(bytes)
+        database_bytes(&self.conn)
     }
 
     /// [`TableFile::open`]'s steps once the database is connected.
@@ -418,6 +391,45 @@ pub(crate) fn find_base(conn: &Connection, replica: &Replica) -> Result<Option<O
         return Ok(Some(id));
     }
     Ok(replica.objects_of_type(BASE).into_iter().next())
+}
+
+/// The database `bytes` (a `.ktable` file) as a database in memory, copied page by page (see
+/// [`TableFile::open_bytes`]), foreign keys off as the copy leaves them.
+pub(crate) fn memory_copy(bytes: &[u8]) -> Result<Connection> {
+    let mut conn = Connection::open_in_memory()?;
+    {
+        let mut source = Connection::open_in_memory()?;
+        source.deserialize_read_exact(rusqlite::MAIN_DB, bytes, bytes.len(), true)?;
+        // An in-memory database takes a copy only at its own page size.
+        let page_size: i64 = source.query_row("PRAGMA page_size", [], |row| row.get(0))?;
+        conn.execute_batch(&format!("PRAGMA page_size = {page_size}"))?;
+        // The copy allocates its pages one at a time, each with the page cache's header (a
+        // few hundred bytes) on top of the page: make room for all of them at once (see
+        // `reserve_memory`).
+        let pages = bytes.len() / usize::try_from(page_size).unwrap_or(4096).max(512);
+        reserve_memory(bytes.len().saturating_add(pages.saturating_mul(512)));
+        let copy = rusqlite::backup::Backup::new(&source, &mut conn)?;
+        if copy.step(-1)? != rusqlite::backup::StepResult::Done {
+            return Err(TableFileError::invalid("ktable bytes could not be read"));
+        }
+    }
+    Ok(conn)
+}
+
+/// The whole database `conn` as the bytes of a file, a page at a time (see [`TableFile::to_bytes`]).
+pub(crate) fn database_bytes(conn: &Connection) -> Result<Vec<u8>> {
+    let pages: i64 = conn.query_row("PRAGMA page_count", [], |row| row.get(0))?;
+    let page_size: i64 = conn.query_row("PRAGMA page_size", [], |row| row.get(0))?;
+    let size = usize::try_from(pages.saturating_mul(page_size)).map_err(|_| TableFileError::invalid("the ktable database is too large"))?;
+    let mut bytes = Vec::with_capacity(size);
+    let mut statement = conn.prepare("SELECT data FROM sqlite_dbpage('main') ORDER BY pgno").map_err(|err| {
+        TableFileError::invalid(format!("this build's SQLite has no sqlite_dbpage (SQLITE_ENABLE_DBPAGE_VTAB, set in .cargo/config.toml): {err}"))
+    })?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        bytes.extend_from_slice(row.get_ref(0)?.as_blob().map_err(|_| TableFileError::invalid("a database page is not a blob"))?);
+    }
+    Ok(bytes)
 }
 
 /// Makes the heap `bytes` larger in one step, ahead of many small allocations that need about as

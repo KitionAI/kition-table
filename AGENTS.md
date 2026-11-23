@@ -52,6 +52,11 @@ executable, and never depends on a crate here.
   and to the engine only through engine commands and extras. Its UI primitives, theme, and strings
   are this repository's (`web/src/ui`, `web/src/styles`, `web/locales`).
 - No compatibility layer: the native suffix is `.ktable`; old `.kitable` files are not read.
+- A saved `.ktable` holds the table's content, not its history (kition-sdk data model 7.3): its
+  replica is the sealed content snapshot (`prepareSave` seals, `save` writes
+  `TableFile::content_bytes`), with no change rows, origin log, record history, deleted rows or
+  free pages. The session keeps the history; the host stores it. Files written before the schema
+  freeze (schema version 1) are not read.
 - English only in code, comments, and docs; localized text only in `web/locales/<locale>/`. Never
   write a local path or user name into a tracked file.
 - Checks: on your machine run only the fast ones: `cargo fmt --all -- --check`, `cargo check -p
