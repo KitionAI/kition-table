@@ -94,7 +94,15 @@ async fn outside_rereads_do_not_undo_or_redo_the_colleague() {
             let basis = f.basis().await;
             f.colleague("table.records.update", json!({"tableId":1,"recordId":if related {1} else {2},"values":{"notes":"Theirs"}}));
             let answer = f.write(basis, if redo { "table.redo" } else { "table.undo" }, json!({})).await.unwrap();
-            assert_eq!(f.disk().file().get_record(1, if related { 1 } else { 2 }).unwrap().values["notes"], "Theirs");
+            // A long text merges per character: the colleague's typing stays, and the step takes
+            // back or puts again only the agent's own characters.
+            let notes = f.disk().file().get_record(1, if related { 1 } else { 2 }).unwrap().values["notes"].as_str().unwrap_or_default().to_owned();
+            assert!(notes.contains("Theirs"), "{notes}");
+            if related {
+                assert_eq!(notes.contains("Mine"), redo, "{notes}");
+            } else {
+                assert_eq!(notes, "Theirs");
+            }
             // The session reconciles the outside reread and keeps its own undo history. The
             // step takes back
             // or puts again only the agent's own edit; the colleague's value stays.

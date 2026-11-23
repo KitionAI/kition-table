@@ -147,7 +147,7 @@ fn fixture() -> (TableDocument, Vec<Role>) {
         let choices = kition_table_file::kdm::cells::listed_choices(doc.file().replica(), &field).unwrap();
         assert_eq!(choices.len(), names.len());
         for (choice, role) in choices.iter().zip(names) {
-            held.push(Role { role: *role, tool: choice.id.to_string(), local: None, name: None });
+            held.push(Role { role, tool: choice.id.to_string(), local: None, name: None });
         }
     }
     for (record, role) in [("$R1", "$N1"), ("$R2", "$N2")] {
@@ -464,7 +464,14 @@ const ROWS: &[Row] = &[
     r(
         "table.fields.delete",
         r#"{"tableId":"$T","fieldId":"$Notes"}"#,
-        &[("$T", "-", "-"), ("$Notes", "*", "-"), ("records($T)", "cells.$Notes", "-"), ("$Base", "~linkCells:*.$Notes,~rowIds:$T", "-")],
+        &[
+            ("$T", "-", "-"),
+            ("$Notes", "*", "-"),
+            ("records($T)", "cells.$Notes", "-"),
+            ("$N1", "text", "-"),
+            ("$N2", "text", "-"),
+            ("$Base", "~linkCells:*.$Notes,~rowIds:$T", "-"),
+        ],
     ),
     r(
         "table.fields.delete",
@@ -587,11 +594,15 @@ const ROWS: &[Row] = &[
     ),
     // records.delete / bulkDelete: the records go, wherever they are, with their links (pinned:
     // `~linkCells` of the record).
-    r("table.records.delete", r#"{"tableId":"$T","recordId":"$R2"}"#, &[("$T", "-", "-"), ("$R2", "*", "-"), ("$Base", "~linkCells:$R2", "-")]),
+    r(
+        "table.records.delete",
+        r#"{"tableId":"$T","recordId":"$R2"}"#,
+        &[("$T", "-", "-"), ("$R2", "*", "-"), ("$N2", "text", "-"), ("$Base", "~linkCells:$R2", "-")],
+    ),
     r(
         "table.records.bulkDelete",
         r#"{"tableId":"$T","row_keys":["$R2","$R3"]}"#,
-        &[("$T", "-", "-"), ("$R2", "*", "-"), ("$R3", "*", "-"), ("$Base", "~linkCells:$R2,~linkCells:$R3", "-")],
+        &[("$T", "-", "-"), ("$R2", "*", "-"), ("$N2", "text", "-"), ("$R3", "*", "-"), ("$Base", "~linkCells:$R2,~linkCells:$R3", "-")],
     ),
     // bulkCopy: the sources' stored cells (which fields are stored: their types);
     // `target_position` is a place among the records. pinned: `~owner`.
@@ -703,6 +714,8 @@ const ROWS: &[Row] = &[
             ("fields($T)", "name,title,type", "-"),
             ("$Owner", "options", "-"),
             ("records($T)", "*", "-"),
+            ("$N1", "text", "-"),
+            ("$N2", "text", "-"),
             ("$Base", "~linkCells:$R1,~linkCells:$R2,~linkCells:$R3,~lists:$T.fields,~rowIds:$T", "-"),
         ],
     ),
@@ -714,6 +727,7 @@ const ROWS: &[Row] = &[
             ("fields($T)", "name,title,type", "-"),
             ("$Owner", "options", "-"),
             ("$R1", "cells.$Notes,cells.$Title,~owner", "-"),
+            ("$N1", "text", "-"),
             ("$R2", "cells.$Title,~owner", "-"),
             ("$R3", "cells.$Title,~owner", "-"),
             ("$Base", "~lists:$T.fields,~rowIds:$T", "-"),
@@ -735,6 +749,7 @@ const ROWS: &[Row] = &[
             ("$Summary", "aiPrompt,name,options,title,type,~owner", "-"),
             ("$Notes", "name,title,type", "-"),
             ("$R1", "cells.$Notes,cells.$Summary,~owner", "-"),
+            ("$N1", "text", "-"),
         ],
         &["$T.records[0..1]"],
     ),

@@ -29,9 +29,9 @@ pub fn resolve(file: &TableFile, ty: &str, value: &Value) -> Option<String> {
 
 /// The premise contract of a raw cell write, `map.set` or `map.remove` of a record's `cells`
 /// (`batchOps` in `model/schema.json`; the write itself runs as the raw operation): the one cell
-/// it assigns, and the field its key names: that it is still there, and its `type`, `options` and
-/// `choices` (with every choice's `name`), through which the written value is read. Neither the
-/// record's place nor its other cells, nor the field's name, title or place.
+/// it assigns, and the field its key names: that it is still there, and its `type` and `options`
+/// (a select's `choices` too, with every choice's `name`), through which the written value is
+/// read. Neither the record's place nor its other cells, nor the field's name, title or place.
 pub const RAW_CELL: &str = "model.cell";
 
 pub fn raw_cell(file: &TableFile, params: &Value) -> Result<Under, String> {
@@ -40,12 +40,51 @@ pub fn raw_cell(file: &TableFile, params: &Value) -> Result<Under, String> {
     let mut premises = vec![Premise::on(json!(record)).fields([format!("cells.{key}")]).positions(Vec::<String>::new())];
     let field = ObjectId::from_string(key);
     if file.replica().object_type(&field).is_ok_and(|ty| ty == "Field") {
-        premises.push(Premise::on(json!(key)).fields(["choices", "options", "type"].map(str::to_owned)).positions(Vec::<String>::new()));
-        for choice in kition_table_file::kdm::cells::all_choices(file.replica(), &field) {
-            premises.push(Premise::on(json!(choice.as_str())).fields(["name".to_owned()]).positions(Vec::<String>::new()));
+        let select = is_select(file, &field);
+        let read: &[&str] = if select { &["choices", "options", "type"] } else { &["options", "type"] };
+        premises.push(Premise::on(json!(key)).fields(read.iter().map(|name| (*name).to_owned())).positions(Vec::<String>::new()));
+        if select {
+            for choice in kition_table_file::kdm::cells::all_choices(file.replica(), &field) {
+                premises.push(Premise::on(json!(choice.as_str())).fields(["name".to_owned()]).positions(Vec::<String>::new()));
+            }
         }
     }
-    Ok(Under { premises, ..Under::default() })
+    Ok(Under { premises: with_texts(file, premises), ..Under::default() })
+}
+
+/// `premises` with the long texts they rest on: a record's cell of a long text holds its
+/// `CellText`'s id, and the characters are that object's `text`, so a premise on the cell (or on
+/// the whole record) holds the text too.
+fn with_texts(file: &TableFile, mut premises: Vec<Premise>) -> Vec<Premise> {
+    let mut texts: Vec<String> = Vec::new();
+    for premise in &premises {
+        let Some(record) = premise.id.as_str().map(ObjectId::from_string) else { continue };
+        if !file.replica().object_type(&record).is_ok_and(|ty| ty == "Record") {
+            continue;
+        }
+        let cells = file.replica().map_entries(&record, "cells").unwrap_or_default();
+        for (key, raw) in cells {
+            let held = premise.fields.as_ref().is_none_or(|fields| fields.iter().any(|field| *field == format!("cells.{key}")));
+            if held && let Some(text) = kition_table_file::kdm::cells::cell_text_of(file.replica(), &raw) {
+                texts.push(text.to_string());
+            }
+        }
+    }
+    for text in texts {
+        if !premises.iter().any(|premise| premise.id.as_str() == Some(text.as_str())) {
+            premises.push(Premise::on(json!(text)).fields(["text".to_owned()]).positions(Vec::<String>::new()));
+        }
+    }
+    premises
+}
+
+/// Whether a field is a select, whose values name its choices.
+fn is_select(file: &TableFile, field: &ObjectId) -> bool {
+    file.replica()
+        .get(field, "type")
+        .ok()
+        .and_then(|ty| ty.as_str().map(str::to_owned))
+        .is_some_and(|ty| ty == "single_select" || ty == "multi_select")
 }
 
 #[derive(Default)]
@@ -196,14 +235,6 @@ fn cells(file: &TableFile, needs: &mut Needs, table: i64, record: Option<String>
             }
         }
         held.push(format!("cells.{id}"));
-        // A long text's characters are in its `CellText`: a write of the whole value replaces
-        // them, so it holds them too.
-        if let Some(record) = &record
-            && let Ok(raw) = file.replica().map_get(&ObjectId::from_string(record), "cells", &id)
-            && let Some(text) = kition_table_file::kdm::cells::cell_text_of(file.replica(), &raw)
-        {
-            needs.add(text.to_string(), strings(&["text"]));
-        }
         if field.field_type == "link_to_record" {
             for value in values[&field.name].as_array().into_iter().flatten() {
                 let value = value.get("row_key").unwrap_or(value);
@@ -278,7 +309,6 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                             ("required", "required"),
                             ("readonly", "readonly"),
                             ("options", "options"),
-                            ("options", "choices"),
                             ("formula", "formula"),
                             ("ai_prompt", "aiPrompt"),
                             ("meta", "meta"),
@@ -293,8 +323,10 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                 }
                 // New options name the choices: each of the field's choices is kept, renamed or
                 // left out by its name.
-                if params.get("options").is_some() {
-                    for choice in kition_table_file::kdm::cells::all_choices(file.replica(), &ObjectId::from_string(&field)) {
+                let choices = kition_table_file::kdm::cells::all_choices(file.replica(), &ObjectId::from_string(&field));
+                if params.get("options").is_some() && (!choices.is_empty() || is_select(file, &ObjectId::from_string(&field))) {
+                    needs.add(field.clone(), strings(&["choices"]));
+                    for choice in choices {
                         needs.add(choice.to_string(), strings(&["name"]));
                     }
                 }
@@ -472,7 +504,7 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
         covers: covers.then(|| kition_kit::Covers {
             fields: strings(&["name", "from", "field", "to", "config", "options", "~owner", "~fieldOrder", "~linkCells", "~mirrors", "~rowIds"]),
         }),
-        premises: needs.0.into_values().collect(),
+        premises: with_texts(file, needs.0.into_values().collect()),
         within,
         ..Under::default()
     }))

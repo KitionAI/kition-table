@@ -5,8 +5,8 @@
 //! `Record`'s cells are a map keyed by field object id; record links are `Link` objects
 //! `(from record, field, to record)`, so concurrent link edits merge as a set.
 //!
-//! A select's options are `Choice` objects its `Field.choices` lists, and its cells hold choice
-//! ids; a long text's cell holds a `CellText` id; a field's AI prompt is its `aiPrompt` text (see
+//! A select's options are `Choice` objects its `Field.choices` lists (the values it does not list
+//! are its `otherChoices`), and its cells hold choice ids; a long text's cell holds a `CellText` id; a field's AI prompt is its `aiPrompt` text (see
 //! [`super::cells`]). The functions here take and give plain values (option names, texts) and
 //! store them in that shape. View configs name fields by object id ([`super::view_refs`]).
 //!
@@ -210,10 +210,16 @@ pub fn delete_table(tx: &mut Tx<'_>, base: &ObjectId, table: &ObjectId) -> Resul
             tx.delete(&link.id)?;
         }
     }
+    // The table's choices and long texts go with it.
     let mut doomed: Vec<ObjectId> = Vec::new();
-    for id in tx.objects_of_type(CHOICE).into_iter().chain(tx.objects_of_type(CELL_TEXT)) {
-        let owner = |key: &str| tx.get(&id, key).ok().and_then(|value| value.as_str().map(ObjectId::from_string));
-        if owner("field").is_some_and(|field| field_set.contains(&field)) || owner("record").is_some_and(|record| record_set.contains(&record)) {
+    for field in &fields {
+        for list in ["choices", "otherChoices"] {
+            doomed.extend(tx.list_items(field, list).unwrap_or_default());
+        }
+    }
+    for id in tx.objects_of_type(CELL_TEXT) {
+        let record = tx.get(&id, "record").ok().and_then(|value| value.as_str().map(ObjectId::from_string));
+        if record.is_some_and(|record| record_set.contains(&record)) {
             doomed.push(id);
         }
     }

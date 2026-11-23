@@ -51,6 +51,7 @@
         "formula": { "kind": "string", "optional": true },
         "aiPrompt": { "kind": "text" },
         "choices": { "kind": "list", "of": "Choice" },
+        "otherChoices": { "kind": "list", "of": "Choice" },
         "meta": { "kind": "json", "optional": true }
       }
     },
@@ -58,7 +59,6 @@
       "batchOps": { "*": { "direct": true } },
       "label": "name",
       "fields": {
-        "field": { "kind": "ref", "of": "Field" },
         "name": { "kind": "string" },
         "color": { "kind": "string", "optional": true }
       }
@@ -99,8 +99,8 @@
     "CellText": {
       "batchOps": { "*": { "direct": true } },
       "fields": {
-        "record": { "kind": "ref", "of": "Record" },
-        "field": { "kind": "ref", "of": "Field" },
+        "record": { "kind": "string" },
+        "field": { "kind": "string" },
         "text": { "kind": "text" }
       }
     },

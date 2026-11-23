@@ -4,7 +4,7 @@
 //! Most cells hold their value (`Record.cells`, keyed by field object id). Three kinds of field
 //! keep their content in objects, so concurrent edits merge inside it:
 //!
-//! - A select's options are `Choice` objects (`{field, name, color}`) its `Field.choices` lists in
+//! - A select's options are `Choice` objects (`{name, color}`) its `Field.choices` lists in
 //!   order. A `single_select` cell holds a choice id, a `multi_select` cell a list of choice ids, so
 //!   renaming an option renames it in every cell, and two replicas adding options both keep
 //!   theirs. A value that names no option of the field is a choice the field does not list (an
@@ -207,18 +207,11 @@ pub fn write_text(tx: &mut Tx<'_>, id: &ObjectId, field: &'static str, texts: &T
     Ok(true)
 }
 
-/// A field's choices in a transaction: the listed ones in order, then the unlisted ones (choices of
-/// the field no list names) by id.
+/// A field's choices in a transaction: its options (`choices`) in order, then the values it does
+/// not list (`otherChoices`), each live and once.
 fn field_choices(tx: &Tx<'_>, field: &ObjectId) -> Result<(Vec<ObjectId>, Vec<ObjectId>)> {
     let listed = Listing::read(tx, field, "choices")?.ids();
-    let mut unlisted: Vec<ObjectId> = tx
-        .objects_of_type(CHOICE)
-        .into_iter()
-        .filter(|id| {
-            !listed.contains(id) && tx.get(id, "field").ok().and_then(|value| value.as_str().map(ObjectId::from_string)).as_ref() == Some(field)
-        })
-        .collect();
-    unlisted.sort();
+    let unlisted = Listing::read(tx, field, "otherChoices")?.ids().into_iter().filter(|id| !listed.contains(id)).collect();
     Ok((listed, unlisted))
 }
 
@@ -323,11 +316,28 @@ pub fn write_choices(tx: &mut Tx<'_>, field: &ObjectId, wanted: &[WantedChoice])
             tx.set(id, "color", value)?;
         }
     }
-    // The list: drop what is no longer wanted, add what is new, then put it in order.
+    // The lists: what is no longer wanted moves to the other choices, what is listed again leaves
+    // them; then the options are put in order.
     let items = tx.list_items(field, "choices")?;
+    let mut dropped: Vec<ObjectId> = Vec::new();
     for (index, item) in items.iter().enumerate().rev() {
         if !order.contains(item) {
             tx.list_remove(field, "choices", index)?;
+            if !dropped.contains(item) {
+                dropped.push(item.clone());
+            }
+        }
+    }
+    let others = tx.list_items(field, "otherChoices")?;
+    for (index, item) in others.iter().enumerate().rev() {
+        if order.contains(item) {
+            tx.list_remove(field, "otherChoices", index)?;
+        }
+    }
+    for item in dropped.iter().rev() {
+        if tx.exists(item) && !others.contains(item) {
+            let len = tx.list_items(field, "otherChoices")?.len();
+            tx.list_insert(field, "otherChoices", len, item)?;
         }
     }
     let present = tx.list_items(field, "choices")?;
@@ -342,12 +352,14 @@ pub fn write_choices(tx: &mut Tx<'_>, field: &ObjectId, wanted: &[WantedChoice])
     Ok(())
 }
 
-/// A new choice of `field`, listed nowhere.
+/// A new choice of `field`, one of its other choices (not one of its options) until listed.
 fn create_choice(tx: &mut Tx<'_>, field: &ObjectId, name: &str) -> Result<ObjectId> {
     let mut values = Map::new();
-    values.insert("field".into(), json!(field.as_str()));
     values.insert("name".into(), json!(name));
-    Ok(tx.create_with_id(CHOICE, &crate::ids::object(), values)?)
+    let id = tx.create_with_id(CHOICE, &crate::ids::object(), values)?;
+    let len = tx.list_items(field, "otherChoices")?.len();
+    tx.list_insert(field, "otherChoices", len, &id)?;
+    Ok(id)
 }
 
 /// Stores plain cell values in a transaction: it finds a field's choices once per write and makes
@@ -470,18 +482,15 @@ pub fn decode_in(tx: &Tx<'_>, raw: &Value, texts: &Texts) -> Result<Value> {
     }
 }
 
-/// Every choice of `field`, listed or not: the ones `Field.choices` lists in order, then the
-/// others by id.
+/// Every choice of `field`, listed or not: its options in order, then its other choices.
 pub fn all_choices(replica: &Replica, field: &ObjectId) -> Vec<ObjectId> {
-    let mut ids: Vec<ObjectId> = listed_choices(replica, field).unwrap_or_default().into_iter().map(|choice| choice.id).collect();
-    let mut unlisted: Vec<ObjectId> = replica
-        .objects_of_type(CHOICE)
-        .into_iter()
-        .filter(|id| {
-            !ids.contains(id) && replica.get(id, "field").ok().and_then(|value| value.as_str().map(ObjectId::from_string)).as_ref() == Some(field)
-        })
-        .collect();
-    unlisted.sort();
-    ids.extend(unlisted);
+    let mut ids: Vec<ObjectId> = Vec::new();
+    for list in ["choices", "otherChoices"] {
+        for id in replica.list(field, list).unwrap_or_default() {
+            if !ids.contains(&id) && replica.object_type(&id).is_ok_and(|ty| ty == CHOICE) {
+                ids.push(id);
+            }
+        }
+    }
     ids
 }

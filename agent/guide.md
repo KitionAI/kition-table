@@ -172,10 +172,11 @@ every choice's `name` (the written value is read through them): a deleted column
 `deleted`, a changed type or option set refuses `changed`, while a rename of the field, the
 record's place and its other cells are independent.
 
-What the document holds, for raw writes: a select's options are `Choice` objects (`field`,
-`name`, `color`) its `Field.choices` lists in order, and its cells hold choice ids (a
-`multi_select` a list of them); a `long_text` cell holds the id of a `CellText` object (`record`,
-`field`, and its `text`, which merges per character); a field's AI prompt is its `aiPrompt` text.
+What the document holds, for raw writes: a select's options are `Choice` objects (`name`,
+`color`) its `Field.choices` lists in order (a value it does not list is one of its
+`otherChoices`), and its cells hold choice ids (a
+`multi_select` a list of them); a `long_text` cell holds the id of a `CellText` object (the ids of its `record`
+and `field`, and its `text`, which merges per character); a field's AI prompt is its `aiPrompt` text.
 A view's `config` names fields by object id (`field` in filter conditions, sorts and groups;
 `group_field`, `cover_field`, `hidden_fields`). The commands take and answer plain values (option
 names, the text, fields by name) and store them in that shape.

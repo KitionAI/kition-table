@@ -256,6 +256,8 @@ struct Plan {
     fields: BTreeSet<ObjectId>,
     views: BTreeSet<ObjectId>,
     records: BTreeSet<ObjectId>,
+    /// Records whose long texts (`CellText`s) changed: more than their written cells.
+    texts: BTreeSet<ObjectId>,
     links: BTreeSet<ObjectId>,
     gone_tables: Vec<i64>,
     gone_fields: Vec<i64>,
@@ -421,14 +423,15 @@ impl<'a> Projector<'a> {
                 // A choice is part of its field's options, and its name of the values of the cells
                 // holding it.
                 CHOICE => {
-                    if let Some(field) = self.replica.get(id, "field")?.as_str() {
-                        plan.fields.insert(ObjectId::from_string(field));
+                    if let Some(field) = self.field_of_choice(id) {
+                        plan.fields.insert(field);
                     }
                 }
                 // A long text is part of its record's values.
                 CELL_TEXT => {
                     if let Some(record) = self.replica.get(id, "record")?.as_str() {
                         plan.records.insert(ObjectId::from_string(record));
+                        plan.texts.insert(ObjectId::from_string(record));
                     }
                 }
                 DASHBOARD => plan.dashboards = true,
@@ -436,6 +439,14 @@ impl<'a> Projector<'a> {
             }
         }
         Ok(plan)
+    }
+
+    /// The field whose options or other choices hold `choice`.
+    fn field_of_choice(&self, choice: &ObjectId) -> Option<ObjectId> {
+        self.replica
+            .objects_of_type(FIELD)
+            .into_iter()
+            .find(|field| ["choices", "otherChoices"].iter().any(|list| self.replica.list(field, list).is_ok_and(|items| items.contains(choice))))
     }
 
     /// Finds the live row a deleted object projected to, if any.
@@ -1290,7 +1301,8 @@ impl<'a> Projector<'a> {
                 continue;
             }
             let schema = self.schema(table_id)?;
-            if let Some(written) = self.written_cells(&record)
+            if !plan.texts.contains(&record)
+                && let Some(written) = self.written_cells(&record)
                 && self.underived()?
                 && self.project_written_cells(id, table_id, &record, &schema, &before, written)?
             {
