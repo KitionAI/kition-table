@@ -2,12 +2,13 @@ format: 1
 id: regressions/issue-7
 feature: table.records
 intent: >-
-  A reproducible build (SOURCE_DATE_EPOCH set, as the showcase and gate cases run) saves the
+  A reproducible build (the reproducible-ids feature of a test or sample build,
+  KITION_REPRODUCIBLE_IDS and SOURCE_DATE_EPOCH set, as the showcase and gate cases run) saves the
   same .ktable bytes every time the same commands build it: the document, record, table, field,
   view, link and dashboard ids, the replica's actor and the editor's filter nodes come from a
-  counter hashed with the epoch, and every stored time is the epoch. Before, row keys were random
+  counter hashed with the seed, and every stored time is the epoch. Before, row keys were random
   UUIDs, times were the clock's, and a JSON value's keys were encoded in a per-process hash order,
-  so every save differed. Without SOURCE_DATE_EPOCH ids stay random.
+  so every save differed. SOURCE_DATE_EPOCH alone (hosts pass it to every kit) leaves ids random.
 layer: gate
 source:
   kind: issue

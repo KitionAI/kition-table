@@ -1,6 +1,7 @@
-//! A document built by the same commands saves the same bytes when `SOURCE_DATE_EPOCH` is set
-//!: its ids (document, records, tables, fields, views, the replica's actor,
-//! filter nodes) come from a counter instead of randomness, and its times are the epoch. Each
+//! A document built by the same commands saves the same bytes in a reproducible build: with the
+//! `reproducible-ids` feature (the dev-dependencies enable it) and `KITION_REPRODUCIBLE_IDS` set,
+//! its ids (document, records, tables, fields, views, the replica's actor, filter nodes) come from
+//! a counter instead of randomness, and with `SOURCE_DATE_EPOCH` set its times are the epoch. Each
 //! build runs in a process of its own, as a sample build does: this test starts itself twice.
 
 #![allow(clippy::unwrap_used)]
@@ -67,6 +68,7 @@ fn build_in_a_process(path: &PathBuf) -> Vec<u8> {
     let status = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "child_builds_a_document", "--test-threads=1", "--quiet"])
         .env("SOURCE_DATE_EPOCH", EPOCH.to_string())
+        .env("KITION_REPRODUCIBLE_IDS", EPOCH.to_string())
         .env(OUT, path)
         .status()
         .unwrap();

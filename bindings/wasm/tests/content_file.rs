@@ -207,3 +207,25 @@ fn a_file_opens_on_the_replica_a_host_stored_by_its_changes_or_by_its_state() {
     assert_eq!(reopened.file().get_record(1, kept).unwrap().values["title"], "Saved elsewhere");
     assert_eq!(records(&reopened), records(&elsewhere));
 }
+
+#[test]
+fn a_file_with_a_new_link_is_taken_in_by_its_state() {
+    let (mut doc, kept) = table_with_history();
+    let bytes = host_save(&mut doc);
+    let history = doc.snapshot().unwrap();
+    // Saved elsewhere: a link field and a record that links to the kept one, so taking the file
+    // in by its state creates a `Link` with its required ends (and a field it names).
+    let mut elsewhere = TableDocument::open(FILE, &bytes).unwrap();
+    run(
+        &mut elsewhere,
+        "table.fields.create",
+        json!({ "tableId": 1, "name": "related", "title": "Related", "type": "link_to_record", "options": { "target_table_id": 1, "allow_multiple": true } }),
+    );
+    let key = elsewhere.file().get_record(1, kept).unwrap().row_key;
+    run(&mut elsewhere, "table.records.create", json!({ "tableId": 1, "values": { "title": "Linking", "related": [key] } }));
+    assert_eq!(elsewhere.file().replica().objects_of_type("Link").len(), 1, "the edit made one link");
+    let later = host_save(&mut elsewhere);
+    let reopened = TableDocument::open_with_replica(FILE, &later, &history, &[]).unwrap();
+    assert_eq!(reopened.file().replica().objects_of_type("Link").len(), 1, "the link is taken in");
+    assert_eq!(records(&reopened), records(&elsewhere));
+}

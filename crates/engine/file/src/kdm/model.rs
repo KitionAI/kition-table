@@ -37,11 +37,6 @@ pub const TABLE: &str = "Table";
 pub const FIELD: &str = "Field";
 pub const VIEW: &str = "View";
 pub const RECORD: &str = "Record";
-/// TEMPORARY (sdk-write-state): `Link`'s ends (`from`, `field`, `to` in `model/schema.json`) are
-/// `optional` only because kition-sdk's `kition_kit::session::write_state` creates an object
-/// before it sets its references. Make them required again when the kits re-pin a kition-sdk whose
-/// `write_state` creates an object with its required references in one step. Every link the model
-/// makes ([`add_link`]) has all three.
 pub const LINK: &str = "Link";
 pub const DASHBOARD: &str = "Dashboard";
 pub const CHOICE: &str = "Choice";

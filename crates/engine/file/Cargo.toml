@@ -23,8 +23,15 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 
+[features]
+# Counted ids for tests and sample builds (src/ids.rs, `KITION_REPRODUCIBLE_IDS`), with the KDM's
+# own: enable it in `[dev-dependencies]` only, never in a shipped build.
+reproducible-ids = ["kition-kdm/reproducible-ids"]
+
 [dev-dependencies]
 tempfile = { workspace = true }
+# The crate's own tests count ids when they ask for it (tests/reproducible_ids.rs).
+kition-table-file = { path = ".", features = ["reproducible-ids"] }
 
 # Browsers have no OS randomness: ids draw theirs from `crypto.getRandomValues`.
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]

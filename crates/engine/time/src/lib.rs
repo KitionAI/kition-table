@@ -13,8 +13,9 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, Utc};
 pub type Millis = i64;
 
 /// `SOURCE_DATE_EPOCH` (seconds), when the process has it: a reproducible build (a showcase
-/// sample, a gate case) then stores this time instead of the clock's, and its ids come from a
-/// counter (`kition-table-file`'s ids), so the same commands save the same bytes. Read once.
+/// sample, a gate case) then stores this time instead of the clock's. It never changes ids
+/// (`kition-table-file`'s ids count only with their `reproducible-ids` feature and
+/// `KITION_REPRODUCIBLE_IDS`). Read once.
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub fn source_date_epoch() -> Option<i64> {
     static EPOCH: std::sync::OnceLock<Option<i64>> = std::sync::OnceLock::new();
