@@ -604,17 +604,18 @@ const ROWS: &[Row] = &[
         r#"{"tableId":"$T","row_keys":["$R2","$R3"]}"#,
         &[("$T", "-", "-"), ("$R2", "*", "-"), ("$N2", "text", "-"), ("$R3", "*", "-"), ("$Base", "~linkCells:$R2,~linkCells:$R3", "-")],
     ),
-    // bulkCopy: the sources' stored cells (which fields are stored: their types);
+    // bulkCopy: the sources' stored cells (which fields are stored: their types) and their long
+    // texts;
     // `target_position` is a place among the records. pinned: `~owner`.
     r(
         "table.records.bulkCopy",
         r#"{"tableId":"$T","row_keys":["$R1"]}"#,
-        &[("$T", "-", "-"), ("$R1", "cells,~owner", "-"), ("fields($T)", "type", "-")],
+        &[("$T", "-", "-"), ("$R1", "cells,~owner", "-"), ("$N1", "text", "-"), ("fields($T)", "type", "-")],
     ),
     rw(
         "table.records.bulkCopy",
         r#"{"tableId":"$T","row_keys":["$R1"],"target_position":1}"#,
-        &[("$T", "-", "-"), ("$R1", "cells,~owner", "-"), ("fields($T)", "type", "-")],
+        &[("$T", "-", "-"), ("$R1", "cells,~owner", "-"), ("$N1", "text", "-"), ("fields($T)", "type", "-")],
         &["$T.records[0..0]"],
     ),
     // links.replace / links.delete: the record's links of the field replaced; the field's type
