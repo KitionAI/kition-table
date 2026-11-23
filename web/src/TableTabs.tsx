@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DownloadIcon as Download, FilesIcon as Files, FileUpIcon as FileUp, LayoutDashboardIcon as LayoutDashboard, PlusIcon as Plus } from '@kition/tessera/icons/react'
 import { useTranslation } from 'react-i18next'
 import { Popover, PopoverContent, PopoverTrigger } from '@kition/sdk/editor'
@@ -49,6 +49,10 @@ export function TableTabs({
   const fileInput = useRef<HTMLInputElement | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [fromFilesOpen, setFromFilesOpen] = useState(false)
+  // A read-only document unmounts the dialog, which stops its run; it does not open again by itself.
+  useEffect(() => {
+    if (readOnly) setFromFilesOpen(false)
+  }, [readOnly])
 
   /** Asks the table editor showing the table to export it. */
   function exportShown(action: TableAction) {

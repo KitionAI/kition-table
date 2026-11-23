@@ -9,10 +9,10 @@ import { createWorkerTableDataSource } from './dataSource'
 import { describe, engineManifest } from './engine'
 import { hostServices } from './hostRequests'
 import { engineAIRun } from './aiFields'
-import { tableFromFiles } from './fromFiles'
+import { tableFromFiles, type FromFilesTitles } from './fromFiles'
 import type { FromFilesRun } from './TableFromFilesDialog'
 import { CATALOGS } from './strings'
-import { kitTableHost } from './tableHost'
+import { aiUnavailable, kitTableHost, type HostMessages } from './tableHost'
 import { exportTableThroughHost, type TableExportFormat } from './exportFile'
 import { TableTabs } from './TableTabs'
 import { resolveShown, shownOfView, type Shown } from './shown'
@@ -103,28 +103,32 @@ export function App({ host, i18n }: { host: HostConnection; i18n: i18n }) {
       ),
     [host],
   )
-  const tableHost = useMemo(() => {
+  // The host's messages, in the person's language.
+  const messages = useMemo<HostMessages>(() => {
     const strings = i18n.getFixedT(null, 'table')
-    return kitTableHost(
-      host.init.locale,
-      source,
-      hostServices(host),
-      {
-        designFailed: strings('kit.designFailed'),
-        workflowFailed: strings('kit.workflowFailed'),
-        aiUnavailable: strings('kit.aiUnavailable'),
-        aiSetUp: strings('kit.aiSetUp'),
-        settingsFailed: strings('kit.settingsFailed'),
-      },
-      exportTable,
-    )
-  }, [host, i18n, source, exportTable])
+    return {
+      designFailed: strings('kit.designFailed'),
+      workflowFailed: strings('kit.workflowFailed'),
+      aiUnavailable: strings('kit.aiUnavailable'),
+      aiSetUp: strings('kit.aiSetUp'),
+      settingsFailed: strings('kit.settingsFailed'),
+    }
+  }, [i18n])
+  const tableHost = useMemo(
+    () => kitTableHost(host.init.locale, source, hostServices(host), messages, exportTable),
+    [host, messages, source, exportTable],
+  )
 
-  // A table from files: the engine's commands, and the host's model for the design and the AI fields.
+  // A table from files: the engine's commands, and the host's model for the design and the AI
+  // fields; the titles of what it makes are the person's language's, and a host without a model
+  // set up gets the AI controls' own notice.
   const fromFiles = useMemo<FromFilesRun>(() => {
     const services = hostServices(host)
-    return (files, request, options) => tableFromFiles({ source, services, runField: engineAIRun(source, services), files, request, ...options })
-  }, [host, source])
+    const unavailable = aiUnavailable(services, messages)
+    const titles = i18n.getFixedT(null, 'table')('kit.fromFiles.defaults', { returnObjects: true }) as FromFilesTitles
+    return (files, request, options) =>
+      tableFromFiles({ source, services, runField: engineAIRun(source, services, unavailable), files, request, titles, onUnavailable: unavailable, ...options })
+  }, [host, i18n, messages, source])
 
   // The table or dashboard shown: the one chosen (first the host's `document.view`, then each
   // `document/reveal` and tab), while the document has it, or its first table.

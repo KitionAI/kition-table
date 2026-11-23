@@ -1,15 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Button, Modal, ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle } from '@kition/sdk/editor'
-import { MAX_FILES, type FromFilesProgress } from './fromFiles'
+import { Button, Modal, ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle, toast } from '@kition/sdk/editor'
+import { FromFilesError, MAX_FILES, type FromFilesProgress, type FromFilesResult } from './fromFiles'
 
-/** Makes a table from files and a request; answers the new table's id (`tableFromFiles`). */
-export type FromFilesRun = (files: File[], request: string, options: { onProgress: (progress: FromFilesProgress) => void; signal: AbortSignal }) => Promise<{ tableId: number }>
+/** Makes a table from files and a request (`tableFromFiles`). */
+export type FromFilesRun = (
+  files: File[],
+  request: string,
+  options: { onProgress: (progress: FromFilesProgress) => void; signal: AbortSignal },
+) => Promise<Pick<FromFilesResult, 'tableId' | 'fallback' | 'unfilled'>>
+
+/** The same file chosen again: the same name, size and modification time. */
+const sameFile = (a: File, b: File) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified
+
+/** What choosing files left out: files past `MAX_FILES`, and files chosen already. */
+type Left = { truncated: number; duplicates: number }
 
 /**
  * A table from files: the person chooses files (or drops them here) and says what they want from
  * them; the table is made with one record a file, and its AI fields are filled while the dialog
- * shows how far it is. Cancel stops the run and leaves no table behind.
+ * shows how far it is. The same file chosen again (same name, size and modification time) is kept
+ * once; files past `MAX_FILES` are left out; the dialog says both. Cancel, Escape, closing the
+ * document for editing and the dialog going away all stop the run, which leaves no table behind.
+ * After the run, a notice says when the plain design was used after the host refused the design,
+ * and how many cells AI could not fill.
  */
 export function TableFromFilesDialog({
   open,
@@ -24,6 +38,7 @@ export function TableFromFilesDialog({
 }) {
   const { t } = useTranslation('table')
   const [files, setFiles] = useState<File[]>([])
+  const [left, setLeft] = useState<Left>({ truncated: 0, duplicates: 0 })
   const [request, setRequest] = useState('')
   const [progress, setProgress] = useState<FromFilesProgress | null>(null)
   const [error, setError] = useState('')
@@ -37,15 +52,27 @@ export function TableFromFilesDialog({
     stop.current?.abort()
     stop.current = null
     setFiles([])
+    setLeft({ truncated: 0, duplicates: 0 })
     setRequest('')
     setProgress(null)
     setError('')
   }, [open])
+  // Nor the dialog itself (the document turned read-only, the bar went away).
+  useEffect(() => () => stop.current?.abort(), [])
 
   function add(chosen: FileList | File[] | null) {
     if (!chosen) return
     setError('')
-    setFiles((current) => [...current, ...Array.from(chosen)].slice(0, MAX_FILES))
+    const next = [...files]
+    let duplicates = 0
+    let truncated = 0
+    for (const file of Array.from(chosen)) {
+      if (next.some((kept) => sameFile(kept, file))) duplicates += 1
+      else if (next.length >= MAX_FILES) truncated += 1
+      else next.push(file)
+    }
+    setFiles(next)
+    setLeft({ truncated, duplicates })
   }
 
   async function start() {
@@ -54,11 +81,19 @@ export function TableFromFilesDialog({
     setError('')
     setProgress({ stage: 'design' })
     try {
-      const made = await run(files, request, { onProgress: setProgress, signal: controller.signal })
+      const made = await run(files, request, { onProgress: (step) => (controller.signal.aborted ? undefined : setProgress(step)), signal: controller.signal })
+      if (made.fallback) toast.warning(t('kit.fromFiles.notices.plainDesign'))
+      if (made.unfilled.length) {
+        const count = made.unfilled.reduce((sum, field) => sum + field.records, 0)
+        toast.warning(t('kit.fromFiles.notices.unfilled', { count }), {
+          description: t('kit.fromFiles.notices.unfilledFields', { fields: made.unfilled.map((field) => field.field).join(', ') }),
+        })
+      }
       onCompleted(made.tableId)
       onOpenChange(false)
     } catch (failure) {
-      if (!(failure instanceof DOMException && failure.name === 'AbortError')) setError(failure instanceof Error ? failure.message : String(failure))
+      if (failure instanceof DOMException && failure.name === 'AbortError') return
+      setError(failure instanceof FromFilesError ? t(`kit.fromFiles.errors.${failure.code}`, failure.params) : t('kit.fromFiles.errors.unexpected'))
     } finally {
       if (stop.current === controller) stop.current = null
       setProgress(null)
@@ -73,7 +108,8 @@ export function TableFromFilesDialog({
   }
 
   return (
-    <Modal open={open} onOpenChange={(next) => (running ? null : onOpenChange(next))}>
+    // Escape and the Cancel button do the same: while a run goes they stop it, otherwise they close.
+    <Modal open={open} onOpenChange={(next) => (running ? (next ? null : stop.current?.abort()) : onOpenChange(next))}>
       <ModalContent size="sm" data-testid="table-from-files-dialog">
         <ModalHeader>
           <ModalTitle>{t('kit.fromFiles.title')}</ModalTitle>
@@ -106,6 +142,16 @@ export function TableFromFilesDialog({
             }}
             data-testid="table-from-files-input"
           />
+          {left.truncated || left.duplicates ? (
+            <p className="text-xs text-muted-foreground" role="status" data-testid="table-from-files-left-out">
+              {[
+                left.truncated ? t('kit.fromFiles.notices.truncated', { count: left.truncated, max: MAX_FILES }) : '',
+                left.duplicates ? t('kit.fromFiles.notices.duplicates', { count: left.duplicates }) : '',
+              ]
+                .filter(Boolean)
+                .join('. ')}
+            </p>
+          ) : null}
           <textarea
             className="min-h-20 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-[13px] outline-none focus:border-ring disabled:opacity-60"
             placeholder={t('kit.fromFiles.requestPlaceholder')}

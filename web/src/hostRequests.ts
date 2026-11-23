@@ -14,8 +14,11 @@ export type GeneratePart =
   | { type: 'image'; url: string }
 
 export type GenerateParams = {
-  /** What the kit generates for: an AI field's cell, or the kit's own purpose (`table.<name>`, UI-G4). */
-  purpose: 'ai-field' | `table.${string}`
+  /**
+   * What the kit generates for: an AI field's cell, or one of the kit's own purposes (UI-G4): only
+   * those the kit uses, `table.schema` for the design of a table from files.
+   */
+  purpose: 'ai-field' | 'table.schema'
   output: 'text' | 'image'
   /** The document's preference, a hint only: the host runs the person's model settings. */
   model?: string
@@ -49,7 +52,11 @@ export type HostServices = {
   generates: boolean
   /** The host serves the action `id` (capability `action:<id>`). */
   acts(id: HostActionId): boolean
-  generate(params: GenerateParams): Promise<GenerateResult>
+  /**
+   * Asks the host's model. The protocol has no way to cancel a request, so `signal` stops the
+   * waiting: on abort the answer rejects with an `AbortError` and the host's late answer is dropped.
+   */
+  generate(params: GenerateParams, signal?: AbortSignal): Promise<GenerateResult>
   action(id: HostActionId, params: Record<string, unknown>): Promise<ActionResult>
 }
 
@@ -60,7 +67,16 @@ export function hostServices(host: HostConnection): HostServices {
     generates: capabilities.has('generate'),
     acts: (id) => capabilities.has(`action:${id}`),
     // Image bytes are transferred, not copied.
-    generate: (params) => peer.request('host/generate', params, { transfer: true }),
+    generate: (params, signal) => {
+      if (signal?.aborted) return Promise.reject(new DOMException('Canceled', 'AbortError'))
+      const answer = peer.request('host/generate', params, { transfer: true })
+      if (!signal) return answer
+      return new Promise<GenerateResult>((resolve, reject) => {
+        const abort = () => reject(new DOMException('Canceled', 'AbortError'))
+        signal.addEventListener('abort', abort, { once: true })
+        answer.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
+      })
+    },
     action: (id, params) => peer.request('host/action', { id, params }),
   }
 }

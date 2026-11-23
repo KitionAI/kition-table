@@ -3,7 +3,8 @@
 //! dashboards, each in the document's order. An item is `{ id, title, kind, view }`: `kind` is
 //! `table` or `dashboard`, and `view` is the place as the editor takes it (Kit UI protocol
 //! `document.view` and `document/reveal`: `{ "path": "tables/<id>" }`, `{ "path":
-//! "dashboards/<id>" }`). It takes no parameters, reads only, and answers at the top level
+//! "dashboards/<id>" }`). A title is never empty: a table without a title goes by its name, and a
+//! dashboard without a name by its id. It takes no parameters, reads only, and answers at the top level
 //! (`items`), not as a data-document request's `{ result, change }`, because the host reads the
 //! outline from the answer's `items`.
 
@@ -54,9 +55,9 @@ pub fn outline(file: &TableFile) -> Result<Value, String> {
         items.push(json!({ "id": table.id.to_string(), "title": title, "kind": "table", "view": { "path": format!("tables/{}", table.id) } }));
     }
     for dashboard in file.list_dashboards().map_err(error)? {
-        items.push(
-            json!({ "id": dashboard.id, "title": dashboard.name, "kind": "dashboard", "view": { "path": format!("dashboards/{}", dashboard.id) } }),
-        );
+        // A dashboard without a name goes by its id, which is never empty.
+        let title = if dashboard.name.trim().is_empty() { dashboard.id.clone() } else { dashboard.name };
+        items.push(json!({ "id": dashboard.id, "title": title, "kind": "dashboard", "view": { "path": format!("dashboards/{}", dashboard.id) } }));
     }
     Ok(json!({ "items": items }))
 }

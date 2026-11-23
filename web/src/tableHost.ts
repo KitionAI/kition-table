@@ -25,9 +25,10 @@ export type HostMessages = { designFailed: string; workflowFailed: string; aiUna
 /**
  * An AI field run the host refused as `unavailable` (no model set up, or not signed in): one
  * notice for the run, with the host's reason and, when the host serves `action:settings.open`, a
- * button that asks it to open where the person sets up AI.
+ * button that asks it to open where the person sets up AI. The AI field controls and a table from
+ * files show the same notice.
  */
-function aiUnavailable(services: HostServices, messages: HostMessages) {
+export function aiUnavailable(services: Pick<HostServices, 'acts' | 'action'>, messages: HostMessages) {
   return (reason: string) => {
     const setUp = services.acts('settings.open')
       ? { label: messages.aiSetUp, onClick: () => void act(() => services.action('settings.open', { section: 'ai' }), messages.settingsFailed) }
