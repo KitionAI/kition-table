@@ -179,9 +179,9 @@ features:
     dimension: [ai, function]
     priority: P0
     status: has
-    paths: [web/src/fromFiles.ts, web/src/fromFiles.spec.ts, web/src/TableFromFilesDialog.tsx, web/src/TableTabs.tsx, web/src/aiFields.ts, web/tests/flow.mjs]
-    gap: "The model is scripted in every test; in the browser flow the host runs no models, so the dialog is tested with the plain design and no AI fill."
-    cases: [table.from-files/receipts]
+    paths: [web/src/fromFiles.ts, web/src/fromFiles.spec.ts, web/src/fromFilesChecks.spec.ts, web/src/fromFilesHistory.spec.ts, web/src/TableFromFilesDialog.tsx, web/src/TableFromFilesDialog.spec.tsx, web/src/TableTabs.tsx, web/src/aiFields.ts, web/src/hostRequests.ts, web/tests/flow.mjs]
+    gap: "The model is scripted in every test; in the browser flow the host runs no models, so the dialog is tested with the plain design and no AI fill. The files' blobs stay in the file after a failed or canceled run, and after Undo: the engine stores blobs outside the document and cannot release one."
+    cases: [table.from-files/receipts, regressions/issue-from-files-partial-table, regressions/issue-from-files-one-undo-step, regressions/issue-from-files-untrusted-design, regressions/issue-from-files-failures-reported, regressions/issue-from-files-design-refused, regressions/issue-from-files-localized, regressions/issue-from-files-dialog-stops]
     since: "2026-11-22"
   - id: table.dashboards
     title: "Dashboards and record previews"
@@ -207,8 +207,8 @@ features:
     priority: P1
     status: has
     commands: [table.file.outline]
-    paths: [bindings/wasm/src/outline.rs, bindings/wasm/tests/outline.rs, kit.json, docs/features/engine-commands.md]
-    cases: [table.outline/items]
+    paths: [bindings/wasm/src/outline.rs, bindings/wasm/tests/outline.rs, bindings/wasm/tests/outline_fallbacks.rs, kit.json, docs/features/engine-commands.md]
+    cases: [table.outline/items, regressions/issue-outline-fallbacks]
     since: "2026-11-22"
   - id: table.attachments
     title: "Attachments stored in the file"

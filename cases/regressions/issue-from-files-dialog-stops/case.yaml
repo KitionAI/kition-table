@@ -1,0 +1,25 @@
+format: 1
+id: regressions/issue-from-files-dialog-stops
+feature: table.from-files
+intent: >-
+  The New table from files dialog stops a running run on Cancel and on Escape alike, and when it
+  goes away (the document turned read-only, the bar unmounted); the run then leaves no table behind.
+  Choosing files says what was left out: files past the most at once (50), and the same file (name,
+  size and modification time) chosen again, which is kept once; files over 100 MB together are
+  refused with a localized message. Before, Escape did nothing while a run went, an unmounted dialog
+  left its run going, and extra files were dropped silently.
+layer: gate
+dimension: function
+source:
+  kind: probe
+  from: review of New table from files (commits 984089d, 7546c00)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/TableFromFilesDialog.spec.tsx, src/fromFilesChecks.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-22"

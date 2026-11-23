@@ -1,0 +1,23 @@
+format: 1
+id: regressions/issue-from-files-design-refused
+feature: table.from-files
+intent: >-
+  A host that runs models but refuses the design's purpose (not-allowed) or has no model
+  (unavailable) gets the plain design, and the person is told the plain design was used; an answer
+  that is no design, and any other failure, still fail the run. Before, those refusals failed the
+  whole run although the plain design is the documented fallback.
+layer: gate
+dimension: ai
+source:
+  kind: probe
+  from: review of New table from files (commits 984089d, 7546c00)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/fromFilesChecks.spec.ts, src/TableFromFilesDialog.spec.tsx]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-22"

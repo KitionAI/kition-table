@@ -1,0 +1,26 @@
+format: 1
+id: regressions/issue-from-files-untrusted-design
+feature: table.from-files
+intent: >-
+  The design the host's model answers is untrusted (the files' names are in its prompt): an
+  attachment field is never an AI field, an AI field reads an attachment field, the model sets only
+  the option keys a field type allows (never ai_config, which only the kit builds from a checked
+  instruction and source), a view's config names fields by their titles or is left out, and designs
+  over 30 fields, 10 views or names over 100 characters are refused; colliding names are told apart
+  the same way every time. Before, an AI attachment field left every cell empty silently, and an
+  injected ai_config ran as an AI field.
+layer: gate
+dimension: security
+source:
+  kind: probe
+  from: review of New table from files (commits 984089d, 7546c00)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/fromFilesChecks.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-22"

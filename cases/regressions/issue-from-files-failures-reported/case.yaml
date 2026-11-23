@@ -1,0 +1,23 @@
+format: 1
+id: regressions/issue-from-files-failures-reported
+feature: table.from-files
+intent: >-
+  A table from files says what it could not do: the AI fields that could not run and how many cells
+  were left empty are in the result and in a notice, and a host that has no model set up gets the AI
+  controls' own set-up notice. Before, every failure of an AI field run, and every record the model
+  could not read, was dropped silently.
+layer: gate
+dimension: ai
+source:
+  kind: probe
+  from: review of New table from files (commits 984089d, 7546c00)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/fromFilesChecks.spec.ts, src/fromFilesHistory.spec.ts, src/TableFromFilesDialog.spec.tsx]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-22"

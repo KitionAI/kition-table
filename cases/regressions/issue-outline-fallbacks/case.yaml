@@ -1,0 +1,20 @@
+format: 1
+id: regressions/issue-outline-fallbacks
+feature: table.outline
+intent: >-
+  Every item of table.file.outline has a title a host can show: a table without a title goes by
+  its name, and a dashboard without a name by its id (before, it answered an empty title). A
+  deleted table is not listed, and a file with no tables lists its dashboards alone, or nothing.
+layer: gate
+source:
+  kind: probe
+  from: review of the outline command (commits 00c7de5, 7239373)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: outline_fallbacks }
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-22"

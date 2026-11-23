@@ -1,0 +1,25 @@
+format: 1
+id: regressions/issue-from-files-localized
+feature: table.from-files
+intent: >-
+  What a table from files shows the person is in their language: every failure is a code with a text
+  in all six locales (the same keys apart from plural forms), the titles of what it makes itself
+  (the table, the file's fields, the plain design, the view) come from the catalogue while the
+  engine's names of the file's fields stay the same, and the dialog says that the chosen files'
+  names and contents are sent to the app's AI model. Before, English messages and titles were shown
+  in every locale.
+layer: gate
+dimension: function
+source:
+  kind: probe
+  from: review of New table from files (commits 984089d, 7546c00)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/fromFilesChecks.spec.ts, src/TableFromFilesDialog.spec.tsx]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-22"

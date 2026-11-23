@@ -1,0 +1,24 @@
+format: 1
+id: regressions/issue-from-files-partial-table
+feature: table.from-files
+intent: >-
+  A table from files that fails partway (a chosen file that can no longer be read, an engine that
+  refuses a record) leaves the document exactly as it was: every file is read before anything is
+  written, and a failure or a cancel after the table is made deletes it again, so there is no
+  half-made table, no stray records, and pressing the button again does not make a second table.
+  Before, only a cancel removed the table; any other failure left it with the records made so far.
+layer: gate
+dimension: data-safety
+source:
+  kind: probe
+  from: review of New table from files (commits 984089d, 7546c00)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/fromFilesChecks.spec.ts, src/fromFilesHistory.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-22"

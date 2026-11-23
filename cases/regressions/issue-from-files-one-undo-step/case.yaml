@@ -1,0 +1,24 @@
+format: 1
+id: regressions/issue-from-files-one-undo-step
+feature: table.from-files
+intent: >-
+  Making a table from files is one undo step: the table with its design is the person's step, and
+  its records (and AI cells, as every AI field run) are written outside the undo history, so one
+  Undo takes back the table with its records and nothing else. After a cancel or a failure, Undo and
+  Redo bring nothing of the run back. Before, each table, record and AI write was its own step, Undo
+  peeled a run apart, and Undo after a cancel brought the canceled table back.
+layer: gate
+dimension: function
+source:
+  kind: probe
+  from: review of New table from files (commits 984089d, 7546c00)
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, vitest, run, src/fromFilesHistory.spec.ts]
+expected:
+  - actual: out:exit
+    compare: exit
+    value: 0
+since: "2026-11-22"
