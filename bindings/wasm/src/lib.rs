@@ -1184,23 +1184,29 @@ impl KitDocument for TableDocument {
     }
 
     /// A file read again after an outside write: when it is this document and holds every change
-    /// of this session, what it adds is taken in, outside both undo histories, so this session
-    /// keeps its own: the changes it holds beyond this replica's version when its history reaches
-    /// it (with their blobs), else (it holds the document's content and only its own seal) its
-    /// state, written by object id as one `system` import. A file of another document, or one
-    /// that lacks a change of this session, cannot be reconciled: `false`, nothing changed.
+    /// of this session (or the session holds nothing unsaved), what it adds is taken in, outside
+    /// both undo histories, so this session keeps its own: the changes it holds beyond this
+    /// replica's version when its history reaches it (with their blobs), else (it holds the
+    /// document's content and only its own seal) its state, written by object id as one `system`
+    /// import, after which the session holds what the file holds (saved). A file of another
+    /// document, or one that lacks an unsaved change of this session, cannot be reconciled:
+    /// `false`, nothing changed.
     fn reconcile_reread(&mut self, fresh: &Self) -> Result<bool, String> {
         if fresh.file.replica().doc_id() != self.file.replica().doc_id() {
             return Ok(false);
         }
         let ours = self.file.replica_version();
-        if !fresh.file.replica_version().includes(&ours) {
-            return Ok(false);
-        }
         if ours.includes(&fresh.file.replica_version()) {
             return Ok(true);
         }
-        if fresh.file.replica().reaches(&ours) {
+        // A file that lacks a change of this session is reconciled only when the session holds
+        // nothing the person did not save: then what it lacks is what the session took from an
+        // earlier read of the file (its state, written as an import) or a seal.
+        let extends = fresh.file.replica_version().includes(&ours);
+        if !extends && self.dirty() {
+            return Ok(false);
+        }
+        if extends && fresh.file.replica().reaches(&ours) {
             let changes = fresh.export_changes(&ours.encode())?;
             let blobs = fresh.file.blobs_for_changes(&changes).map_err(error)?;
             if !blobs.is_empty() {
@@ -1254,6 +1260,8 @@ impl KitDocument for TableDocument {
         self.grid.note(&version, &self.file.replica_version(), Some(&change));
         self.revision += 1;
         self.history.left();
+        // The session holds what the file holds.
+        self.history.saved = Some(self.history.step);
         if change != TableChange::default() {
             let mut value = change_json(&self.doc.document_id.to_string(), &import_origin(), &change);
             value["documentPath"] = Value::from(self.name.clone());

@@ -205,10 +205,16 @@ fn dashboards_survive_save_and_reopen() {
 fn attachments_survive_save_and_reopen() {
     let mut doc = new_document();
     let (table, _, _) = first_table(&mut doc);
+    run(&mut doc, "table.fields.create", json!({ "tableId": table, "name": "files", "title": "Files", "type": "attachment" }));
     let data = base64::engine::general_purpose::STANDARD.encode(b"hello attachment");
     let attachment = run(&mut doc, "table.attachments.put", json!({ "tableId": table, "name": "note.txt", "mimeType": "text/plain", "data": data }));
     let hash = attachment["url"].as_str().unwrap().trim_start_matches("kition-blob:").to_owned();
+    run(&mut doc, "table.records.create", json!({ "tableId": table, "values": { "title": "With a file", "files": [attachment] } }));
+    let loose = base64::engine::general_purpose::STANDARD.encode(b"a blob no record names");
+    let unnamed = run(&mut doc, "table.attachments.put", json!({ "tableId": table, "name": "loose.txt", "mimeType": "text/plain", "data": loose }));
+    let unnamed = unnamed["url"].as_str().unwrap().trim_start_matches("kition-blob:").to_owned();
     let stored = read(&mut doc, "table.attachments.read", json!({ "hash": hash }));
     let mut back = round_trip(&mut doc);
-    assert_eq!(read(&mut back, "table.attachments.read", json!({ "hash": hash })), stored, "the bytes travel in the file");
+    assert_eq!(read(&mut back, "table.attachments.read", json!({ "hash": hash })), stored, "the bytes a record names travel in the file");
+    assert!(back.file().blob(&unnamed).unwrap().is_none(), "a blob no record names does not");
 }
