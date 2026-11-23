@@ -381,6 +381,8 @@ fn filter_tree(replica: &Replica, view: &ObjectId) -> Option<Value> {
         children: &HashMap<Option<ObjectId>, Vec<ObjectId>>,
         depth: usize,
     ) -> Value {
+        // The root's children are keyed by no parent (those of every root are its children).
+        let kids_key = if depth == 0 { None } else { id.cloned() };
         let key = |id: Option<&ObjectId>| -> Value {
             match id {
                 Some(id) => {
@@ -400,7 +402,7 @@ fn filter_tree(replica: &Replica, view: &ObjectId) -> Option<Value> {
         let kids: Vec<Value> = if depth > 64 {
             Vec::new()
         } else {
-            children.get(&id.cloned()).into_iter().flatten().map(|child| node(Some(child), get, children, depth + 1)).collect()
+            children.get(&kids_key).into_iter().flatten().map(|child| node(Some(child), get, children, depth + 1)).collect()
         };
         json!({ "id": key(id), "kind": "group", "conjunction": conjunction, "children": kids })
     }

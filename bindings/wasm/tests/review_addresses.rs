@@ -63,6 +63,9 @@ fn preview_diagnostic_paths_accept_stable_ids() {
 
 #[test]
 fn changed_layout_preimages_refuse_the_replaced_entry() {
+    // A column's place is one entry of the view's layout map: the write holds that entry
+    // (`layout.<field>`), so a change of it since basis refuses the write, and an entry of another
+    // field does not.
     let mut doc = TableDocument::create("Work.ktable", 0, 0).unwrap();
     let overview = doc.inspect().unwrap();
     let table = &overview["tables"][0];
@@ -71,18 +74,7 @@ fn changed_layout_preimages_refuse_the_replaced_entry() {
     let params = json!({"tableId":table["tool_id"],"viewId":view,"fieldId":field,"position":2});
     doc.execute("table.views.patchField", json!({"tableId":1,"viewId":1,"fieldId":3,"position":7})).unwrap();
     let under = doc.under("table.views.patchField", &params).unwrap().unwrap();
-    assert!(under.covers.is_some(), "{under:?}");
-    let answer = doc
-        .covered(
-            "table.views.patchField",
-            &params,
-            &[kition_kit::CoveredAsk {
-                id: view,
-                before: serde_json::Map::from_iter([("config".to_owned(), serde_json::Value::Null)]),
-                ..Default::default()
-            }],
-        )
-        .unwrap()
-        .unwrap();
-    assert_eq!(answer.covered[0].covered, None, "{answer:?}");
+    let held = under.premises.iter().find(|premise| premise.id == view).and_then(|premise| premise.fields.clone()).unwrap_or_default();
+    assert!(held.contains(&format!("layout.{}", field.as_str().unwrap())), "{under:?}");
+    assert!(!held.iter().any(|path| path.starts_with("layout.") && !path.ends_with(field.as_str().unwrap())), "only its own entry: {under:?}");
 }

@@ -543,7 +543,7 @@ pub fn create_view(tx: &mut Tx<'_>, table: &ObjectId, spec: &ViewSpec) -> Result
     if !VIEW_TYPES.contains(&view_type.as_str()) {
         view_type = "grid".to_owned();
     }
-    let mut values = registers(json!({
+    let values = registers(json!({
         "type": view_type,
         "title": fallback(&spec.title, "All"),
         "locked": false,

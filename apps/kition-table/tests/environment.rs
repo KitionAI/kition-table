@@ -126,7 +126,7 @@ async fn seed_seven_one_hundred_tasks_and_create_classification() {
         .collect();
     assert_eq!(
         types,
-        ["Choice", "Dashboard", "Field", "Record", "Table", "View"].map(str::to_owned).into(),
+        ["Choice", "Dashboard", "Field", "Filter", "Group", "Record", "Sort", "Table", "View"].map(str::to_owned).into(),
         "every stored type is created and replayed"
     );
 }

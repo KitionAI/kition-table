@@ -17,7 +17,9 @@ use serde_json::{Map, Value, json};
 use super::model::{Listing, place_items};
 use crate::Result;
 
-const OWN: [&str; 4] = ["id", "title", "type", "query"];
+/// The widget keys with registers of their own; every other key (its `id` too, as written) is in
+/// `settings`.
+const OWN: [&str; 3] = ["title", "type", "query"];
 
 /// A widget's query with its fields by object id: `field_name` becomes `field`,
 /// `group_by_field_name` `group_by_field`, each filter's `field_name` its `field`, and `columns`
@@ -74,7 +76,7 @@ pub fn query_from_kdm(query: &Value, name_of: &dyn Fn(&ObjectId) -> Option<Strin
         }
     }
     if let Some(Value::Array(columns)) = out.get_mut("columns") {
-        *columns = columns.iter().filter_map(|id| name(id)).map(|found| json!(found)).collect();
+        *columns = columns.iter().filter_map(name).map(|found| json!(found)).collect();
     }
     Value::Object(out)
 }
@@ -215,7 +217,6 @@ pub fn assemble(replica: &Replica, dashboard: &ObjectId) -> Result<(Value, Map<S
             continue;
         }
         let mut widget = Map::new();
-        widget.insert("id".into(), json!(key));
         for name in ["title", "type", "query"] {
             let value = replica.get(&id, name)?;
             if !value.is_null() {
