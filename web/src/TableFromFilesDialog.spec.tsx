@@ -134,6 +134,6 @@ describe('the New table from files dialog', () => {
     await start()
     expect(toast.warning).toHaveBeenCalledWith('The AI model did not design the table, so the plain design was used')
     expect(toast.warning).toHaveBeenCalledWith('AI could not fill 4 cells', { description: 'In: Merchant, Total. Run these AI fields again from their column menu.' })
-    expect(fromFiles.MAX_TOTAL_BYTES).toBe(100 << 20)
+    expect((fromFiles as unknown as Record<string, unknown>).MAX_TOTAL_BYTES).toBe(100 << 20)
   })
 })

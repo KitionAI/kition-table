@@ -44,6 +44,9 @@ async function rejection(run: Promise<unknown>) {
   return 'resolved'
 }
 
+/** A run's options (typed loosely, so the spec also compiles against a run without them). */
+type Options = Parameters<typeof tableFromFiles>[0]
+
 type FakeField = { id: number; name: string; title: string; type: string; is_primary: boolean; options: Record<string, unknown> }
 
 /** The engine, faked: it keeps the tables and records it made, and refuses what `refuse` says. */
@@ -308,9 +311,9 @@ describe('D5: AI fields that leave cells empty are reported', () => {
     const runField = vi.fn(async () => {
       throw hostRefusal('unavailable')
     })
-    const made = await tableFromFiles({ source: engine.source, services: model(RECEIPTS), runField, onUnavailable, files: [file('a.png')], request: 'x' })
+    const made = await tableFromFiles({ source: engine.source, services: model(RECEIPTS), runField, onUnavailable, files: [file('a.png')], request: 'x' } as Options)
     expect(onUnavailable).toHaveBeenCalledWith('The host refused: unavailable')
-    expect(made.unfilled.map((field) => field.records)).toEqual([1, 1])
+    expect((made as unknown as { unfilled: Array<{ records: number }> }).unfilled.map((field) => field.records)).toEqual([1, 1])
   })
 })
 
@@ -322,7 +325,7 @@ describe('D6: a host that refuses the design gets the plain design', () => {
       const services = model(async () => {
         throw hostRefusal(reason)
       })
-      const made = await tableFromFiles({ source: engine.source, services, onUnavailable, files: [file('a.png')], request: 'x' })
+      const made = await tableFromFiles({ source: engine.source, services, onUnavailable, files: [file('a.png')], request: 'x' } as Options)
       expect(made).toMatchObject({ records: 1, fallback: reason })
       expect([...engine.tables.values()].map((table) => [table.title, table.fields.map((field) => field.title)])).toEqual([
         ['Files', ['File Name', 'Attachment', 'Summary', 'Detected Date']],
@@ -350,7 +353,7 @@ describe('R2: what the person reads is localized', () => {
       : [prefix.slice(0, -1)]
 
   it('every failure has a text in all six locales', () => {
-    const codes = fromFiles.FROM_FILES_ERROR_CODES
+    const codes = (fromFiles as unknown as { FROM_FILES_ERROR_CODES: string[] }).FROM_FILES_ERROR_CODES
     expect(codes.length).toBeGreaterThan(10)
     for (const [locale, catalogue] of Object.entries(LOCALES)) {
       const errors = catalogue.kit.fromFiles.errors as Record<string, unknown>
