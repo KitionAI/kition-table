@@ -1,0 +1,25 @@
+format: 1
+id: table.collab.merge-inside/view-and-dashboard-items
+feature: table.collab.merge-inside
+intent: >-
+  Two copies of one table edit it at once and exchange their changes: filters added on both
+  sides are both kept; sorts reordered on one side and added on the other merge; columns hidden
+  and placed on both sides are all kept; widgets added and edited on both sides are both kept and
+  name their fields by object id; an AI field's instruction (its aiPrompt text, not a copy in the
+  options) edited in two places keeps both edits.
+layer: gate
+source:
+  kind: synthetic
+  from: the schema freeze (schema version 1)
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-file, filter: "filters_added_on_both_sides_are_both_kept" }
+  - cargo-test: { package: kition-table-file, filter: "sorts_reordered_on_one_side_and_added_on_the_other_merge" }
+  - cargo-test: { package: kition-table-file, filter: "columns_hidden_and_placed_on_both_sides_are_all_kept" }
+  - cargo-test: { package: kition-table-file, filter: "widgets_added_and_edited_on_both_sides_are_both_kept_and_name_fields_by_id" }
+  - cargo-test: { package: kition-table-file, filter: "an_ai_instruction_edited_in_two_places_keeps_both" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-23"

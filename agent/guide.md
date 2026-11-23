@@ -177,8 +177,15 @@ What the document holds, for raw writes: a select's options are `Choice` objects
 `otherChoices`), and its cells hold choice ids (a
 `multi_select` a list of them); a `long_text` cell holds the id of a `CellText` object (the ids of its `record`
 and `field`, and its `text`, which merges per character); a field's AI prompt is its `aiPrompt` text.
-A view's `config` names fields by object id (`field` in filter conditions, sorts and groups;
-`group_field`, `cover_field`, `hidden_fields`). The commands take and answer plain values (option
+A view's filters are `Filter` objects in `View.filters` (groups and conditions, each naming its
+group by `parent` and, a condition, its field by object id); its sorts and groups are `Sort` and
+`Group` objects in `View.sorts`, `View.groups` (the API's) and `View.sortItems`,
+`View.groupItems` (the editor's); its hidden columns and column layout are the maps
+`View.hiddenFields` and `View.layout`; `View.config` keeps the rest, which changes as a unit
+(row height, frozen columns, `group_field`, `cover_field`). A dashboard's widgets are `Widget`
+objects in `Dashboard.widgets` (`key`, `title`, `type`, `query` naming fields by object id,
+`settings`, `layout`). An AI action's instruction is the field's `aiPrompt` text, not a key of
+`options.ai_config`. The commands take and answer plain values (option
 names, the text, fields by name) and store them in that shape.
 
 A call that reads a table's schema in field order holds that table's own `~fieldOrder`, a

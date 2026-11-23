@@ -256,3 +256,175 @@ fn a_view_config_names_fields_by_id_and_never_stores_the_search() {
     let stored = ok(here.replica().get(&object, "config"));
     assert!(stored["sorts"][0].get("field_id").is_none() && stored["sorts"][0]["field"].is_string(), "{stored}");
 }
+
+/// The view's config as the editor reads it, with `change` applied to it.
+fn edit_view(file: &mut TableFile, table: i64, change: impl FnOnce(&mut Map<String, Value>)) -> Map<String, Value> {
+    let view = ok(file.get_table(table)).views.first().cloned().unwrap_or_else(|| panic!("no view"));
+    let mut config = view.config.clone();
+    change(&mut config);
+    ok(file.update_view(table, view.id, &ViewPatch { config: Some(Value::Object(config)), ..ViewPatch::default() })).config
+}
+
+fn view_config(file: &TableFile, table: i64) -> Map<String, Value> {
+    ok(file.get_table(table)).views.first().map(|view| view.config.clone()).unwrap_or_default()
+}
+
+fn condition(id: &str, field: &str, value: &str) -> Value {
+    json!({ "id": id, "kind": "condition", "field_name": field, "operator": "contains", "value": value })
+}
+
+#[test]
+fn filters_added_on_both_sides_are_both_kept() {
+    let mut c = copies();
+    let tree = |children: Vec<Value>| json!({ "id": "root", "kind": "group", "conjunction": "and", "children": children });
+    edit_view(&mut c.here, c.table, |config| {
+        config.insert("filter_tree".into(), tree(vec![condition("a", "title", "Write")]));
+    });
+    let start = ok(c.here.export_replica_changes(&c.there.replica_version()));
+    ok(c.there.import_replica_changes(&start));
+    edit_view(&mut c.here, c.table, |config| {
+        config.insert("filter_tree".into(), tree(vec![condition("a", "title", "Write"), condition("b", "title", "Here")]));
+    });
+    edit_view(&mut c.there, c.table, |config| {
+        config.insert("filter_tree".into(), tree(vec![condition("a", "title", "Write"), condition("c", "notes", "There")]));
+    });
+    c.exchange();
+    let (here, there) = (view_config(&c.here, c.table), view_config(&c.there, c.table));
+    assert_eq!(here, there, "both copies read the same");
+    let ids: Vec<&str> =
+        here["filter_tree"]["children"].as_array().unwrap_or_else(|| panic!("{here:?}")).iter().filter_map(|node| node["id"].as_str()).collect();
+    assert_eq!(ids.first(), Some(&"a"));
+    let mut sorted = ids.clone();
+    sorted.sort_unstable();
+    assert_eq!(sorted, vec!["a", "b", "c"], "{ids:?}");
+    // The filters are objects of the document, naming their fields by object id.
+    let filters = c.here.replica().objects_of_type("Filter");
+    assert_eq!(filters.len(), 4, "the root group and three conditions");
+    let view = c.here.replica().objects_of_type("View").into_iter().next().unwrap_or_else(|| panic!("no view"));
+    let stored = ok(c.here.replica().get(&view, "config"));
+    assert!(stored.get("filter_tree").is_none(), "the tree is not in the config register: {stored}");
+}
+
+#[test]
+fn sorts_reordered_on_one_side_and_added_on_the_other_merge() {
+    let mut c = copies();
+    let items = |names: &[&str]| {
+        json!(names.iter().map(|name| json!({ "id": format!("s-{name}"), "field_name": name, "direction": "asc" })).collect::<Vec<_>>())
+    };
+    edit_view(&mut c.here, c.table, |config| {
+        config.insert("sort_items".into(), items(&["title", "status"]));
+    });
+    let start = ok(c.here.export_replica_changes(&c.there.replica_version()));
+    ok(c.there.import_replica_changes(&start));
+    edit_view(&mut c.here, c.table, |config| {
+        config.insert("sort_items".into(), items(&["status", "title"]));
+    });
+    edit_view(&mut c.there, c.table, |config| {
+        config.insert("sort_items".into(), items(&["title", "status", "notes"]));
+    });
+    c.exchange();
+    let (here, there) = (view_config(&c.here, c.table), view_config(&c.there, c.table));
+    assert_eq!(here, there);
+    let names: Vec<&str> =
+        here["sort_items"].as_array().unwrap_or_else(|| panic!("{here:?}")).iter().filter_map(|item| item["field_name"].as_str()).collect();
+    assert_eq!(names.len(), 3, "{names:?}");
+    let at = |name: &str| names.iter().position(|found| *found == name).unwrap_or_else(|| panic!("{name} in {names:?}"));
+    assert!(at("status") < at("title"), "the reorder is kept: {names:?}");
+    assert_eq!(c.here.replica().objects_of_type("Sort").len(), 3);
+}
+
+#[test]
+fn columns_hidden_and_placed_on_both_sides_are_all_kept() {
+    let mut c = copies();
+    edit_view(&mut c.here, c.table, |config| {
+        config.insert("hidden_field_names".into(), json!(["notes"]));
+    });
+    edit_view(&mut c.there, c.table, |config| {
+        config.insert("hidden_field_names".into(), json!(["status"]));
+    });
+    c.exchange();
+    let mut hidden: Vec<String> = view_config(&c.here, c.table)["hidden_field_names"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|name| name.as_str().map(str::to_owned))
+        .collect();
+    hidden.sort();
+    assert_eq!(hidden, vec!["notes", "status"]);
+    assert_eq!(view_config(&c.here, c.table), view_config(&c.there, c.table));
+    // A column's place is one entry of the view's layout: two columns placed at once both keep theirs.
+    let view = ok(c.here.get_table(c.table)).views[0].id;
+    let fields = ok(c.here.list_fields(c.table));
+    let (first, second) = (fields[1].id, fields[2].id);
+    ok(c.here.upsert_view_field(view, first, &kition_table_file::ViewFieldPatch { position: Some(5), ..Default::default() }));
+    ok(c.there.upsert_view_field(view, second, &kition_table_file::ViewFieldPatch { frozen: Some(true), ..Default::default() }));
+    c.exchange();
+    let layout = view_config(&c.here, c.table)["field_layout"].clone();
+    assert_eq!(layout.as_object().map(Map::len), Some(2), "{layout}");
+    assert_eq!(view_config(&c.here, c.table), view_config(&c.there, c.table));
+}
+
+#[test]
+fn widgets_added_and_edited_on_both_sides_are_both_kept_and_name_fields_by_id() {
+    let mut c = copies();
+    let widget = |id: &str, title: &str| json!({ "id": id, "title": title, "type": "bar", "query": { "aggregation": "count", "group_by_field_name": "status" } });
+    let dashboard = |widgets: Vec<Value>, layout: Value| -> (Value, Map<String, Value>) {
+        let config = json!({ "order": 1, "source_table_id": 0, "layout": layout });
+        (config, widgets.into_iter().map(|w| (w["id"].as_str().unwrap_or_default().to_owned(), w)).collect())
+    };
+    let table = c.table;
+    let config_of = |config: Value| -> Value {
+        let mut config = config;
+        config["source_table_id"] = json!(table);
+        config
+    };
+    let (config, widgets) = dashboard(vec![widget("w1", "By status")], json!([{ "widget_id": "w1", "x": 0, "y": 0, "w": 4, "h": 3 }]));
+    ok(c.here.upsert_dashboard(Some("d1"), "Overview", config_of(config), &widgets));
+    let start = ok(c.here.export_replica_changes(&c.there.replica_version()));
+    ok(c.there.import_replica_changes(&start));
+    let (config, widgets) = dashboard(
+        vec![widget("w1", "By status"), widget("w2", "Added here")],
+        json!([{ "widget_id": "w1", "x": 0, "y": 0, "w": 4, "h": 3 }, { "widget_id": "w2", "x": 4, "y": 0, "w": 4, "h": 3 }]),
+    );
+    ok(c.here.upsert_dashboard(Some("d1"), "Overview", config_of(config), &widgets));
+    let (config, widgets) = dashboard(vec![widget("w1", "Renamed there")], json!([{ "widget_id": "w1", "x": 0, "y": 0, "w": 4, "h": 3 }]));
+    ok(c.there.upsert_dashboard(Some("d1"), "Overview", config_of(config), &widgets));
+    c.exchange();
+    let (here, there) = (ok(c.here.list_dashboards()), ok(c.there.list_dashboards()));
+    assert_eq!(here, there);
+    let board = &here[0];
+    assert_eq!(board.widgets["w1"]["title"], "Renamed there");
+    assert_eq!(board.widgets["w2"]["title"], "Added here");
+    assert_eq!(board.widgets["w2"]["query"]["group_by_field_name"], "status", "readers name the field");
+    assert_eq!(board.config["layout"].as_array().map(Vec::len), Some(2), "{:?}", board.config);
+    // The document names the field by its object id.
+    let stored: Vec<Value> = c.here.replica().objects_of_type("Widget").iter().map(|id| ok(c.here.replica().get(id, "query"))).collect();
+    let status = status_object(&c.here);
+    assert!(stored.iter().all(|query| query["group_by_field"] == json!(status) && query.get("group_by_field_name").is_none()), "{stored:?}");
+}
+
+#[test]
+fn an_ai_instruction_edited_in_two_places_keeps_both() {
+    let mut c = copies();
+    let field = ok(c.here.create_field(
+        c.table,
+        &FieldSpec { options: json!({ "ai_config": { "type": "customize", "enabled": true, "prompt": "Write a summary" } }), ..field("Brief", "ai") },
+    ))
+    .id;
+    let start = ok(c.here.export_replica_changes(&c.there.replica_version()));
+    ok(c.there.import_replica_changes(&start));
+    let options = |prompt: &str| FieldPatch {
+        options: Some(json!({ "ai_config": { "type": "customize", "enabled": true, "prompt": prompt } })),
+        ..FieldPatch::default()
+    };
+    ok(c.here.update_field(c.table, field, &options("Write a short summary")));
+    ok(c.there.update_field(c.table, field, &options("Write a summary of the notes")));
+    c.exchange();
+    let (_, options, ai_prompt) = c.converged(field);
+    assert_eq!(options["ai_config"]["prompt"], "Write a short summary of the notes");
+    assert_eq!(ai_prompt, "Write a short summary of the notes", "the instruction is the field's aiPrompt");
+    // The options in the document hold no copy of it.
+    let object = c.here.replica().objects_of_type("Field").into_iter().find(|id| ok(c.here.replica().get(id, "name")) == json!("brief"));
+    let stored = ok(c.here.replica().get(&object.unwrap_or_else(|| panic!("no brief field")), "options"));
+    assert!(stored["ai_config"].get("prompt").is_none(), "{stored}");
+}

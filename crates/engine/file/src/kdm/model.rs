@@ -37,6 +37,11 @@ pub const TABLE: &str = "Table";
 pub const FIELD: &str = "Field";
 pub const VIEW: &str = "View";
 pub const RECORD: &str = "Record";
+/// TEMPORARY (sdk-write-state): `Link`'s ends (`from`, `field`, `to` in `model/schema.json`) are
+/// `optional` only because kition-sdk's `kition_kit::session::write_state` creates an object
+/// before it sets its references. Make them required again when the kits re-pin a kition-sdk whose
+/// `write_state` creates an object with its required references in one step. Every link the model
+/// makes ([`add_link`]) has all three.
 pub const LINK: &str = "Link";
 pub const DASHBOARD: &str = "Dashboard";
 pub const CHOICE: &str = "Choice";
@@ -210,8 +215,13 @@ pub fn delete_table(tx: &mut Tx<'_>, base: &ObjectId, table: &ObjectId) -> Resul
             tx.delete(&link.id)?;
         }
     }
-    // The table's choices and long texts go with it.
+    // The table's choices, long texts and views' filters and sorts go with it.
     let mut doomed: Vec<ObjectId> = Vec::new();
+    for view in &views {
+        for list in VIEW_ITEM_LISTS {
+            doomed.extend(tx.list_items(view, list).unwrap_or_default());
+        }
+    }
     for field in &fields {
         for list in ["choices", "otherChoices"] {
             doomed.extend(tx.list_items(field, list).unwrap_or_default());
@@ -270,10 +280,11 @@ fn create_field_as(tx: &mut Tx<'_>, table: &ObjectId, spec: &FieldSpec, check_cy
         "formula": spec.formula.trim(),
     }));
     let (options, choices) = cells::split_choices(&object_ids_only(decode_json(&spec.options)?)?);
+    let (options, instruction) = split_instruction(options);
     put_json(&mut values, "options", &options)?;
     put_json(&mut values, "meta", &spec.meta)?;
     let field = tx.create_with_id(FIELD, &crate::ids::object(), values)?;
-    let prompt = spec.ai_prompt.trim();
+    let prompt = instruction.as_deref().map(str::trim).filter(|text| !text.is_empty()).unwrap_or(spec.ai_prompt.trim());
     if !prompt.is_empty() {
         tx.text_insert(&field, "aiPrompt", 0, prompt)?;
     }
@@ -331,8 +342,14 @@ pub fn update_field_known(tx: &mut Tx<'_>, field: &ObjectId, patch: &FieldPatch,
     set_if_changed(tx, field, "readonly", json!(readonly || forces_readonly(&field_type)))?;
     if let Some(options) = &patch.options {
         let (options, choices) = cells::split_choices(&object_ids_only(decode_json(options)?)?);
+        let (options, instruction) = split_instruction(options);
         set_if_changed(tx, field, "options", options)?;
         cells::write_choices(tx, field, &choices)?;
+        if let Some(instruction) = instruction
+            && patch.ai_prompt.is_none()
+        {
+            cells::write_text(tx, field, "aiPrompt", texts, &instruction)?;
+        }
     }
     if let Some(formula) = &patch.formula {
         set_if_changed(tx, field, "formula", json!(formula))?;
@@ -531,10 +548,13 @@ pub fn create_view(tx: &mut Tx<'_>, table: &ObjectId, spec: &ViewSpec) -> Result
         "title": fallback(&spec.title, "All"),
         "locked": false,
     }));
-    put_json(&mut values, "config", &config_in(tx, table, &decode_json(&spec.config)?)?)?;
+    let config = config_in(tx, table, &decode_json(&spec.config)?)?;
     let view = tx.create_with_id(VIEW, &crate::ids::object(), values)?;
     let len = tx.list_items(table, "views")?.len();
     tx.list_insert(table, "views", len, &view)?;
+    if !config.is_null() {
+        super::view_store::store(tx, &view, &config)?;
+    }
     Ok(view)
 }
 
@@ -558,11 +578,8 @@ pub fn update_view(tx: &mut Tx<'_>, view: &ObjectId, patch: &ViewPatch) -> Resul
             Some(table) => config_in(tx, &table, &config)?,
             None => view_refs::config_to_kdm(&config, &|_| None),
         };
-        // A view without a config reads as `{}`: writing that back changes nothing.
-        let unchanged = config.as_object().is_some_and(Map::is_empty) && tx.get(view, "config")?.is_null();
-        if !unchanged {
-            set_if_changed(tx, view, "config", config)?;
-        }
+        // A view without a config reads as `{}`: writing that back changes nothing (`store`).
+        super::view_store::store(tx, view, &config)?;
     }
     Ok(())
 }
@@ -585,6 +602,21 @@ fn table_of_view(tx: &Tx<'_>, view: &ObjectId) -> Result<Option<ObjectId>> {
         }
     }
     Ok(None)
+}
+
+/// The lists of a view whose items are its own: its filters, sorts and groups.
+const VIEW_ITEM_LISTS: [&str; 5] = ["filters", "sorts", "groups", "sortItems", "groupItems"];
+
+/// Deletes a view's filters, sorts and groups.
+fn delete_view_items(tx: &mut Tx<'_>, view: &ObjectId) -> Result<()> {
+    for list in VIEW_ITEM_LISTS {
+        for item in tx.list_items(view, list)? {
+            if tx.exists(&item) {
+                tx.delete(&item)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Sets a column width, clamped to [`MIN_WIDTH`]`..=`[`MAX_WIDTH`].
@@ -612,6 +644,7 @@ pub fn delete_view(tx: &mut Tx<'_>, table: &ObjectId, view: &ObjectId) -> Result
         return Err(TableFileError::NotFound);
     }
     if tx.exists(view) {
+        delete_view_items(tx, view)?;
         tx.delete(view)?;
     }
     Ok(())
@@ -995,7 +1028,8 @@ pub(crate) fn is_single_target(tx: &Tx<'_>, field: &ObjectId) -> Result<bool> {
 
 /// Creates or updates a dashboard of the base. `config` is the dashboard without its widgets
 /// (title, order, layout, `source_table` as an object id; see [`super::options`]); `widgets` are
-/// keyed by widget id and unordered, so their order belongs in `config` (its layout).
+/// keyed by widget id, their queries naming fields by object id ([`super::widgets`]). The layout's
+/// entries are kept with their widgets (`Widget.layout`).
 /// `id: None` creates one with a new id; an id that names no object creates one under that id
 /// (it must match the KDM object id pattern). On update, `name` and `config` are set when they
 /// differ and widgets are diffed key by key: changed widgets are written, missing ones deleted.
@@ -1010,25 +1044,13 @@ pub fn upsert_dashboard(
 ) -> Result<ObjectId> {
     require(tx, base, BASE)?;
     let config = object_ids_only(decode_json(&config)?)?;
+    let (config, layout) = super::widgets::split_layout(&config);
+    let config = if config.as_object().is_some_and(Map::is_empty) { Value::Null } else { config };
     let dashboard = match id {
         Some(id) if tx.exists(id) => {
             require(tx, id, DASHBOARD)?;
             set_if_changed(tx, id, "name", json!(name))?;
             set_if_changed(tx, id, "config", config)?;
-            for (key, _) in tx.map_entries(id, "widgets")? {
-                if widgets.get(&key).is_none_or(Value::is_null) {
-                    tx.map_delete(id, "widgets", &key)?;
-                }
-            }
-            for (key, widget) in widgets {
-                if widget.is_null() {
-                    continue;
-                }
-                let current = tx.map_get(id, "widgets", key)?;
-                if !json::equal(&current, widget) {
-                    tx.map_set(id, "widgets", key, widget.clone())?;
-                }
-            }
             id.clone()
         }
         chosen => {
@@ -1036,18 +1058,13 @@ pub fn upsert_dashboard(
             if !config.is_null() {
                 values.insert("config".into(), config);
             }
-            let id = match chosen {
+            match chosen {
                 Some(id) => tx.create_with_id(DASHBOARD, id, values)?,
                 None => tx.create_with_id(DASHBOARD, &crate::ids::object(), values)?,
-            };
-            for (key, widget) in widgets {
-                if !widget.is_null() {
-                    tx.map_set(&id, "widgets", key, widget.clone())?;
-                }
             }
-            id
         }
     };
+    super::widgets::store(tx, &dashboard, widgets, &layout)?;
     let listed = tx.list_items(base, "dashboards")?;
     if !listed.contains(&dashboard) {
         tx.list_insert(base, "dashboards", listed.len(), &dashboard)?;
@@ -1061,6 +1078,11 @@ pub fn delete_dashboard(tx: &mut Tx<'_>, base: &ObjectId, id: &ObjectId) -> Resu
         return Err(TableFileError::NotFound);
     }
     if tx.exists(id) {
+        for widget in tx.list_items(id, "widgets")? {
+            if tx.exists(&widget) {
+                tx.delete(&widget)?;
+            }
+        }
         tx.delete(id)?;
     }
     Ok(())
@@ -1231,6 +1253,56 @@ fn check_field_type(field_type: &str) -> Result<()> {
     } else {
         Err(TableFileError::invalid(format!("unsupported field type {field_type:?}: `type` must be one of {}", FIELD_TYPES.join(", "))))
     }
+}
+
+/// The `ai_config` key that holds the instruction of an AI action, which the document keeps as
+/// the field's `aiPrompt` text (so it merges per character), not in the options.
+pub(crate) fn instruction_key(ai_config: &Value) -> Option<&'static str> {
+    let action = ai_config.get("type").or_else(|| ai_config.get("action_type")).and_then(Value::as_str)?;
+    match action.trim() {
+        "customize" | "text_generation" | "image_generation" | "image_customization" => Some("prompt"),
+        "extract" => Some("extract_instruction"),
+        "improve" => Some("improve_instruction"),
+        "summarize" => Some("summary_instruction"),
+        _ => None,
+    }
+}
+
+/// Takes the instruction out of `options.ai_config` (`prompt`, or `custom_prompt`, for the
+/// actions that write one; the action's own instruction key otherwise): the options left and the
+/// instruction, `Some("")` for an action whose config has none, `None` when the options configure
+/// no action with an instruction.
+fn split_instruction(options: Value) -> (Value, Option<String>) {
+    let mut options = options;
+    let Some(config) = options.get_mut("ai_config").and_then(Value::as_object_mut) else {
+        return (options, None);
+    };
+    let Some(key) = instruction_key(&Value::Object(config.clone())) else {
+        return (options, None);
+    };
+    let mut text = config.remove(key).and_then(|value| value.as_str().map(str::to_owned));
+    if key == "prompt"
+        && let Some(alias) = config.remove("custom_prompt")
+        && text.as_deref().is_none_or(str::is_empty)
+    {
+        text = alias.as_str().map(str::to_owned);
+    }
+    (options, Some(text.unwrap_or_default()))
+}
+
+/// Puts the field's instruction (`aiPrompt`) back into `options.ai_config` under its action's key,
+/// as readers see the options.
+pub(crate) fn with_instruction(options: Value, prompt: &str) -> Value {
+    let mut options = options;
+    if prompt.is_empty() {
+        return options;
+    }
+    if let Some(config) = options.get_mut("ai_config").and_then(Value::as_object_mut)
+        && let Some(key) = instruction_key(&Value::Object(config.clone()))
+    {
+        config.insert(key.to_owned(), json!(prompt));
+    }
+    options
 }
 
 /// Formula and AI values are written by Kition, never typed in.

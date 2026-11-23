@@ -195,17 +195,19 @@ impl<'a> ModelView<'a> {
         self.expect(id, FIELD)?;
         let field_type = self.string(id, "type")?;
         let choices = cells::listed_choices(self.replica, id)?;
+        let ai_prompt = self.replica.text(id, "aiPrompt")?;
+        let options = cells::options_with_choices(&self.replica.get(id, "options")?, &field_type, &choices);
         Ok(FieldData {
             id: id.clone(),
             name: self.string(id, "name")?,
             title: self.string(id, "title")?,
             required: self.replica.get(id, "required")? == Value::Bool(true),
             readonly: self.replica.get(id, "readonly")? == Value::Bool(true),
-            options: cells::options_with_choices(&self.replica.get(id, "options")?, &field_type, &choices),
+            options: super::model::with_instruction(options, &ai_prompt),
             choices,
             field_type,
             formula: self.string(id, "formula")?,
-            ai_prompt: self.replica.text(id, "aiPrompt")?,
+            ai_prompt,
             meta: self.replica.get(id, "meta")?,
         })
     }
@@ -306,12 +308,8 @@ impl<'a> ModelView<'a> {
             .into_iter()
             .map(|id| {
                 self.expect(&id, DASHBOARD)?;
-                Ok(DashboardData {
-                    name: self.string(&id, "name")?,
-                    config: self.replica.get(&id, "config")?,
-                    widgets: self.replica.map_entries(&id, "widgets")?.into_iter().collect(),
-                    id,
-                })
+                let (config, widgets) = super::widgets::assemble(self.replica, &id)?;
+                Ok(DashboardData { name: self.string(&id, "name")?, config, widgets, id })
             })
             .collect()
     }
@@ -391,7 +389,7 @@ impl<'a> ModelView<'a> {
             view_type: self.string(id, "type")?,
             title: self.string(id, "title")?,
             locked: self.replica.get(id, "locked")? == Value::Bool(true),
-            config: self.replica.get(id, "config")?,
+            config: super::view_store::assemble(self.replica, id)?,
             widths,
             hidden,
         })

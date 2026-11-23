@@ -9,6 +9,8 @@ pub mod read;
 pub mod repair;
 pub mod store;
 pub mod view_refs;
+pub mod view_store;
+pub mod widgets;
 
 use std::sync::{Arc, OnceLock};
 

@@ -8,6 +8,7 @@ use serde_json::{Map, Value};
 use crate::kdm::commit::{any_object, table_id_of};
 use crate::kdm::model;
 use crate::kdm::options::{self, IdKind};
+use crate::kdm::widgets;
 use crate::{Result, TableFile, TableFileError};
 
 /// One dashboard, in the relational API's shape: `config`'s table reference (when present) is
@@ -24,18 +25,42 @@ pub struct Dashboard {
 impl TableFile {
     /// The base's dashboards in order.
     pub fn list_dashboards(&self) -> Result<Vec<Dashboard>> {
-        self.model_view()
-            .dashboards()?
+        let view = self.model_view();
+        view.dashboards()?
             .into_iter()
             .map(|data| {
+                let names = self.field_names(&data.config, |field| field.id.to_string(), |field| field.name.clone());
+                let widgets = data
+                    .widgets
+                    .into_iter()
+                    .map(|(key, mut widget)| {
+                        if let Some(query) = widget.get_mut("query") {
+                            *query = widgets::query_from_kdm(query, &|id| names.get(id.as_str()).cloned());
+                        }
+                        (key, widget)
+                    })
+                    .collect();
                 Ok(Dashboard {
                     id: data.id.to_string(),
                     name: data.name,
                     config: options::options_from_kdm(&data.config, |object| table_id_of(&self.conn, object).ok()),
-                    widgets: data.widgets,
+                    widgets,
                 })
             })
             .collect()
+    }
+
+    /// The fields of a dashboard's table (its `source_table`, by object id), as `key` to `value`.
+    fn field_names(
+        &self,
+        config: &Value,
+        key: impl Fn(&crate::kdm::read::FieldData) -> String,
+        value: impl Fn(&crate::kdm::read::FieldData) -> String,
+    ) -> std::collections::HashMap<String, String> {
+        let Some(table) = config.get("source_table").and_then(Value::as_str).map(ObjectId::from_string) else {
+            return std::collections::HashMap::new();
+        };
+        self.model_view().fields(&table).unwrap_or_default().iter().map(|field| (key(field), value(field))).collect()
     }
 
     fn get_dashboard(&self, id: &str) -> Result<Dashboard> {
@@ -58,9 +83,26 @@ impl TableFile {
         self.writable()?;
         let base = self.require_base()?;
         let kdm_config = self.dashboard_config_in(&config)?;
+        let widgets = self.widgets_in(&kdm_config, widgets);
         let object_id = id.map(ObjectId::from_string);
-        let (dashboard_id, _) = self.commit(|tx| model::upsert_dashboard(tx, &base, object_id.as_ref(), name, kdm_config, widgets))?;
+        let (dashboard_id, _) = self.commit(|tx| model::upsert_dashboard(tx, &base, object_id.as_ref(), name, kdm_config, &widgets))?;
         self.get_dashboard(dashboard_id.as_str())
+    }
+
+    /// Widgets in the document's form: their queries name the dashboard table's fields by object
+    /// id ([`widgets::query_to_kdm`]).
+    fn widgets_in(&self, config: &Value, widgets: &Map<String, Value>) -> Map<String, Value> {
+        let ids = self.field_names(config, |field| field.name.clone(), |field| field.id.to_string());
+        widgets
+            .iter()
+            .map(|(key, widget)| {
+                let mut widget = widget.clone();
+                if let Some(query) = widget.get_mut("query") {
+                    *query = widgets::query_to_kdm(query, &|name| ids.get(name).map(ObjectId::from_string));
+                }
+                (key.clone(), widget)
+            })
+            .collect()
     }
 
     pub fn delete_dashboard(&mut self, id: &str) -> Result<()> {
@@ -79,7 +121,9 @@ impl TableFile {
         let converted = dashboards
             .iter()
             .map(|(id, name, config, widgets)| {
-                Ok((ObjectId::from_string(id.clone()), name.clone(), self.dashboard_config_in(config)?, widgets.clone()))
+                let config = self.dashboard_config_in(config)?;
+                let widgets = self.widgets_in(&config, widgets);
+                Ok((ObjectId::from_string(id.clone()), name.clone(), config, widgets))
             })
             .collect::<Result<Vec<_>>>()?;
         self.commit(|tx| {

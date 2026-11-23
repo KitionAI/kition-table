@@ -107,8 +107,8 @@ features:
     dimension: [collab, data-safety]
     priority: P0
     status: has
-    paths: [model/schema.json, crates/engine/file/src/kdm/cells.rs, crates/engine/file/src/kdm/view_refs.rs, crates/engine/file/tests/schema_freeze.rs]
-    cases: [table.collab.merge-inside/schema-freeze]
+    paths: [model/schema.json, crates/engine/file/src/kdm/cells.rs, crates/engine/file/src/kdm/view_refs.rs, crates/engine/file/src/kdm/view_store.rs, crates/engine/file/src/kdm/widgets.rs, crates/engine/file/tests/schema_freeze.rs]
+    cases: [table.collab.merge-inside/schema-freeze, table.collab.merge-inside/view-and-dashboard-items]
     since: "2026-11-23"
   - id: table.file.content-only
     title: "A saved .ktable holds the table's content, not its history (the sealed content snapshot; no change log, record history, deleted rows or free pages)"

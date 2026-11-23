@@ -79,8 +79,43 @@
         "title": { "kind": "string" },
         "locked": { "kind": "boolean", "label": "locked" },
         "config": { "kind": "json", "optional": true, "members": { "frozen_column_count": { "minimum": 0, "maximum": 9223372036854775807, "multipleOf": 1 } } },
+        "filters": { "kind": "list", "of": "Filter" },
+        "sorts": { "kind": "list", "of": "Sort" },
+        "groups": { "kind": "list", "of": "Group" },
+        "sortItems": { "kind": "list", "of": "Sort" },
+        "groupItems": { "kind": "list", "of": "Group" },
+        "hiddenFields": { "kind": "map" },
+        "layout": { "kind": "map" },
         "widths": { "kind": "map" },
         "hidden": { "kind": "map" }
+      }
+    },
+    "Filter": {
+      "batchOps": { "*": { "direct": true } },
+      "fields": {
+        "kind": { "kind": "enum", "values": ["group", "condition"] },
+        "parent": { "kind": "ref", "of": "Filter", "optional": true },
+        "key": { "kind": "string", "optional": true },
+        "conjunction": { "kind": "string", "optional": true },
+        "field": { "kind": "ref", "of": "Field", "optional": true },
+        "operator": { "kind": "string", "optional": true },
+        "value": { "kind": "json", "optional": true }
+      }
+    },
+    "Sort": {
+      "batchOps": { "*": { "direct": true } },
+      "fields": {
+        "key": { "kind": "string", "optional": true },
+        "field": { "kind": "ref", "of": "Field", "optional": true },
+        "direction": { "kind": "string" }
+      }
+    },
+    "Group": {
+      "batchOps": { "*": { "direct": true } },
+      "fields": {
+        "key": { "kind": "string", "optional": true },
+        "field": { "kind": "ref", "of": "Field", "optional": true },
+        "direction": { "kind": "string" }
       }
     },
     "Record": {
@@ -118,7 +153,19 @@
       "fields": {
         "name": { "kind": "string" },
         "config": { "kind": "json", "optional": true },
-        "widgets": { "kind": "map" }
+        "widgets": { "kind": "list", "of": "Widget" }
+      }
+    },
+    "Widget": {
+      "batchOps": { "*": { "direct": true } },
+      "label": "title",
+      "fields": {
+        "key": { "kind": "string" },
+        "title": { "kind": "string", "optional": true },
+        "type": { "kind": "string", "optional": true },
+        "query": { "kind": "json", "optional": true },
+        "settings": { "kind": "json", "optional": true },
+        "layout": { "kind": "json", "optional": true }
       }
     }
   }

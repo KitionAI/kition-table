@@ -154,7 +154,7 @@ fn every_field_type_and_view_type_round_trips() {
         .map(|ty| ViewSpec {
             title: format!("View {ty}"),
             view_type: (*ty).into(),
-            config: json!({ "sorts": [{ "field": "f_text", "desc": true }] }),
+            config: json!({ "row_height": "tall", "sorts": [{ "field": null, "direction": "desc" }] }),
         })
         .collect();
     let ids = table_with(

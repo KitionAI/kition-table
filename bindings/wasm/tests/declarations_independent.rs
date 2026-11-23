@@ -538,7 +538,7 @@ const ROWS: &[Row] = &[
     r(
         "table.views.patchField",
         r#"{"tableId":"$T","viewId":"$V","fieldId":"$Est","position":2}"#,
-        &[("$T", "-", "-"), ("$V", "config.field_layout.$Est.position,~owner", "-"), ("$Est", "~owner", "-")],
+        &[("$T", "-", "-"), ("$V", "layout.$Est,~owner", "-"), ("$Est", "~owner", "-")],
     ),
     // records.create: appended; values keyed by field name (membership), written by the field's
     // type (a computed field's value is dropped); a select label must still be one of the

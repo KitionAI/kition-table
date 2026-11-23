@@ -22,7 +22,6 @@ pub(crate) struct Selection {
     pub schema_tables: BTreeSet<String>,
     pub record_links: BTreeSet<String>,
     pub field_links: BTreeSet<String>,
-    pub layouts: BTreeMap<String, BTreeMap<String, BTreeSet<String>>>,
 }
 
 impl Selection {
@@ -61,7 +60,7 @@ impl Selection {
 
     /// What the selection holds, as `(object id, fact)` pairs in the words of the independent
     /// reading's comparison (`tests/declarations_independent.rs`): name membership, link
-    /// membership, partners, row identities, field lists and layout entries.
+    /// membership, partners, row identities and field lists.
     pub fn facts(&self, file: &TableFile) -> Vec<(String, String)> {
         let root = file.replica().objects_of_type("Base").first().map(|id| id.to_string()).unwrap_or_default();
         let table_id = |table: &i64| resolve(file, "Table", &json!(table)).unwrap_or_default();
@@ -78,11 +77,6 @@ impl Selection {
         // The reading's word for a table's field list; the kit holds it as that table's
         // `~fieldOrder` (one small value per table).
         facts.extend(self.schema_tables.iter().map(|table| (root.clone(), format!("~lists:{table}.fields"))));
-        for (view, fields) in &self.layouts {
-            for (field, keys) in fields {
-                facts.extend(keys.iter().map(|key| (view.clone(), format!("config.field_layout.{field}.{key}"))));
-            }
-        }
         facts
     }
 
@@ -98,7 +92,6 @@ impl Selection {
             && self.schema_tables.is_empty()
             && self.record_links.is_empty()
             && self.field_links.is_empty()
-            && self.layouts.is_empty()
     }
 }
 
@@ -607,15 +600,6 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
         let table = params["source_table_id"].as_i64().unwrap_or_default();
         references(file, needs, &mut selected, table, &params["widgets"], &[]);
     }
-    if method == "views.patchField"
-        && let (Some(view), Some(field)) = (resolve(file, "View", &params["viewId"]), resolve(file, "Field", &params["fieldId"]))
-    {
-        for key in ["position", "frozen"] {
-            if params.get(key).is_some() {
-                selected.layouts.entry(view.clone()).or_default().entry(field.clone()).or_default().insert(key.to_owned());
-            }
-        }
-    }
     // A type change writes the stored cells again in the new type's shape, from what they hold
     // when it runs, so it does not rest on them; a delete takes them.
     if method == "fields.delete"
@@ -847,17 +831,6 @@ pub(crate) fn covered(file: &TableFile, selected: &Selection, asks: &[CoveredAsk
                     }
                 });
                 Some(changed)
-            }
-        } else if let Some(layouts) = selected.layouts.get(id) {
-            if ask.unknown.iter().any(|key| key == "config" || key == "$was") {
-                None
-            } else {
-                let current = file.replica().get(&object, "config").unwrap_or(Value::Null);
-                let before = ask.before.get("config").unwrap_or(&current);
-                let changed = layouts
-                    .iter()
-                    .any(|(field, keys)| keys.iter().any(|key| before["field_layout"][field][key] != current["field_layout"][field][key]));
-                if changed { None } else { Some(window_objects.contains(id)) }
             }
         } else if ty.as_deref() == Some("Link") || ask.before.contains_key("from") {
             let old = |key| ask.before.get(key).cloned().or_else(|| file.replica().get(&object, key).ok());

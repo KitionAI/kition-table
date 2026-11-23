@@ -166,7 +166,7 @@ pub fn derived(file: &TableFile, ids: &[Value], names: &[String]) -> Result<Vec<
         .filter(|id| ids.is_empty() || ids.iter().any(|v| v.as_str() == Some(id.as_str())))
         .map(|id| {
             // An absent config and an object without the key have the same effective value.
-            let config = file.replica().get(&id, "config").map_err(|e| e.to_string())?;
+            let config = kition_table_file::kdm::view_store::assemble(file.replica(), &id).map_err(|e| e.to_string())?;
             let values = SETTINGS
                 .iter()
                 .filter(|(_, name)| names.is_empty() || names.iter().any(|n| n == name))
@@ -321,6 +321,10 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                 {
                     needs.add(table, strings(&["primaryField"]));
                 }
+                // An AI action's instruction in the options is the field's `aiPrompt` text.
+                if params["options"].get("ai_config").is_some() {
+                    needs.add(field.clone(), strings(&["aiPrompt"]));
+                }
                 // New options name the choices: each of the field's choices is kept, renamed or
                 // left out by its name.
                 let choices = kition_table_file::kdm::cells::all_choices(file.replica(), &ObjectId::from_string(&field));
@@ -361,6 +365,10 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                 }
                 if params.get("visible").is_some() {
                     held.push(format!("hidden.{field}"));
+                }
+                // Its place and freezing are one entry of the view's layout map.
+                if params.get("position").is_some() || params.get("frozen").is_some() {
+                    held.push(format!("layout.{field}"));
                 }
                 needs.set(view, held, Vec::new());
                 needs.set(field, Vec::new(), Vec::new());
