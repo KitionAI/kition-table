@@ -224,6 +224,8 @@ fn a_change_undo_does_not_revert_keeps_the_document_unsaved() {
 fn saved_bytes_reopen_with_the_edits_and_the_same_replica() {
     let mut doc = new_document();
     add_record(&mut doc, "Ada");
+    // As a host saves: sealed first, so the file's replica is the session's.
+    doc.prepare_save().unwrap();
     let bytes = doc.save(None).unwrap();
     let mut reopened = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     assert_eq!(titles(&mut reopened), ["Ada"]);
@@ -319,7 +321,11 @@ fn save_vacuums_a_sparse_database_and_keeps_every_edit() {
     let (vacuumed, free) = free_pages(&doc);
     assert_eq!(free, 0);
     assert!(vacuumed < pages);
-    assert_eq!(bytes.len() as i64, vacuumed * doc.file().conn().query_row("PRAGMA page_size", [], |row| row.get::<_, i64>(0)).unwrap());
+    // The file holds the content of the vacuumed session's database, and no free page either.
+    let page_size = doc.file().conn().query_row("PRAGMA page_size", [], |row| row.get::<_, i64>(0)).unwrap();
+    assert!(bytes.len() as i64 <= vacuumed * page_size && bytes.len() as i64 % page_size == 0, "{} bytes", bytes.len());
+    let saved = TableDocument::open("Tasks.ktable", &bytes).unwrap();
+    assert_eq!(free_pages(&saved).1, 0, "the file has no free page");
     let mut reopened = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     assert_eq!(titles(&mut reopened), vec![last.clone()]);
     assert_eq!(reopened.doc_id(), doc.doc_id());
@@ -514,6 +520,7 @@ fn a_snapshot_opens_as_the_same_document_without_a_file() {
 fn file_bytes_open_saved_with_the_replica_saved_with_them() {
     let mut a = new_document();
     add_record(&mut a, "In the file");
+    a.prepare_save().unwrap();
     let bytes = a.save(None).unwrap();
     let snapshot = a.snapshot().unwrap();
     let mut b = TableDocument::open_with_replica("Tasks.ktable", &bytes, &snapshot, &a.blobs().unwrap()).unwrap();

@@ -107,9 +107,9 @@
     "Link": {
       "batchOps": { "*": { "direct": true } },
       "fields": {
-        "from": { "kind": "ref", "of": "Record" },
-        "field": { "kind": "ref", "of": "Field" },
-        "to": { "kind": "ref", "of": "Record" }
+        "from": { "kind": "ref", "of": "Record", "optional": true },
+        "field": { "kind": "ref", "of": "Field", "optional": true },
+        "to": { "kind": "ref", "of": "Record", "optional": true }
       }
     },
     "Dashboard": {

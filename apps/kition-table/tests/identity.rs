@@ -46,9 +46,9 @@ fn hash(attachment: &Value) -> String {
     attachment["url"].as_str().unwrap().trim_start_matches("kition-blob:").to_owned()
 }
 
-/// A table saved twice: first with two records and the secret one, each with an attachment (the
-/// stored snapshot), then with the secret record deleted (change rows after it, a deleted row,
-/// and record history).
+/// A table saved twice: first with two records and the secret one, each with an attachment, then
+/// with the secret record deleted. A saved file holds the content, not the history, so the second
+/// holds no change row, no deleted row, no record history and not the deleted record's blob.
 fn table() -> (Vec<u8>, String, String) {
     let mut doc = TableDocument::create("Plan.ktable", 0, 0).unwrap();
     doc.execute("table.fields.create", json!({ "tableId": 1, "name": "files", "title": "Files", "type": "attachment" })).unwrap();
@@ -109,8 +109,9 @@ async fn a_table_tells_its_identity_and_forks_into_a_new_document_without_histor
     let (bytes, kept, gone) = table();
     std::fs::write(dir.join("Plan.ktable"), &bytes).unwrap();
     let source = dir.join("Plan.ktable");
-    assert!(count(&source, "SELECT COUNT(*) FROM kition_kdm_changes") > 0, "the deletion is a change row after the snapshot");
-    assert!(count(&source, "SELECT COUNT(*) FROM kition_records WHERE deleted_at IS NOT NULL") > 0, "and a deleted row");
+    assert_eq!(count(&source, "SELECT COUNT(*) FROM kition_kdm_changes"), 0, "a saved table holds no change row");
+    assert_eq!(count(&source, "SELECT COUNT(*) FROM kition_records WHERE deleted_at IS NOT NULL"), 0, "nor a deleted row");
+    assert_eq!(count(&source, "SELECT COUNT(*) FROM kition_record_history"), 0, "nor record history");
     let kit = launch(&dir).await;
     assert!(kit.serves("document.identity"), "{}", kit.capabilities());
 
@@ -160,7 +161,7 @@ async fn a_table_tells_its_identity_and_forks_into_a_new_document_without_histor
         let mut statement = conn.prepare("SELECT hash FROM kition_blobs ORDER BY hash").unwrap();
         statement.query_map([], |row| row.get::<_, String>(0)).unwrap().collect::<Result<Vec<_>, _>>().unwrap()
     };
-    assert!(blobs(&source).contains(&gone), "the source keeps every blob");
+    assert!(!blobs(&source).contains(&gone), "a saved table keeps only the blobs its records name");
     assert_eq!(blobs(&forked), vec![kept.clone()], "the fork keeps the blob its records name");
 
     // The fork edits, saves and opens again as any table, under its own id, with its attachment.
@@ -177,8 +178,8 @@ async fn a_table_tells_its_identity_and_forks_into_a_new_document_without_histor
     let rows = reopened.execute("table.read", json!({ "tableId": 1 })).unwrap()["result"]["rows"].clone();
     assert_eq!(rows.as_array().map(Vec::len), Some(3), "the two records kept and the new one: {rows}");
 
-    // No history: the deleted record's text is in the source's bytes and not in the fork's.
-    assert!(holds(&bytes, SECRET), "the source keeps its history");
+    // No history: the deleted record's text is in neither file.
+    assert!(!holds(&bytes, SECRET), "a saved table holds no history");
     assert!(!holds(&fork_bytes, SECRET), "deleted content does not travel");
 
     // A fork of a fork is a third document with the same content.

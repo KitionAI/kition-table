@@ -79,6 +79,9 @@ impl TableFile {
         if !current.includes(since) {
             return Err(TableFileError::invalid("the version names changes this document does not have"));
         }
+        // A replica opened from a content file holds no history before its seal: changes before
+        // it are the file's content, not changes since `since`.
+        let since = if self.replica.reaches(since) { since } else { &self.floor };
         let mut walk = Walk { file: self, prev: fork(&self.replica, since)?, out: Collected::default() };
         if since.includes(&current) {
             return Ok(walk.out.finish());

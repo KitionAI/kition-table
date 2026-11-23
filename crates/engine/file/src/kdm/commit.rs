@@ -191,6 +191,7 @@ impl TableFile {
         *self.head.get_mut() = head;
         self.base = file::find_base(&self.conn, &replica)?;
         self.repair_index = repair::RepairIndex::default();
+        self.floor = file::floor_of(&replica);
         self.replica = replica;
         self.identity = FileIdentity::of(&self.path);
         self.last_change = Some(change.clone());
@@ -260,6 +261,7 @@ impl TableFile {
         self.since = replica.version();
         self.base = file::find_base(&self.conn, &replica)?;
         self.repair_index = repair::RepairIndex::default();
+        self.floor = file::floor_of(&replica);
         self.replica = replica;
         self.stale = false;
         Ok(())

@@ -72,6 +72,9 @@ pub struct TableFile {
     pub(crate) stale: bool,
     /// Why this handle refuses writes, when it does.
     pub(crate) read_only: Option<String>,
+    /// The earliest version the replica's own history reaches: where a replica opened from a
+    /// content file starts (it holds no history before its seal), the empty version otherwise.
+    pub(crate) floor: Version,
 }
 
 /// What tells one file on disk from another, or from itself after a write.
@@ -290,6 +293,7 @@ impl TableFile {
             identity: FileIdentity::of(&path),
             // Built by the first write that repairs: it reads every object.
             repair_index: RepairIndex::default(),
+            floor: floor_of(&replica),
             conn,
             path,
             replica,
@@ -440,6 +444,11 @@ pub(crate) fn database_bytes(conn: &Connection) -> Result<Vec<u8>> {
 /// hands it out again.
 fn reserve_memory(bytes: usize) {
     drop(std::hint::black_box(Vec::<u8>::with_capacity(bytes)));
+}
+
+/// The earliest version `replica`'s history reaches ([`TableFile::floor`]).
+pub(crate) fn floor_of(replica: &Replica) -> Version {
+    if replica.is_shallow() { replica.version() } else { Version::empty() }
 }
 
 /// Opens the SQLite database at `path`; answers the connection and the absolute path.

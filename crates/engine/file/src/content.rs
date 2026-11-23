@@ -7,7 +7,7 @@
 //! replica's sealed content snapshot (the state, and of the history only the seal: no deleted or
 //! overwritten content, no person's or agent's origin), with no change rows and no origin log; the
 //! relational projection keeps only live rows (no record history, no deleted tables, fields,
-//! views or records); the file's own metadata keeps no timestamps; only the blobs the records name
+//! views or records); only the blobs the records name
 //! stay; and the database is rebuilt (`VACUUM`), so no free page holds anything that was
 //! deleted. The history stays with the host's store (the replica's full snapshot), never in the
 //! file.
@@ -85,8 +85,9 @@ fn sealing_actor(version: &Version) -> ActorId {
     ActorId::from_u64(u64::from_le_bytes(high) >> 1).unwrap_or_else(|_| ActorId::random())
 }
 
-/// Deletes from the relational tables what is history: the record history, deleted rows (and
-/// what cascades from them), and the file's own timestamps.
+/// Deletes from the relational tables what is history: the record history and deleted rows (and
+/// what cascades from them). The document's creation time stays: it is set once, when the
+/// document is made.
 fn strip_history(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "DELETE FROM kition_record_history;
@@ -98,8 +99,7 @@ fn strip_history(conn: &Connection) -> Result<()> {
          DELETE FROM kition_fields WHERE deleted_at IS NOT NULL;
          DELETE FROM kition_tables WHERE deleted_at IS NOT NULL;
          DELETE FROM kition_documents WHERE deleted_at IS NOT NULL;
-         DELETE FROM kition_attachments WHERE deleted_at IS NOT NULL;
-         DELETE FROM kition_meta WHERE key IN ('created_at', 'updated_at');",
+         DELETE FROM kition_attachments WHERE deleted_at IS NOT NULL;",
     )?;
     Ok(())
 }

@@ -1223,6 +1223,31 @@ impl KitDocument for TableDocument {
         let ((), change) = self
             .file
             .transact_as(&import_origin(), |tx| {
+                let failed = |err: kition_kdm::KdmError| kition_table_file::TableFileError::Kdm(err.to_string());
+                // A text the file changed is the file's, all of it: written whole, as the file's
+                // own characters, not merged into this replica's (whose undo would put its own
+                // back in among them).
+                let mut before = before;
+                for (id, object) in &after {
+                    let Some(old) = before.get_mut(id) else { continue };
+                    for field in ["text", "aiPrompt"] {
+                        let (Some(Value::String(now)), Some(Value::String(was))) = (object.get(field), old.get(field)) else { continue };
+                        if now == was {
+                            continue;
+                        }
+                        let target = kition_kdm::ObjectId::from_string(id.clone());
+                        let len = tx.text_len(&target, field).map_err(failed)?;
+                        if len > 0 {
+                            tx.text_delete(&target, field, 0, len).map_err(failed)?;
+                        }
+                        if !now.is_empty() {
+                            tx.text_insert(&target, field, 0, now).map_err(failed)?;
+                        }
+                        if let Some(old) = old.as_object_mut() {
+                            old.insert(field.to_owned(), Value::String(now.clone()));
+                        }
+                    }
+                }
                 kition_kit::session::write_state(tx, &schema, &before, &after).map_err(|err| kition_table_file::TableFileError::Kdm(err.to_string()))
             })
             .map_err(error)?;
