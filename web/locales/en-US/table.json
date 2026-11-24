@@ -203,6 +203,7 @@
     "loadHistoryFailed": "Failed to load history",
     "loadingHistory": "Loading history…",
     "noHistory": "No history yet",
+    "historySessionOnly": "Only this session's changes are shown: the app keeps no history of this document.",
     "fieldId": "Field ID: {{id}}",
     "historyAction": {
       "create": "Created",

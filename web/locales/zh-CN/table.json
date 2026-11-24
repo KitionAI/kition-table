@@ -202,6 +202,7 @@
     "loadHistoryFailed": "加载历史失败",
     "loadingHistory": "正在加载历史…",
     "noHistory": "暂无历史",
+    "historySessionOnly": "仅显示本次会话的更改：应用未保存此文档的历史。",
     "fieldId": "字段 ID：{{id}}",
     "historyAction": {
       "create": "已创建",

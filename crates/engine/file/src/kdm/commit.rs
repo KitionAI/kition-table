@@ -192,6 +192,7 @@ impl TableFile {
         self.base = file::find_base(&self.conn, &replica)?;
         self.repair_index = repair::RepairIndex::default();
         self.floor = file::floor_of(&replica);
+        self.session_start = replica.version();
         self.replica = replica;
         self.identity = FileIdentity::of(&self.path);
         self.last_change = Some(change.clone());

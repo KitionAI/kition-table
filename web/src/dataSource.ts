@@ -8,6 +8,7 @@ import {
   type TableDataSource,
 } from './editor'
 import type { GridFieldSummary, GridRecordRead } from './editor/table/ports/TableDataSource'
+import type { RecordHistoryResponse } from './editor/types/dataDocument'
 import { decodeGridAxis, decodeGridHits } from './editor/table/lib/gridAxis'
 import type { GridEngineFonts } from './editor/table/canvas/gridFonts'
 
@@ -106,6 +107,16 @@ export function refusalMessage(error: unknown): unknown {
   return error
 }
 
+/**
+ * Where a record's history before this session comes from (Kit UI protocol 7, 7m): `kept`, the
+ * host keeps the document's replica (its history; without it only this session's changes are
+ * known); `checkpoints`, the host's checkpoints, oldest first, which cut that history.
+ */
+export type RecordHistorySource = {
+  kept?: boolean
+  checkpoints?: () => Promise<Array<{ version: string; time: number; author?: string }> | null>
+}
+
 /** `params` without `documentId`: the engine holds one document. */
 function own<T extends { documentId?: number }>({ documentId: _documentId, ...params }: T) {
   return params as Record<string, unknown>
@@ -124,7 +135,7 @@ function own<T extends { documentId?: number }>({ documentId: _documentId, ...pa
  * Undo from the shell, an agent's command), a `resync`. `observe(revision)` is told every engine
  * revision the shell sees.
  */
-export function createWorkerTableDataSource(engine: TableEngineAccess, path: string) {
+export function createWorkerTableDataSource(engine: TableEngineAccess, path: string, history: RecordHistorySource = {}) {
   const listeners = new Set<ChangeListener>()
   /** The editor's arrangement, told after every change to the document. */
   const gridListeners = new Set<() => void>()
@@ -198,7 +209,13 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
       create: (params) => call('records.create', own(params)),
       update: (params) => call('records.update', own(params)),
       delete: (params) => call('records.delete', own(params)),
-      history: (params) => call('records.history', own(params)),
+      history: async (params) => {
+        // The host's checkpoints cut the history before this session; a host that answers none
+        // (or fails) leaves it one stretch.
+        const checkpoints = (await history.checkpoints?.().catch(() => null)) ?? null
+        const answer = await call<RecordHistoryResponse>('records.history', { ...own(params), ...(checkpoints?.length ? { checkpoints } : {}) })
+        return { ...answer, kept: history.kept ?? false }
+      },
       bulkDelete: (params) => call('records.bulkDelete', own(params)),
       bulkCopy: (params) => call('records.bulkCopy', own(params)),
     },

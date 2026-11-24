@@ -204,6 +204,7 @@
     "loadHistoryFailed": "No se pudo cargar el historial",
     "loadingHistory": "Cargando historial…",
     "noHistory": "Aún no hay historial",
+    "historySessionOnly": "Solo se muestran los cambios de esta sesión: la aplicación no guarda el historial de este documento.",
     "fieldId": "ID del campo: {{id}}",
     "historyAction": {
       "create": "Creado",

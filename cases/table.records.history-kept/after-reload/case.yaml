@@ -1,0 +1,23 @@
+format: 1
+id: table.records.history-kept/after-reload
+feature: table.records.history-kept
+intent: >-
+  A record's history survives closing the document. The saved .ktable holds no history; the
+  replica the host keeps does, and records.history derives what came before the session from it:
+  after a save and an open with the stored replica, the record's change and its author are told;
+  the host's checkpoints cut that history into stretches, each with its own author and time; a
+  file opened alone tells nothing before its session. In the editor under the development host
+  (replica and checkpoints), an edit saved and reloaded keeps its history and author.
+layer: gate
+source:
+  kind: synthetic
+  from: kition-sdk Kit UI protocol 7 and 7m, data model 7.3
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "a_record_keeps_its_history_and_author_through_the_stored_replica" }
+  - cargo-test: { package: kition-table-kit, filter: "checkpoints_cut_the_stored_history_and_name_each_stretchs_author" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-24"

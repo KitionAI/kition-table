@@ -277,3 +277,144 @@ fn diff(file: &TableFile, prev: &Replica, next: &Replica, changed: &BTreeSet<Obj
     }
     Ok(())
 }
+
+/// A point of the document's stored history the host names (a checkpoint, Kit UI protocol
+/// section 7m): the replica version it names, when it was recorded (milliseconds since the Unix
+/// epoch) and, when the host knows it, who made it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryPoint {
+    pub version: Version,
+    pub time: i64,
+    pub author: Option<String>,
+}
+
+impl TableFile {
+    /// The replica version this handle's session started at: the record history rows
+    /// ([`TableFile::list_record_history`]) hold what happened after it.
+    pub fn session_start(&self) -> &Version {
+        &self.session_start
+    }
+
+    /// A record's history before this session, newest first, derived from the replica's own
+    /// history (the stored lineage the host handed back on open, data model 7.3); nothing is
+    /// stored for it. The history from where the replica starts (its seal, for one rooted at a
+    /// content file) to [`TableFile::session_start`] is cut at `points` (the host's checkpoints,
+    /// oldest first; those the replica does not reach, or that are not between the two, are
+    /// skipped). For each stretch, the record's creation, deletion or each field that differs
+    /// (before and after values, as the session's rows hold them), by the people and agents
+    /// whose changes the stretch holds (their principals, as the session's rows name them;
+    /// else the point's author), at the time of the point that ends it (0: unknown). A record
+    /// whose changes all came in this session, or a document opened from its file alone (no
+    /// stored history), has none.
+    pub fn stored_record_history(&self, table_id: i64, record_id: i64, points: &[HistoryPoint]) -> Result<Vec<crate::HistoryEntry>> {
+        let record = self
+            .conn
+            .prepare_cached("SELECT row_key FROM kition_records WHERE id = ?1 AND table_id = ?2")?
+            .query_row(rusqlite::params![record_id, table_id], |row| row.get::<_, String>(0))
+            .optional()?;
+        let Some(record) = record.map(ObjectId::from_string) else { return Ok(Vec::new()) };
+        let start = self.replica.shallow_root().unwrap_or_else(Version::empty);
+        let end = self.session_start.clone();
+        if start.includes(&end) || !self.replica.reaches(&start) || !self.replica.version().includes(&end) {
+            return Ok(Vec::new());
+        }
+        let mut stops: Vec<(Version, i64, Option<String>)> = vec![(start, 0, None)];
+        for point in points {
+            let after_last = stops.last().is_some_and(|(last, ..)| point.version.includes(last) && point.version != *last);
+            if after_last && end.includes(&point.version) && point.version != end && self.replica.reaches(&point.version) {
+                stops.push((point.version.clone(), point.time, point.author.clone()));
+            }
+        }
+        stops.push((end, 0, None));
+        let document_id = self.info()?.document_id;
+        let mut names = HashMap::new();
+        let mut entries = Vec::new();
+        let mut stops = stops.into_iter();
+        let Some((first, ..)) = stops.next() else { return Ok(Vec::new()) };
+        let mut prev = fork(&self.replica, &first)?;
+        let mut prev_origins = origin_counts(&prev)?;
+        for (version, time, author) in stops {
+            let next = fork(&self.replica, &version)?;
+            let next_origins = origin_counts(&next)?;
+            let mut principals: Vec<&String> = next_origins
+                .iter()
+                .filter(|(key, count)| key.0 != OriginKind::System.as_str() && **count > prev_origins.get(*key).copied().unwrap_or(0))
+                .map(|((_, principal), _)| principal)
+                .collect();
+            principals.sort();
+            principals.dedup();
+            let actor =
+                if principals.is_empty() { author.unwrap_or_default() } else { principals.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(", ") };
+            let was = ModelView::new(&prev).table_of_record(&record)?.is_some();
+            let is = ModelView::new(&next).table_of_record(&record)?.is_some();
+            let (old, new) = (cells(&prev, &record)?, cells(&next, &record)?);
+            let mut entry = |field_id: Option<i64>, action: crate::HistoryAction, before: Value, after: Value| {
+                entries.push(crate::HistoryEntry {
+                    id: 0,
+                    document_id: document_id.clone(),
+                    table_id,
+                    record_id,
+                    field_id,
+                    action: action.as_str().to_owned(),
+                    before,
+                    after,
+                    actor: actor.clone(),
+                    created_at: time,
+                });
+            };
+            match (was, is) {
+                (false, true) => entry(None, crate::HistoryAction::Create, Value::Null, named(self, &mut names, &new)?),
+                (true, false) => entry(None, crate::HistoryAction::Delete, named(self, &mut names, &old)?, Value::Null),
+                (true, true) => {
+                    let keys: BTreeSet<&String> = old.keys().chain(new.keys()).collect();
+                    for key in keys {
+                        let (before, after) = (old.get(key), new.get(key));
+                        if before != after {
+                            let field = field_row(self, &mut names, key)?.map(|(id, _)| id);
+                            entry(field, crate::HistoryAction::Update, before.cloned().unwrap_or(Value::Null), after.cloned().unwrap_or(Value::Null));
+                        }
+                    }
+                }
+                (false, false) => {}
+            }
+            prev = next;
+            prev_origins = next_origins;
+        }
+        entries.reverse();
+        Ok(entries)
+    }
+}
+
+/// How many changes of each origin (`(kind, principal)`) the replica's history holds.
+fn origin_counts(replica: &Replica) -> Result<HashMap<(String, String), usize>> {
+    let mut counts = HashMap::new();
+    for origin in Replica::snapshot_origins(&replica.snapshot()?)?.into_iter().flatten() {
+        *counts.entry((origin.kind.as_str().to_owned(), origin.principal)).or_insert(0) += 1;
+    }
+    Ok(counts)
+}
+
+/// The field row's `(id, name)` for a field object, live or deleted.
+fn field_row(file: &TableFile, cache: &mut HashMap<String, Option<(i64, String)>>, object: &str) -> Result<Option<(i64, String)>> {
+    if let Some(found) = cache.get(object) {
+        return Ok(found.clone());
+    }
+    let found = file
+        .conn
+        .prepare_cached("SELECT id, name FROM kition_fields WHERE kdm_id = ?1 ORDER BY deleted_at IS NOT NULL, id DESC LIMIT 1")?
+        .query_row([object], |row| Ok((row.get(0)?, row.get(1)?)))
+        .optional()?;
+    cache.insert(object.to_owned(), found.clone());
+    Ok(found)
+}
+
+/// A record's cells keyed by field name, as a create or delete row holds its values.
+fn named(file: &TableFile, cache: &mut HashMap<String, Option<(i64, String)>>, cells: &HashMap<String, Value>) -> Result<Value> {
+    let mut out = serde_json::Map::new();
+    for (key, value) in cells {
+        if let Some((_, name)) = field_row(file, cache, key)? {
+            out.insert(name, value.clone());
+        }
+    }
+    Ok(Value::Object(out))
+}

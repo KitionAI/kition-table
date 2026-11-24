@@ -106,7 +106,26 @@ fn query_params(method: &str) -> Vec<(&'static str, Value)> {
     let limit = || json!({ "type": "integer", "description": "How many items to answer at most." });
     let offset = || json!({ "type": "integer", "description": "How many items to skip, from 0." });
     match method {
-        "records.list" | "records.history" => vec![("limit", limit()), ("offset", offset())],
+        "records.list" => vec![("limit", limit()), ("offset", offset())],
+        "records.history" => vec![
+            ("limit", limit()),
+            ("offset", offset()),
+            (
+                "checkpoints",
+                json!({
+                    "type": "array",
+                    "description": "The host's checkpoints of the document, oldest first (Kit UI protocol 7m): the history before this session is told between them.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "version": { "type": "string", "required": true, "description": "The replica version, base64, as replica/version answers it." },
+                            "time": { "type": "integer", "description": "When it was recorded, in milliseconds since the Unix epoch." },
+                            "author": { "type": "string", "description": "Who made it, when the host knows." }
+                        }
+                    }
+                }),
+            ),
+        ],
         "fields.linkCandidates" => {
             vec![("q", json!({ "type": "string", "description": "Text to match in the candidates' display values." })), ("limit", limit())]
         }

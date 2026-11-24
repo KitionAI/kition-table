@@ -202,6 +202,7 @@
     "loadHistoryFailed": "Не удалось загрузить историю",
     "loadingHistory": "Загрузка истории…",
     "noHistory": "Истории пока нет",
+    "historySessionOnly": "Показаны только изменения этого сеанса: приложение не хранит историю этого документа.",
     "fieldId": "ID поля: {{id}}",
     "historyAction": {
       "create": "Создано",

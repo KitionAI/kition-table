@@ -173,6 +173,7 @@ function RecordHistoryPanel({
   const locale = useTableLocale()
   const dataSource = useTableDataSource()
   const [entries, setEntries] = useState<RecordHistoryEntry[]>([])
+  const [kept, setKept] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -184,6 +185,7 @@ function RecordHistoryPanel({
       .then((response) => {
         if (cancelled) return
         setEntries(response.items || [])
+        setKept(response.kept !== false)
       })
       .catch((err) => {
         if (cancelled) return
@@ -205,34 +207,45 @@ function RecordHistoryPanel({
   if (error) {
     return <div className="data-inline-record-history-empty">{error}</div>
   }
+  // Without the host's history store only this session's changes are known: said, not hidden.
+  const sessionOnly = kept ? null : <div className="data-inline-record-history-note">{t('drawer.historySessionOnly')}</div>
   if (entries.length === 0) {
-    return <div className="data-inline-record-history-empty">{t('drawer.noHistory')}</div>
+    return (
+      <>
+        {sessionOnly}
+        <div className="data-inline-record-history-empty">{t('drawer.noHistory')}</div>
+      </>
+    )
   }
   return (
-    <ol className="data-inline-record-history-list">
-      {entries.map((entry) => {
-        const field = entry.field_id ? fieldById.get(entry.field_id) : null
-        const fieldLabel = field?.title || (entry.field_id ? t('drawer.fieldId', { id: entry.field_id }) : null)
-        return (
-          <li key={entry.id} className="data-inline-record-history-item">
-            <div className="data-inline-record-history-meta">
-              <span className={`data-inline-record-history-action data-inline-record-history-action--${entry.action}`}>
-                {t(`drawer.historyAction.${entry.action}`, { defaultValue: entry.action })}
-              </span>
-              {fieldLabel ? <span className="data-inline-record-history-field">{fieldLabel}</span> : null}
-              <span className="data-inline-record-history-time">{formatHistoryTime(entry.created_at, locale)}</span>
-            </div>
-            {entry.action === 'update' && entry.field_id ? (
-              <div className="data-inline-record-history-diff">
-                <span className="data-inline-record-history-before">{displayValue(entry.before as DataRecordValue) || '∅'}</span>
-                <span className="data-inline-record-history-arrow">→</span>
-                <span className="data-inline-record-history-after">{displayValue(entry.after as DataRecordValue) || '∅'}</span>
+    <>
+      {sessionOnly}
+      <ol className="data-inline-record-history-list">
+        {entries.map((entry) => {
+          const field = entry.field_id ? fieldById.get(entry.field_id) : null
+          const fieldLabel = field?.title || (entry.field_id ? t('drawer.fieldId', { id: entry.field_id }) : null)
+          return (
+            <li key={entry.id} className="data-inline-record-history-item">
+              <div className="data-inline-record-history-meta">
+                <span className={`data-inline-record-history-action data-inline-record-history-action--${entry.action}`}>
+                  {t(`drawer.historyAction.${entry.action}`, { defaultValue: entry.action })}
+                </span>
+                {fieldLabel ? <span className="data-inline-record-history-field">{fieldLabel}</span> : null}
+                {entry.actor ? <span className="data-inline-record-history-actor">{entry.actor}</span> : null}
+                <span className="data-inline-record-history-time">{formatHistoryTime(entry.created_at, locale)}</span>
               </div>
-            ) : null}
-          </li>
-        )
-      })}
-    </ol>
+              {entry.action === 'update' && entry.field_id ? (
+                <div className="data-inline-record-history-diff">
+                  <span className="data-inline-record-history-before">{displayValue(entry.before as DataRecordValue) || '∅'}</span>
+                  <span className="data-inline-record-history-arrow">→</span>
+                  <span className="data-inline-record-history-after">{displayValue(entry.after as DataRecordValue) || '∅'}</span>
+                </div>
+              ) : null}
+            </li>
+          )
+        })}
+      </ol>
+    </>
   )
 }
 

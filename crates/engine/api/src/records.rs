@@ -1,5 +1,6 @@
 //! Records, their history and links, and CSV/Markdown transfer.
 
+use kition_table_file::kdm::changes::HistoryPoint;
 use kition_table_file::{HistoryEntry, LinkRef, Record, TableFile, TableFileError};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -64,13 +65,44 @@ fn history_entry(entry: &HistoryEntry) -> Value {
     })
 }
 
-/// `GET /records/{recordId}/history`; a `limit` of 0 means 100.
-pub fn history(file: &TableFile, table_id: i64, record_id: i64, limit: i64, offset: i64) -> ApiResult<Value> {
+/// `GET /records/{recordId}/history`; a `limit` of 0 means 100. Newest first: this session's
+/// changes, then what came before it, derived from the replica's stored history
+/// ([`TableFile::stored_record_history`], cut at `points`, the host's checkpoints), whose
+/// entries have negative ids.
+pub fn history(file: &TableFile, table_id: i64, record_id: i64, limit: i64, offset: i64, points: &[HistoryPoint]) -> ApiResult<Value> {
     let limit = if limit <= 0 { 100 } else { limit };
-    let (entries, total) =
-        file.list_record_history(table_id, record_id, limit, offset).map_err(|_| ApiError::internal("Failed to query record history"))?;
-    let items: Vec<Value> = entries.iter().map(history_entry).collect();
+    let failed = |_| ApiError::internal("Failed to query record history");
+    let (mut entries, _) = file.list_record_history(table_id, record_id, 0, 0).map_err(failed)?;
+    let stored = file.stored_record_history(table_id, record_id, points).map_err(failed)?;
+    entries.extend(stored.into_iter().zip(1..).map(|(entry, at): (HistoryEntry, i64)| HistoryEntry { id: -at, ..entry }));
+    let total = i64::try_from(entries.len()).unwrap_or(i64::MAX);
+    let items: Vec<Value> = entries
+        .iter()
+        .skip(usize::try_from(offset.max(0)).unwrap_or(usize::MAX))
+        .take(usize::try_from(limit).unwrap_or(usize::MAX))
+        .map(history_entry)
+        .collect();
     Ok(json!({ "items": items, "total": total, "limit": limit, "offset": offset }))
+}
+
+/// The `checkpoints` of `records.history`: the host's checkpoints, oldest first, each
+/// `{version, time, author?}` (`version` base64, as `replica/version` answers it).
+pub fn history_points(value: Option<&Value>) -> ApiResult<Vec<HistoryPoint>> {
+    use base64::Engine;
+    let Some(value) = value.filter(|value| !value.is_null()) else { return Ok(Vec::new()) };
+    let invalid = || ApiError::bad_request("checkpoints must be a list of {version, time, author?}");
+    value
+        .as_array()
+        .ok_or_else(invalid)?
+        .iter()
+        .map(|point| {
+            let bytes = base64::engine::general_purpose::STANDARD.decode(point["version"].as_str().ok_or_else(invalid)?).map_err(|_| invalid())?;
+            let version = kition_kdm::Version::decode(&bytes).map_err(|_| invalid())?;
+            let time = point.get("time").and_then(Value::as_i64).unwrap_or(0);
+            let author = point.get("author").and_then(Value::as_str).filter(|author| !author.is_empty()).map(str::to_owned);
+            Ok(HistoryPoint { version, time, author })
+        })
+        .collect()
 }
 
 fn link_items(refs: &[LinkRef]) -> Value {

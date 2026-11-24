@@ -351,7 +351,11 @@ export type RecordHistoryEntry = {
   created_at: ApiTimestamp
 }
 
-export type RecordHistoryResponse = DataListResponse<RecordHistoryEntry>
+/**
+ * A page of a record's history; `kept` false when the host keeps no history of the document, so
+ * only this session's changes can be told.
+ */
+export type RecordHistoryResponse = DataListResponse<RecordHistoryEntry> & { kept?: boolean }
 
 export type LinkCandidate = {
   row_key: string

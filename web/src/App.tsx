@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import type { i18n } from 'i18next'
-import { ConfirmProvider, EditorFrame, FrameChrome, ICON_STROKE, KitEditorProvider, TesseraIcons, createKitStrings, useKitEditor, useKitEditorState, useKitSession, type HostConnection } from '@kition/sdk/editor'
+import { ConfirmProvider, EditorFrame, FrameChrome, ICON_STROKE, KitEditorProvider, TesseraIcons, createKitStrings, listCheckpoints, useKitEditor, useKitEditorState, useKitSession, type HostConnection } from '@kition/sdk/editor'
 import { TableDataSourceProvider, TableHostProvider } from './editor'
 import { TableEditor } from './editor/TableEditor'
 import { DashboardEditor } from './editor/DashboardEditor'
@@ -71,8 +71,20 @@ export function App({ host, i18n }: { host: HostConnection; i18n: i18n }) {
           },
         },
         path,
+        {
+          kept: host.replica,
+          checkpoints: async () => {
+            const listed = await listCheckpoints(host.files, path, { limit: 200 })
+            return listed
+              ? listed.checkpoints
+                  .filter((checkpoint) => checkpoint.available)
+                  .reverse()
+                  .map(({ version, time, author }) => ({ version, time, ...(author ? { author } : {}) }))
+              : null
+          },
+        },
       ),
-    [path, fontListeners],
+    [path, fontListeners, host],
   )
   // The document opened again from its file (the file changed on disk, Load the new version) is
   // a new engine: the editor reads it again.

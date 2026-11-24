@@ -170,7 +170,8 @@ pub fn handle(file: &mut TableFile, doc: &DocRef, method: &str, params: &Value) 
         "records.history" => {
             let (table_id, record_id) = (p.id("tableId")?, p.id("recordId")?);
             let (limit, offset) = p.window();
-            records::history(file, table_id, record_id, limit, offset)
+            let points = records::history_points(p.0.get("checkpoints"))?;
+            records::history(file, table_id, record_id, limit, offset, &points)
         }
         "records.bulkDelete" => {
             let request = p.body()?;

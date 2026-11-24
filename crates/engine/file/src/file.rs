@@ -75,6 +75,10 @@ pub struct TableFile {
     /// The earliest version the replica's own history reaches: where a replica opened from a
     /// content file starts (it holds no history before its seal), the empty version otherwise.
     pub(crate) floor: Version,
+    /// The replica version this handle's session started at (its open, or the stored replica it
+    /// adopted): the record history rows (`kition_record_history`) hold what came after it, and
+    /// [`TableFile::stored_record_history`] derives what came before it from the replica.
+    pub(crate) session_start: Version,
 }
 
 /// What tells one file on disk from another, or from itself after a write.
@@ -294,6 +298,7 @@ impl TableFile {
             // Built by the first write that repairs: it reads every object.
             repair_index: RepairIndex::default(),
             floor: floor_of(&replica),
+            session_start: replica.version(),
             conn,
             path,
             replica,
