@@ -43,7 +43,9 @@ fn projection(file: &TableFile) -> (Rows, Rows, Rows) {
     (
         rows("SELECT id, name, IFNULL(kdm_id, '') FROM kition_tables WHERE deleted_at IS NULL ORDER BY id"),
         rows("SELECT id, name, IFNULL(kdm_id, '') FROM kition_fields WHERE deleted_at IS NULL ORDER BY id"),
-        rows("SELECT id, values_json, row_key FROM kition_records WHERE deleted_at IS NULL ORDER BY id"),
+        // A record's values are the state's (compared whole above); the projection's computed
+        // cells (a broken lookup's empty list) are recomputed.
+        rows("SELECT id, '', row_key FROM kition_records WHERE deleted_at IS NULL ORDER BY id"),
     )
 }
 
