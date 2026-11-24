@@ -142,6 +142,21 @@ fn files_from_before_the_schema_freeze_are_refused_untouched() {
     }
 }
 
+/// The name reuse the legacy-file test asserted (restored after 6c3e76d removed that test with the
+/// migration): the projection's unique table names hold for live rows only.
+#[test]
+fn a_deleted_tables_name_can_be_reused_and_two_live_tables_still_collide() {
+    let dir = temp();
+    let (_, file) = create(dir.path(), "names.ktable");
+    let document = ok(file.info()).document_id;
+    let deleted = "INSERT INTO kition_tables (document_id, name, title, created_at, updated_at, deleted_at) VALUES (?1, 'reused', 'Gone', 1, 1, 2)";
+    assert!(file.conn().execute(deleted, [&document]).is_ok());
+    // The soft-deleted name can be reused; two live rows still collide.
+    let insert = "INSERT INTO kition_tables (document_id, name, title, created_at, updated_at) VALUES (?1, 'reused', 'T', 1, 1)";
+    assert!(file.conn().execute(insert, [&document]).is_ok());
+    assert!(file.conn().execute(insert, [&document]).is_err());
+}
+
 #[test]
 fn create_table_with_defaults_and_custom_schema() {
     let dir = temp();
