@@ -22,10 +22,10 @@ fn pages(doc: &TableDocument) -> (i64, i64) {
     (count, free)
 }
 
-fn report(label: &str, doc: &TableDocument) {
+fn report(label: &str, doc: &mut TableDocument) {
     let (count, free) = pages(doc);
     let started = Instant::now();
-    let bytes = doc.save(None).unwrap();
+    let bytes = doc.sealed_save().unwrap();
     let save = started.elapsed();
     println!(
         "{label}: {count} pages, {free} free ({:.0}%); save {save:?} writes {:.1} MB",
@@ -54,15 +54,15 @@ fn build(count: usize) -> (TableDocument, i64, String) {
 fn save_size() {
     for count in [10_000, 50_000] {
         let (mut doc, table_id, field) = build(count);
-        report(&format!("{count} records, as built"), &doc);
+        report(&format!("{count} records, as built"), &mut doc);
         let page = doc.call("records.list", &json!({ "tableId": table_id, "limit": 2000 })).unwrap();
         let keys: Vec<String> = page["result"]["items"].as_array().unwrap().iter().map(|r| r["row_key"].as_str().unwrap().to_owned()).collect();
         for (round, key) in keys.iter().enumerate().take(600) {
             doc.call("transact", &json!({ "ops": [{ "op": "cells.set", "tableId": table_id, "records": [{ "rowKey": key, "values": { field.clone(): format!("Edit {round}") } }] }] })).unwrap();
         }
-        report(&format!("{count} records, after 600 edits"), &doc);
+        report(&format!("{count} records, after 600 edits"), &mut doc);
         let doomed: Vec<String> = keys.iter().take(2000).cloned().collect();
         doc.call("transact", &json!({ "ops": [{ "op": "records.delete", "tableId": table_id, "rowKeys": doomed }] })).unwrap();
-        report(&format!("{count} records, after deleting 2,000"), &doc);
+        report(&format!("{count} records, after deleting 2,000"), &mut doc);
     }
 }

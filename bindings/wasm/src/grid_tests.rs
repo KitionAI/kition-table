@@ -203,7 +203,7 @@ fn the_view_s_engine_sorts_and_a_changed_schema_arrange_again() {
 #[test]
 fn changes_imported_from_a_co_editor_are_arranged() {
     let mut t = table();
-    let bytes = t.doc.save(None).unwrap();
+    let bytes = t.doc.sealed_save().unwrap();
     let mut peer = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     let params = t.sorted_by_title();
     t.open(params);

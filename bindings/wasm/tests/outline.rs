@@ -42,10 +42,10 @@ fn lists_the_tables_then_the_dashboards_with_the_view_the_editor_opens() {
 #[test]
 fn reads_only_and_takes_no_parameters() {
     let (mut doc, ..) = file();
-    let (revision, saved) = (doc.revision(), doc.save(None).unwrap());
+    let (revision, saved) = (doc.revision(), doc.sealed_save().unwrap());
     doc.execute("table.file.outline", json!({})).unwrap();
     assert_eq!((doc.revision(), doc.dirty()), (revision, false));
-    assert_eq!(doc.save(None).unwrap(), saved);
+    assert_eq!(doc.sealed_save().unwrap(), saved);
     let command = doc.commands().into_iter().find(|command| command.id == "table.file.outline").unwrap();
     assert!(!command.mutates, "a read-only session runs it");
     let error = doc.execute("table.file.outline", json!({ "tableId": 1 })).unwrap_err();

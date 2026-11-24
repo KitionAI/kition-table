@@ -78,7 +78,7 @@ describe('the design of a table from files', () => {
   })
 })
 
-type Doc = { execute(command: string, params: string): string; save(): Uint8Array; readonly revision: bigint | number; free(): void }
+type Doc = { execute(command: string, params: string): string; prepareSave(): void; save(): Uint8Array; readonly revision: bigint | number; free(): void }
 type DocClass = { create(name: string, width: number, height: number): Doc; open(name: string, bytes: Uint8Array): Doc }
 
 const engine = path.resolve(__dirname, '..', 'public', 'engine')
@@ -177,7 +177,7 @@ describe('a table from receipts, over the engine', () => {
     expect(progress.at(-1)).toEqual({ stage: 'ai', field: '', done: 2, total: 2 })
 
     // The file reopens with all of it.
-    const reopened = TableDocument.open('Receipts.ktable', doc.save())
+    const reopened = TableDocument.open('Receipts.ktable', (doc.prepareSave(), doc.save()))
     expect(rows(reopened, made.tableId)).toEqual(expected)
     reopened.free()
     doc.free()

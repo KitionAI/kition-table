@@ -231,9 +231,6 @@ pub struct TableDocument {
     history: History,
     /// The history step the last `save` wrote, until `mark_saved` records it (`save` takes `&self`).
     save_pending: Cell<Option<u64>>,
-    /// The seal of the last `save` of a replica nobody sealed (the fallback in `save`), which
-    /// `mark_saved` takes into the replica.
-    save_seal: RefCell<Option<Vec<u8>>>,
     /// `TableChange`s of imported replica changes, as `table/changed` carries them, until taken.
     imported: Vec<Value>,
     /// What the document's picture shows (`preview.show`); not saved.
@@ -359,7 +356,6 @@ impl TableDocument {
             revision: 0,
             history: History { saved: Some(0), ..History::default() },
             save_pending: Cell::new(None),
-            save_seal: RefCell::new(None),
             imported: Vec::new(),
             shown: kition_table_picture::Shown::default(),
             picture: RefCell::new(None),
@@ -944,6 +940,15 @@ impl TableDocument {
 }
 
 impl TableDocument {
+    /// The file's bytes as every host takes them: [`KitDocument::prepare_save`] (the seal), then
+    /// [`KitDocument::save`]. Like `save`, it leaves the document unsaved until `mark_saved`.
+    pub fn sealed_save(&mut self) -> Result<Vec<u8>, String> {
+        self.prepare_save()?;
+        self.save(None)
+    }
+}
+
+impl TableDocument {
     fn run_command(&mut self, command: &str, params: Value) -> Result<Value, String> {
         // A key the command's schema does not name is refused, naming it (platform rule E7a).
         if let Some(schema) = self.parameter_schemas().get(command) {
@@ -1136,33 +1141,27 @@ impl KitDocument for TableDocument {
     }
 
     /// The document's content as a `.ktable` file ([`TableFile::content_bytes`]): no history,
-    /// the same bytes while the document does not change. Hosts call
-    /// [`KitDocument::prepare_save`] first, which seals the replica. The one fallback, for an
-    /// editor that does not call `prepareSave` yet: a replica nobody sealed saves the content of a
-    /// sealed copy, and [`KitDocument::mark_saved`] takes that seal into the replica. TEMPORARY:
-    /// delete the fallback once a kit-editor release that calls prepareSave is in
-    /// web/pnpm-lock.yaml. The session's own store (the history) is compacted when its log is
-    /// long and vacuumed when it is sparse, as before.
+    /// the same bytes while the document does not change. Every host calls
+    /// [`KitDocument::prepare_save`] first, which seals the replica; a replica nobody sealed is
+    /// refused (`save before prepareSave`), so a file is always rooted at a seal of this session's
+    /// replica. The session's own store (the history) is compacted when its log is long and
+    /// vacuumed when it is sparse, as before.
     fn save(&self, _name: Option<&str>) -> Result<Vec<u8>, String> {
+        if !self.file.is_sealed() {
+            return Err("save before prepareSave: the table's replica is not sealed".into());
+        }
         self.file.compact_log().map_err(error)?;
         vacuum_if_sparse(&self.file)?;
-        let bytes = if self.file.is_sealed() {
-            self.save_seal.replace(None);
-            self.file.content_bytes().map_err(error)?
-        } else {
-            let (bytes, seal) = self.file.content_bytes_of_a_sealed_copy().map_err(error)?;
-            self.save_seal.replace(Some(seal));
-            bytes
-        };
+        let bytes = self.file.content_bytes().map_err(error)?;
         self.save_pending.set(Some(self.history.step));
         Ok(bytes)
     }
 
     /// Seals the replica (rule M16b) so `save` writes its content snapshot, and the seal is in
-    /// the replica the host stores and syncs: a `system` change, no edit, no undo step.
+    /// the replica the host stores and syncs: a `system` change, no edit, no undo step. A handle
+    /// that refuses writes seals nothing: it saves only what is sealed already.
     fn prepare_save(&mut self) -> Result<(), String> {
         if self.file.read_only().is_some() {
-            // Nothing can be written: `save` seals a copy.
             return Ok(());
         }
         let before = self.file.replica_version();
@@ -1172,14 +1171,6 @@ impl KitDocument for TableDocument {
     }
 
     fn mark_saved(&mut self) {
-        // The fallback's seal (see `save`; delete with it). One that does not import leaves the
-        // replica as it was.
-        if let Some(seal) = self.save_seal.take() {
-            let before = self.file.replica_version();
-            if self.file.import_replica_changes(&seal).is_ok() {
-                self.grid.note(&before, &self.file.replica_version(), Some(&TableChange::default()));
-            }
-        }
         self.history.saved = Some(self.save_pending.take().unwrap_or(self.history.step));
     }
 

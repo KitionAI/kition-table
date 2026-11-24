@@ -240,7 +240,7 @@ impl KitAdapter for TableKit {
     }
 
     fn export_file(&self, doc: &mut TableDocument) -> Result<Option<Vec<u8>>, String> {
-        doc.save(None).map(Some)
+        doc.sealed_save().map(Some)
     }
 }
 
@@ -275,7 +275,7 @@ fn send(from: &mut TableDocument, to: &mut TableDocument) {
 /// records, the same replica, and each editor hears of the other's record.
 #[test]
 fn two_editors_adding_records_at_once_converge() {
-    let bytes = ok(TableDocument::create(NAME, 0, 0).and_then(|doc| doc.save(None)));
+    let bytes = ok(TableDocument::create(NAME, 0, 0).and_then(|mut doc| doc.sealed_save()));
     let mut ann = ok(TableDocument::open(NAME, &bytes));
     let mut bob = ok(TableDocument::open(NAME, &bytes));
     ok(run(&mut ann, "table.records.create", json!({ "tableId": 1, "values": { "title": "Ann wrote this" } })));
@@ -344,7 +344,7 @@ fn an_editor_offline_while_both_edit_converges_on_reconnect() {
 /// document, and the first edit reaches the other.
 #[test]
 fn a_first_open_from_the_room_and_one_from_the_file_are_one_document() {
-    let bytes = ok(TableDocument::create(NAME, 0, 0).and_then(|doc| doc.save(None)));
+    let bytes = ok(TableDocument::create(NAME, 0, 0).and_then(|mut doc| doc.sealed_save()));
     let mut seeder = ok(TableDocument::open(NAME, &bytes));
     let room = ok(seeder.snapshot());
     let mut joiner = ok(TableDocument::open_with_replica(NAME, &bytes, &room, &ok(seeder.blobs())));

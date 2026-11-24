@@ -83,7 +83,7 @@ impl Runner {
         assert_valid(&input, &params, &format!("{command} params"));
         let output = to_json_schema(&output_schema(command).unwrap_or_else(|| panic!("{command} has no output schema")));
         self.ran.insert(command.to_owned());
-        let before = self.doc.save(None).unwrap();
+        let before = self.doc.sealed_save().unwrap();
         match self.doc.execute(command, params) {
             Ok(answer) => {
                 assert_valid(&output, &answer, &format!("{command} answer"));
@@ -94,7 +94,7 @@ impl Runner {
             }
             Err(message) => {
                 assert_valid(&output, &error_result(&message), &format!("{command} error"));
-                assert_eq!(self.doc.save(None).unwrap(), before, "{command} failed and changed the file");
+                assert_eq!(self.doc.sealed_save().unwrap(), before, "{command} failed and changed the file");
                 Err(message)
             }
         }
@@ -179,12 +179,12 @@ fn empty_params_answer_a_result_or_an_error_and_leave_the_file() {
         } else {
             // Params the schema refuses still answer an error the output schema accepts.
             let output = to_json_schema(&output_schema(&id).unwrap());
-            let before = runner.doc.save(None).unwrap();
+            let before = runner.doc.sealed_save().unwrap();
             match runner.doc.execute(&id, json!({})) {
                 Ok(answer) => assert_valid(&output, &answer, &id),
                 Err(message) => {
                     assert_valid(&output, &error_result(&message), &id);
-                    assert_eq!(runner.doc.save(None).unwrap(), before, "{id} failed and changed the file");
+                    assert_eq!(runner.doc.sealed_save().unwrap(), before, "{id} failed and changed the file");
                 }
             }
         }

@@ -4,9 +4,7 @@
 //! the same bytes; a file opened alone is the same document, with its ids, and edits; a replica
 //! from the file and one with the whole history converge; undo after a save takes back the last
 //! edit; a file opens on top of a stored replica, by its changes or by its state. Hosts seal
-//! before saving (`prepare_save`, the direct path); the one fallback, a save nobody sealed for
-//! (the kit editor before its release that calls `prepareSave`), seals a copy and `mark_saved`
-//! takes the seal in.
+//! before saving (`prepare_save`); a save nobody sealed for is refused and writes nothing.
 //!
 //! The needles are written once each and share no run of four characters with anything else in
 //! the table, so the engine's compression keeps each one literal in the bytes that hold it: every
@@ -168,22 +166,24 @@ fn undo_after_a_save_takes_back_the_last_edit() {
 }
 
 #[test]
-fn a_save_nobody_sealed_for_seals_a_copy_and_mark_saved_takes_the_seal_in() {
-    let (doc, _) = table_with_history();
-    let mut doc = doc;
+fn a_save_nobody_sealed_for_is_refused_and_writes_nothing() {
+    let (mut doc, _) = table_with_history();
     let before = doc.file().replica_version();
-    let bytes = doc.save(None).unwrap();
-    assert_eq!(doc.file().replica_version(), before, "a save writes nothing into the session");
+    let refused = doc.save(None).unwrap_err();
+    assert!(refused.contains("prepareSave"), "{refused}");
+    assert_eq!(doc.file().replica_version(), before, "a refused save writes nothing into the session");
     assert!(!doc.file().is_sealed());
+    assert!(doc.dirty(), "a refused save leaves the document unsaved");
+    // Sealed first, as a host saves: the bytes hold the content and, of the history, the seal.
+    let bytes = host_save(&mut doc);
     for needle in NEEDLES {
         assert!(!contains(&bytes, needle), "the file holds {needle}");
     }
     let (content, changes) = stored(&bytes);
     assert_eq!(changes, 0);
     assert_eq!(Replica::snapshot_origins(&content).unwrap(), vec![Some(Origin::system("content-seal"))]);
-    assert_eq!(doc.save(None).unwrap(), bytes, "the same unsealed version saves the same bytes");
     doc.mark_saved();
-    assert!(doc.file().is_sealed(), "the seal of the saved copy is the session's now");
+    assert!(doc.file().is_sealed());
     assert_eq!(doc.file().replica_version(), version_of(&bytes));
 }
 

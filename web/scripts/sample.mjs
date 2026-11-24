@@ -22,6 +22,6 @@ for (const [title, status, notes] of [
   call('records.create', { tableId: table.id, values: { [fields.Title]: title, [fields.Status]: status, [fields.Notes]: notes } })
 }
 fs.mkdirSync(path.join(web, 'public', 'sample'), { recursive: true })
-fs.writeFileSync(path.join(web, 'public', 'sample', 'Sample.ktable'), doc.save())
+fs.writeFileSync(path.join(web, 'public', 'sample', 'Sample.ktable'), (doc.prepareSave(), doc.save()))
 doc.free()
 console.log('wrote public/sample/Sample.ktable')

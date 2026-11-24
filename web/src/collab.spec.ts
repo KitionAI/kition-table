@@ -18,6 +18,7 @@ type Doc = {
   importChanges(changes: Uint8Array): string
   blobsSince(since: Uint8Array): Uint8Array
   addBlobs(blobs: Uint8Array): void
+  prepareSave(): void
   save(): Uint8Array
   readonly revision: bigint | number
   free(): void
@@ -26,6 +27,12 @@ type DocClass = { create(name: string, width: number, height: number): Doc; open
 
 const engine = path.resolve(__dirname, '..', 'public', 'engine')
 let TableDocument: DocClass
+
+/** The file's bytes as a host saves them: sealed first. */
+function sealed(doc: Doc): Uint8Array {
+  doc.prepareSave()
+  return doc.save()
+}
 
 beforeAll(async () => {
   const sdk = await import(/* @vite-ignore */ pathToFileURL(path.join(engine, 'kition_table_kit.js')).href)
@@ -75,7 +82,7 @@ describe('co-editing a table', () => {
   })
 
   it("hears a co-editor's records once they are imported, and not its own", async () => {
-    const bytes = TableDocument.create('Tasks.ktable', 0, 0).save()
+    const bytes = sealed(TableDocument.create('Tasks.ktable', 0, 0))
     const ann = TableDocument.open('Tasks.ktable', bytes)
     const bob = TableDocument.open('Tasks.ktable', bytes)
     const source = createWorkerTableDataSource(access(bob), 'Tasks.ktable')

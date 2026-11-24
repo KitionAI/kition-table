@@ -29,7 +29,7 @@ async fn waiting_for_sdk_creation_replay_and_required_defaults() {
     let dir = tempfile::tempdir().unwrap();
     let mut doc = TableDocument::create("Work.ktable", 0, 0).unwrap();
     doc.execute("table.records.create", json!({"tableId":1,"values":{"title":"One"}})).unwrap();
-    let bytes = doc.save(None).unwrap();
+    let bytes = doc.sealed_save().unwrap();
     let definition = Box::leak(Box::new(KitDefinition::from_manifest_text(include_str!("../../../kit.json")).unwrap()));
     let executable = Some(PathBuf::from(env!("CARGO_BIN_EXE_kition-table")));
     let env = EnvKit::new(definition, executable.clone());
@@ -102,7 +102,7 @@ async fn seed_seven_one_hundred_tasks_and_create_classification() {
     for title in ["One", "Two", "Three"] {
         doc.execute("table.records.create", json!({"tableId":1,"values":{"title":title,"notes":"N"}})).unwrap();
     }
-    std::fs::write(dir.path().join("Work.ktable"), doc.save(None).unwrap()).unwrap();
+    std::fs::write(dir.path().join("Work.ktable"), doc.sealed_save().unwrap()).unwrap();
     let definition = Box::leak(Box::new(KitDefinition::from_manifest_text(include_str!("../../../kit.json")).unwrap()));
     let kit = EnvKit::new(definition, Some(PathBuf::from(env!("CARGO_BIN_EXE_kition-table"))));
     let options = GenerateOptions { seed: 7, count: 100, ..Default::default() };

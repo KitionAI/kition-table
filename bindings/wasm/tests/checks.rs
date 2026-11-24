@@ -120,11 +120,11 @@ fn each_fix_is_a_valid_command_and_clears_its_code() {
 #[test]
 fn a_check_changes_nothing() {
     for entry in catalogue() {
-        let doc = fixture(entry["fixture"].as_str().unwrap());
-        let (revision, bytes) = (doc.revision(), doc.save(None).unwrap());
+        let mut doc = fixture(entry["fixture"].as_str().unwrap());
+        let (revision, bytes) = (doc.revision(), doc.sealed_save().unwrap());
         doc.check();
         assert_eq!(doc.revision(), revision);
-        assert_eq!(doc.save(None).unwrap(), bytes);
+        assert_eq!(doc.sealed_save().unwrap(), bytes);
     }
 }
 

@@ -30,7 +30,7 @@ function fixture(name, second) {
     call('records.create', { tableId: places.id, values: { [primary(places)]: 'Paris' } })
   }
   doc.markSaved()
-  const bytes = Buffer.from(doc.save()).toString('base64')
+  const bytes = Buffer.from((doc.prepareSave(), doc.save())).toString('base64')
   doc.free()
   return { bytes, places: places?.id ?? null }
 }

@@ -47,7 +47,7 @@ fn large() -> (TableDocument, i64) {
             .collect();
         call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "records": records }] }));
     }
-    let bytes = doc.save(None).unwrap();
+    let bytes = doc.sealed_save().unwrap();
     (TableDocument::open("Large.ktable", &bytes).unwrap(), table_id)
 }
 

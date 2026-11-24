@@ -236,7 +236,7 @@ fn main() -> Result<(), String> {
     let tall = tall["id"].as_i64().or_else(|| tall["view"]["id"].as_i64()).ok_or("no tall view")?;
     doc.call("views.patchConfig", json!({ "tableId": table_id, "viewId": tall, "row_height": "extra_tall", "frozen_column_count": 1 }))?;
 
-    let bytes = doc.0.save(None)?;
+    let bytes = doc.0.sealed_save()?;
     if let Some(dir) = std::path::Path::new(&out).parent() {
         std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
     }

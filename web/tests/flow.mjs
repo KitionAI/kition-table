@@ -34,7 +34,7 @@ function fixture(name, count) {
   call('records.create', { tableId: table.id, values: { title: 'Phase 3 deferred', score: 0, received_at: '2026-07-24T05:15:48Z' } })
   for (let index = 2; index < count; index += 1) call('records.create', { tableId: table.id, values: { title: `Message ${String(index + 1).padStart(4, '0')}`, score: index % 6 } })
   doc.markSaved()
-  const bytes = Buffer.from(doc.save()).toString('base64')
+  const bytes = Buffer.from((doc.prepareSave(), doc.save())).toString('base64')
   doc.free()
   return bytes
 }
@@ -53,7 +53,7 @@ function viewsFixture() {
   const second = call('tables.create', { title: 'People' })
   call('dashboards.upsert', { dashboardId: 'overview', title: 'Overview', source_table_id: first.id, layout: [], widgets: [] })
   doc.markSaved()
-  const bytes = Buffer.from(doc.save()).toString('base64')
+  const bytes = Buffer.from((doc.prepareSave(), doc.save())).toString('base64')
   doc.free()
   return { tables: [first.id, second.id], dashboard: 'overview', bytes }
 }
@@ -93,7 +93,7 @@ function coversFixture() {
   const covers = [held('drawn.svg', 'image/svg+xml', Buffer.from(svg)), held('moving.gif', 'image/gif', gif), held('photo.heic', 'image/heic', heic)]
   for (const [index, cover] of covers.entries()) call('records.create', { tableId: table.id, values: { title: `Cover ${index + 1}`, [name]: [cover] } })
   doc.markSaved()
-  const bytes = Buffer.from(doc.save()).toString('base64')
+  const bytes = Buffer.from((doc.prepareSave(), doc.save())).toString('base64')
   doc.free()
   return bytes
 }

@@ -18,9 +18,7 @@
 
 use std::collections::BTreeSet;
 
-use kition_kdm::{ActorId, Version};
 use rusqlite::Connection;
-use sha2::{Digest, Sha256};
 
 use crate::blobs::blob_hash_candidates;
 use crate::kdm::store;
@@ -42,19 +40,6 @@ impl TableFile {
         self.file_with_content(&content)
     }
 
-    /// [`TableFile::content_bytes`] of a replica nobody sealed, for a host that does not call
-    /// `prepareSave` yet: the content of a copy sealed under an actor derived from the version
-    /// (so the same unsealed version saves the same bytes), and that seal's changes, which the
-    /// session takes in once the host stored the bytes ([`TableFile::import_replica_changes`]).
-    pub fn content_bytes_of_a_sealed_copy(&self) -> Result<(Vec<u8>, Vec<u8>)> {
-        let version = self.replica.version();
-        let mut copy = self.replica.fork(sealing_actor(&version))?;
-        copy.seal()?;
-        let seal = copy.export_changes(&version)?;
-        let content = copy.sealed_content_snapshot()?;
-        Ok((self.file_with_content(&content)?, seal))
-    }
-
     /// The stored snapshot and the number of change rows after it: a saved file holds its content
     /// snapshot and no change row.
     pub fn stored_replica(&self) -> Result<(Vec<u8>, i64)> {
@@ -74,15 +59,6 @@ impl TableFile {
         settle_header(&mut bytes);
         Ok(bytes)
     }
-}
-
-/// The actor a copy of a replica at `version` seals under: the same for the same version.
-fn sealing_actor(version: &Version) -> ActorId {
-    let digest = Sha256::new().chain_update(b"kition-table-seal").chain_update(version.encode()).finalize();
-    let mut high = [0u8; 8];
-    high.copy_from_slice(digest.get(..8).unwrap_or(&[1; 8]));
-    // The top bit is cleared, as `ActorId::random` does: the engine reserves `u64::MAX`.
-    ActorId::from_u64(u64::from_le_bytes(high) >> 1).unwrap_or_else(|_| ActorId::random())
 }
 
 /// Deletes from the relational tables what is history: the record history and deleted rows (and
@@ -135,14 +111,5 @@ fn settle_header(bytes: &mut [u8]) {
         if let Some(field) = bytes.get_mut(at..at + 4) {
             field.copy_from_slice(&1u32.to_be_bytes());
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn the_sealing_actor_is_the_same_for_the_same_version() {
-        let version = kition_kdm::Version::empty();
-        assert_eq!(super::sealing_actor(&version), super::sealing_actor(&version));
     }
 }

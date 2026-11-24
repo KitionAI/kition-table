@@ -97,7 +97,7 @@ fn import_previews_and_runs_as_one_request_outside_the_undo_history() {
 fn a_failed_import_leaves_the_document_as_it_was() {
     let mut doc = new_document();
     let (table_id, fields) = first_table(&mut doc);
-    let bytes = doc.save(None).unwrap();
+    let bytes = doc.sealed_save().unwrap();
     let mut doc = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     // `Extra` is created first; the rows then fail: the starter table's `Title` is required.
     let failed = doc.execute(
@@ -167,7 +167,7 @@ fn ai_fields_prepare_prompts_and_apply_results_as_the_ai_field_origin() {
 
 #[test]
 fn as_origin_writes_as_a_system_feature_outside_the_persons_undo() {
-    let bytes = new_document().save(None).unwrap();
+    let bytes = new_document().sealed_save().unwrap();
     let mut doc = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     let (table_id, fields) = first_table(&mut doc);
     let (title, notes) = (field_name(&fields, "Title"), field_name(&fields, "Notes"));

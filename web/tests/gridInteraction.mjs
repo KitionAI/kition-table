@@ -51,7 +51,7 @@ async function fixture() {
   const groupedId = grouped.id ?? grouped.view.id
   call('views.putGroups', { tableId, viewId: groupedId, items: [{ field_id: status.id, direction: 'asc' }] })
   doc.markSaved()
-  const bytes = doc.save()
+  const bytes = (doc.prepareSave(), doc.save())
   doc.free()
   return { bytes, tableId, primary: primary.name, views: { grid, grouped: groupedId } }
 }

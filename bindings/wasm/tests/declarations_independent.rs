@@ -116,7 +116,7 @@ fn fixture() -> (TableDocument, Vec<Role>) {
         "table.dashboards.upsert",
         json!({"dashboardId":"d1","title":"Overview","order":1,"source_table_id":1,"layout":[],"widgets":[{"id":"w1","type":"metric"}]}),
     );
-    let bytes = doc.save(None).unwrap();
+    let bytes = doc.sealed_save().unwrap();
     let doc = TableDocument::open("Read.ktable", &bytes).unwrap();
     let inspect = doc.inspect().unwrap();
     let mut roles = Vec::new();
@@ -983,9 +983,9 @@ fn a_view_setting_lands_only_on_a_view_of_the_table_it_names() {
         ("table.views.patchField", json!({"tableId":1,"viewId":other,"fieldId":est,"width":300})),
         ("table.views.patchField", json!({"tableId":1,"viewId":1,"fieldId":with_roles(&json!("@Name"), &roles),"width":300})),
     ] {
-        let before = doc.save(None).unwrap();
+        let before = doc.sealed_save().unwrap();
         assert!(doc.execute(command, params.clone()).is_err(), "{command} {params} wrote another table's view");
-        assert_eq!(doc.save(None).unwrap(), before, "{command}");
+        assert_eq!(doc.sealed_save().unwrap(), before, "{command}");
     }
 }
 

@@ -25,7 +25,7 @@ fn a_document_the_kit_saves_opens_natively_with_its_edits() {
     let rows = doc.execute("table.records.create", json!({ "tableId": table_id, "values": { "title": "From the kit" } })).unwrap();
     let field = rows["result"]["values"].as_object().unwrap().keys().next().unwrap().clone();
     let path = scratch("kit-saved.ktable");
-    std::fs::write(&path, doc.save(None).unwrap()).unwrap();
+    std::fs::write(&path, doc.sealed_save().unwrap()).unwrap();
 
     let mut native = TableFile::open(&path).unwrap();
     assert!(native.read_only().is_none(), "the file opens writable");

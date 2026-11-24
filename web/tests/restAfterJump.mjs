@@ -29,7 +29,7 @@ async function fixture(count) {
   const records = Array.from({ length: count }, (_, i) => ({ [primary.name]: `Record ${i + 1}` }))
   call('transact', { ops: [{ op: 'records.create', tableId: table.id, at: null, records }] })
   doc.markSaved()
-  const bytes = doc.save()
+  const bytes = (doc.prepareSave(), doc.save())
   doc.free()
   return bytes
 }

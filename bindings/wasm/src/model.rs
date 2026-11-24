@@ -98,7 +98,7 @@ mod tests {
         let rename = json!({ "ops": [{ "op": "set", "target": object, "field": "title", "value": "Renamed by a script" }] });
         exchange.batch(&mut doc, &rename, false).unwrap();
         assert_eq!(first_table(&mut doc)["title"], "Renamed by a script", "the model edit is projected");
-        let saved = TableDocument::open("Tasks.ktable", &doc.save(None).unwrap()).unwrap();
+        let saved = TableDocument::open("Tasks.ktable", &doc.sealed_save().unwrap()).unwrap();
         assert_eq!(saved.doc_id(), doc.doc_id());
     }
 }

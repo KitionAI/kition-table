@@ -46,7 +46,7 @@ fn file() -> Vec<u8> {
         result(&mut doc, "table.records.create", json!({ "tableId": 2, "values": { "title": title } }));
     }
     result(&mut doc, "table.views.create", json!({ "tableId": 2, "title": "Open", "type": "grid" }));
-    doc.save(None).unwrap()
+    doc.sealed_save().unwrap()
 }
 
 struct Fixture {

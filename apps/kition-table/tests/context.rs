@@ -52,7 +52,7 @@ fn open(name: &str) -> (Headless<TableDocument>, String, std::path::PathBuf) {
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
-    std::fs::write(root.join("Work.ktable"), document().save(None).unwrap()).unwrap();
+    std::fs::write(root.join("Work.ktable"), document().sealed_save().unwrap()).unwrap();
     let mut kit = kit();
     let folder = HostFolder::new(&root).unwrap();
     kit.set_host(folder.host());

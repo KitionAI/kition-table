@@ -29,10 +29,13 @@ fn titles(doc: &mut TableDocument) -> Vec<String> {
 
 #[test]
 fn keeps_the_kit_sdk_contract() {
-    let fixture = new_document().save(None).unwrap();
+    let fixture = new_document().sealed_save().unwrap();
+    // kition-kit's contract check saves right after the edit without a host's `prepare_save`;
+    // the edit ends as every host's save starts, with the seal (`save` refuses a replica nobody
+    // sealed).
     kition_kit::testing::check_contract::<TableDocument>(&fixture, "Tasks.ktable", |doc| {
         add_record(doc, "Write the plan");
-        Ok(())
+        doc.prepare_save()
     })
     .unwrap();
 }
@@ -107,11 +110,11 @@ fn every_read_method_is_known_and_its_command_does_not_mutate() {
 fn save_leaves_edits_after_it_unsaved() {
     let mut doc = new_document();
     add_record(&mut doc, "Ada");
-    doc.save(None).unwrap();
+    doc.sealed_save().unwrap();
     add_record(&mut doc, "Grace");
     doc.mark_saved();
     assert!(doc.dirty(), "an edit after the save is not in the file");
-    doc.save(None).unwrap();
+    doc.sealed_save().unwrap();
     doc.mark_saved();
     assert!(!doc.dirty());
 }
@@ -136,7 +139,7 @@ fn open_like_the_editor(doc: &mut TableDocument) {
 
 #[test]
 fn opening_a_file_and_reading_it_leaves_it_saved() {
-    let bytes = new_document().save(None).unwrap();
+    let bytes = new_document().sealed_save().unwrap();
     let mut doc = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     assert!(!doc.dirty());
     let revision = doc.revision();
@@ -148,7 +151,7 @@ fn opening_a_file_and_reading_it_leaves_it_saved() {
 
 #[test]
 fn undo_back_to_the_saved_state_makes_the_document_saved() {
-    let bytes = new_document().save(None).unwrap();
+    let bytes = new_document().sealed_save().unwrap();
     let mut doc = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     add_record(&mut doc, "Ada");
     assert!(doc.dirty());
@@ -164,7 +167,7 @@ fn undo_back_to_the_saved_state_makes_the_document_saved() {
 
     // Saved after an edit: undo leaves the file's state, and redo comes back to it.
     add_record(&mut doc, "Ada");
-    doc.save(None).unwrap();
+    doc.sealed_save().unwrap();
     doc.mark_saved();
     doc.execute("edit.undo", json!({})).unwrap();
     assert!(doc.dirty());
@@ -195,7 +198,7 @@ fn a_request_is_one_undo_step() {
 
 #[test]
 fn a_change_undo_does_not_revert_keeps_the_document_unsaved() {
-    let bytes = new_document().save(None).unwrap();
+    let bytes = new_document().sealed_save().unwrap();
     let mut left = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     let mut right = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     add_record(&mut right, "Mine");
@@ -205,7 +208,7 @@ fn a_change_undo_does_not_revert_keeps_the_document_unsaved() {
     right.execute("edit.undo", json!({})).unwrap();
     assert_eq!(titles(&mut right), ["Theirs"]);
     assert!(right.dirty(), "the imported change is not in the file");
-    right.save(None).unwrap();
+    right.sealed_save().unwrap();
     right.mark_saved();
     assert!(!right.dirty());
 
@@ -226,7 +229,7 @@ fn saved_bytes_reopen_with_the_edits_and_the_same_replica() {
     add_record(&mut doc, "Ada");
     // As a host saves: sealed first, so the file's replica is the session's.
     doc.prepare_save().unwrap();
-    let bytes = doc.save(None).unwrap();
+    let bytes = doc.sealed_save().unwrap();
     let mut reopened = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     assert_eq!(titles(&mut reopened), ["Ada"]);
     assert_eq!(reopened.doc_id(), doc.doc_id());
@@ -235,7 +238,7 @@ fn saved_bytes_reopen_with_the_edits_and_the_same_replica() {
 
 #[test]
 fn two_copies_exchange_changes_and_converge() {
-    let fixture = new_document().save(None).unwrap();
+    let fixture = new_document().sealed_save().unwrap();
     let mut left = TableDocument::open("Tasks.ktable", &fixture).unwrap();
     let mut right = TableDocument::open("Tasks.ktable", &fixture).unwrap();
     add_record(&mut left, "Left");
@@ -317,7 +320,7 @@ fn save_vacuums_a_sparse_database_and_keeps_every_edit() {
     }
     let (pages, free) = free_pages(&doc);
     assert!(free * 100 > pages * VACUUM_FREE_PERCENT, "{free} of {pages} pages free");
-    let bytes = doc.save(None).unwrap();
+    let bytes = doc.sealed_save().unwrap();
     let (vacuumed, free) = free_pages(&doc);
     assert_eq!(free, 0);
     assert!(vacuumed < pages);
@@ -342,7 +345,7 @@ fn save_leaves_a_dense_database_as_it_is() {
     add_record(&mut doc, "One");
     let (pages, free) = free_pages(&doc);
     assert!(free * 100 <= pages * VACUUM_FREE_PERCENT);
-    doc.save(None).unwrap();
+    doc.sealed_save().unwrap();
     assert_eq!(free_pages(&doc), (pages, free));
 }
 
@@ -439,7 +442,7 @@ fn attachments_are_put_into_the_file_and_read_back() {
     assert!(doc.call("attachments.put", &json!({ "tableId": table_id, "name": "x", "data": "not base64!" })).is_err());
 
     // Saved and reopened (as another application would), the attachment and its bytes are there.
-    let saved = doc.save(None).unwrap();
+    let saved = doc.sealed_save().unwrap();
     let mut reopened = TableDocument::open("Tasks.ktable", &saved).unwrap();
     let records = reopened.call("records.list", &json!({ "tableId": table_id })).unwrap();
     assert_eq!(records["result"]["items"][0]["values"][&field], json!([attachment]));
@@ -452,7 +455,7 @@ fn two_copies_sync_a_blob_attachment() {
     let mut first = new_document();
     add_record(&mut first, "Beach");
     let (table_id, field) = files_field(&mut first);
-    let fixture = first.save(None).unwrap();
+    let fixture = first.sealed_save().unwrap();
     let mut left = TableDocument::open("Tasks.ktable", &fixture).unwrap();
     let mut right = TableDocument::open("Tasks.ktable", &fixture).unwrap();
     assert!(left.blobs().unwrap().is_empty());
@@ -521,7 +524,7 @@ fn file_bytes_open_saved_with_the_replica_saved_with_them() {
     let mut a = new_document();
     add_record(&mut a, "In the file");
     a.prepare_save().unwrap();
-    let bytes = a.save(None).unwrap();
+    let bytes = a.sealed_save().unwrap();
     let snapshot = a.snapshot().unwrap();
     let mut b = TableDocument::open_with_replica("Tasks.ktable", &bytes, &snapshot, &a.blobs().unwrap()).unwrap();
     assert_eq!(b.doc_id(), a.doc_id());
@@ -538,7 +541,7 @@ fn file_bytes_open_saved_with_the_replica_saved_with_them() {
 fn a_room_snapshot_of_the_same_document_merges_into_the_file() {
     let mut a = new_document();
     add_record(&mut a, "Saved");
-    let bytes = a.save(None).unwrap();
+    let bytes = a.sealed_save().unwrap();
     let mut peer = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     add_record(&mut peer, "Acknowledged");
     let room = peer.snapshot().unwrap();
@@ -559,7 +562,7 @@ fn a_room_snapshot_of_the_same_document_merges_into_the_file() {
 fn file_bytes_open_with_their_own_replica() {
     let mut a = new_document();
     add_record(&mut a, "In the file");
-    let bytes = a.save(None).unwrap();
+    let bytes = a.sealed_save().unwrap();
     let mut other = new_document();
     let mut b = TableDocument::open_with_replica("Tasks.ktable", &bytes, &other.snapshot().unwrap(), &[]).unwrap();
     assert_eq!(b.doc_id(), a.doc_id());
@@ -574,7 +577,7 @@ fn file_bytes_open_with_their_own_replica() {
 fn a_damaged_snapshot_leaves_the_file_as_it_is() {
     let mut a = new_document();
     add_record(&mut a, "In the file");
-    let bytes = a.save(None).unwrap();
+    let bytes = a.sealed_save().unwrap();
     let mut b = TableDocument::open_with_replica("Tasks.ktable", &bytes, b"not a replica", &[]).unwrap();
     assert_eq!(b.doc_id(), a.doc_id());
     assert_eq!(titles(&mut b), ["In the file"]);
