@@ -8258,6 +8258,31 @@
           "offset": {
             "type": "integer",
             "description": "How many items to skip, from 0."
+          },
+          "checkpoints": {
+            "type": "array",
+            "description": "The host's checkpoints of the document, oldest first (Kit UI protocol 7m): the history before this session is told between them.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "version": {
+                  "type": "string",
+                  "description": "The replica version, base64, as replica/version answers it."
+                },
+                "time": {
+                  "type": "integer",
+                  "description": "When it was recorded, in milliseconds since the Unix epoch."
+                },
+                "author": {
+                  "type": "string",
+                  "description": "Who made it, when the host knows."
+                }
+              },
+              "required": [
+                "version"
+              ]
+            }
           }
         },
         "required": [

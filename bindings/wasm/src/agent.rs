@@ -117,6 +117,7 @@ fn query_params(method: &str) -> Vec<(&'static str, Value)> {
                     "description": "The host's checkpoints of the document, oldest first (Kit UI protocol 7m): the history before this session is told between them.",
                     "items": {
                         "type": "object",
+                        "additionalProperties": false,
                         "properties": {
                             "version": { "type": "string", "required": true, "description": "The replica version, base64, as replica/version answers it." },
                             "time": { "type": "integer", "description": "When it was recorded, in milliseconds since the Unix epoch." },

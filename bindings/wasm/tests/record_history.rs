@@ -52,10 +52,17 @@ fn saved_file() -> (Vec<u8>, i64) {
     (doc.sealed_save().unwrap(), record)
 }
 
+/// A checkpoint as the host lists it, at `doc`'s version: the save that wrote the file it holds.
+fn checkpoint(doc: &TableDocument, time: i64) -> Value {
+    json!({ "version": base64::engine::general_purpose::STANDARD.encode(doc.version()), "time": time })
+}
+
 #[test]
 fn a_record_keeps_its_history_and_author_through_the_stored_replica() {
     let (bytes, record) = saved_file();
     let mut doc = TableDocument::open(FILE, &bytes).unwrap();
+    // The host's checkpoint at the save that wrote this file.
+    let saved_before = checkpoint(&doc, 1_000);
     run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": record, "values": { "title": "Reviewed" } }));
     let session = title_updates(&history(&mut doc, record, None));
     assert_eq!(session.len(), 1, "{session:?}");
@@ -67,13 +74,16 @@ fn a_record_keeps_its_history_and_author_through_the_stored_replica() {
     let stored = doc.snapshot().unwrap();
     // The file alone holds no history: only the content.
     let mut alone = TableDocument::open(FILE, &saved).unwrap();
-    assert!(title_updates(&history(&mut alone, record, None)).is_empty(), "a file opened alone has no history before its session");
+    assert!(
+        title_updates(&history(&mut alone, record, Some(json!([saved_before.clone()])))).is_empty(),
+        "a file opened alone has no history before its session"
+    );
     let mut reopened = TableDocument::open_with_replica(FILE, &saved, &stored, &[]).unwrap();
-    let kept = title_updates(&history(&mut reopened, record, None));
+    let kept = title_updates(&history(&mut reopened, record, Some(json!([saved_before.clone()]))));
     assert_eq!(kept, vec![(json!("Draft"), json!("Reviewed"), author, 0)], "the stored replica tells the change and its author");
     // The session's own changes come first, then the stored ones.
     run(&mut reopened, "table.records.update", json!({ "tableId": 1, "recordId": record, "values": { "title": "Final" } }));
-    let both = title_updates(&history(&mut reopened, record, None));
+    let both = title_updates(&history(&mut reopened, record, Some(json!([saved_before]))));
     assert_eq!(both.iter().map(|(_, after, ..)| after.clone()).collect::<Vec<_>>(), vec![json!("Final"), json!("Reviewed")], "{both:?}");
 }
 
@@ -81,12 +91,13 @@ fn a_record_keeps_its_history_and_author_through_the_stored_replica() {
 fn checkpoints_cut_the_stored_history_and_name_each_stretchs_author() {
     let (bytes, record) = saved_file();
     let mut doc = TableDocument::open(FILE, &bytes).unwrap();
+    let opened = checkpoint(&doc, 500);
     run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": record, "values": { "title": "By the person" } }));
     let person = title_updates(&history(&mut doc, record, None))[0].2.clone();
     // The host's checkpoint at the first save.
     doc.sealed_save().unwrap();
     doc.mark_saved();
-    let checkpoint = base64::engine::general_purpose::STANDARD.encode(doc.version());
+    let first_save = checkpoint(&doc, 1_000);
     doc.execute_as(
         "table.records.update",
         json!({ "tableId": 1, "recordId": record, "values": { "title": "By the agent" } }),
@@ -97,7 +108,7 @@ fn checkpoints_cut_the_stored_history_and_name_each_stretchs_author() {
     doc.mark_saved();
     let stored = doc.snapshot().unwrap();
     let mut reopened = TableDocument::open_with_replica(FILE, &saved, &stored, &[]).unwrap();
-    let cut = title_updates(&history(&mut reopened, record, Some(json!([{ "version": checkpoint, "time": 1_000 }]))));
+    let cut = title_updates(&history(&mut reopened, record, Some(json!([opened.clone(), first_save]))));
     assert_eq!(
         cut,
         vec![
@@ -106,8 +117,8 @@ fn checkpoints_cut_the_stored_history_and_name_each_stretchs_author() {
         ],
         "newest first, each stretch by its author, at its checkpoint's time"
     );
-    // Without the checkpoints the history before the session is one stretch, by both.
-    let whole = title_updates(&history(&mut reopened, record, None));
+    // With only the first checkpoint the history after it is one stretch, by both.
+    let whole = title_updates(&history(&mut reopened, record, Some(json!([opened]))));
     assert_eq!(whole.len(), 1, "{whole:?}");
     assert_eq!((&whole[0].0, &whole[0].1), (&json!("Draft"), &json!("By the agent")));
     assert!(whole[0].2.split(", ").any(|name| name == "helper") && whole[0].2.split(", ").any(|name| name == person), "{whole:?}");

@@ -297,10 +297,10 @@ impl TableFile {
 
     /// A record's history before this session, newest first, derived from the replica's own
     /// history (the stored lineage the host handed back on open, data model 7.3); nothing is
-    /// stored for it. The history from where the replica starts (its seal, for one rooted at a
-    /// content file) to [`TableFile::session_start`] is cut at `points` (the host's checkpoints,
-    /// oldest first; those the replica does not reach, or that are not between the two, are
-    /// skipped). For each stretch, the record's creation, deletion or each field that differs
+    /// stored for it. The history from where the replica starts (a full replica) or from the
+    /// first of `points` it reaches (a shallow one, whose root the KDM cannot read) to
+    /// [`TableFile::session_start`] is cut at `points` (the host's checkpoints, oldest first;
+    /// those the replica does not reach, or that are not between the two, are skipped). For each stretch, the record's creation, deletion or each field that differs
     /// (before and after values, as the session's rows hold them), by the people and agents
     /// whose changes the stretch holds (their principals, as the session's rows name them;
     /// else the point's author), at the time of the point that ends it (0: unknown). A record
@@ -313,17 +313,27 @@ impl TableFile {
             .query_row(rusqlite::params![record_id, table_id], |row| row.get::<_, String>(0))
             .optional()?;
         let Some(record) = record.map(ObjectId::from_string) else { return Ok(Vec::new()) };
-        let start = self.replica.shallow_root().unwrap_or_else(Version::empty);
         let end = self.session_start.clone();
-        if start.includes(&end) || !self.replica.reaches(&start) || !self.replica.version().includes(&end) {
+        if !self.replica.version().includes(&end) {
             return Ok(Vec::new());
         }
-        let mut stops: Vec<(Version, i64, Option<String>)> = vec![(start, 0, None)];
+        // Where the replica's history starts: the empty version of a full replica. A shallow one
+        // (rooted at a content file's seal) cannot be read at its root: `Replica::shallow_root`
+        // names the version before the root's own change, which `fork_at` refuses, and the KDM
+        // names no version that includes it; its history is read from the first checkpoint on.
+        let mut stops: Vec<(Version, i64, Option<String>)> = Vec::new();
+        let root = self.replica.shallow_root().unwrap_or_else(Version::empty);
+        if self.replica.reaches(&root) && !root.includes(&end) {
+            stops.push((root, 0, None));
+        }
         for point in points {
-            let after_last = stops.last().is_some_and(|(last, ..)| point.version.includes(last) && point.version != *last);
+            let after_last = stops.last().is_none_or(|(last, ..)| point.version.includes(last) && point.version != *last);
             if after_last && end.includes(&point.version) && point.version != end && self.replica.reaches(&point.version) {
                 stops.push((point.version.clone(), point.time, point.author.clone()));
             }
+        }
+        if stops.is_empty() {
+            return Ok(Vec::new());
         }
         stops.push((end, 0, None));
         let document_id = self.info()?.document_id;
