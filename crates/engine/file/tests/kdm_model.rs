@@ -376,7 +376,8 @@ fn updates_patch_tables_fields_and_views() {
     assert_eq!(summary.options, json!({ "precision": 2 }));
     let board = ok(read.view(&grid));
     assert_eq!((board.title.as_str(), board.view_type.as_str()), ("Board", "kanban"));
-    assert_eq!(board.config, json!({ "group_by": "name" }));
+    // The hidden column is the config's too: one representation (`View.hiddenFields`).
+    assert_eq!(board.config, json!({ "group_by": "name", "hidden_fields": [notes.as_str()] }));
     assert_eq!(board.widths.get(&name), Some(&40));
     assert_eq!(board.widths.get(&notes), Some(&1200));
     assert_eq!(board.hidden.get(&notes), Some(&true));

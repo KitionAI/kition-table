@@ -895,10 +895,10 @@ try {
   })
 
   // A record's history survives closing the document: the file holds none, the host's replica
-  // (Kit UI protocol 7) holds it, and the engine derives the record's history from it between the
-  // host's checkpoints (7m; feature table.records.history-kept). Last: the page is the
-  // development host with the replica and checkpoints from here on.
-  await test('a record keeps its history and author after a save and a reload', async () => {
+  // (Kit UI protocol 7) holds it, and the engine derives the record's history from it back to the
+  // file's seal (feature table.records.history-kept). Last: the page is the development host with
+  // the replica and checkpoints from here on.
+  await test('a record keeps its history and authors across saves and reloads', async () => {
     await page.goto(`${origin}/dev.html?locale=en-US&replica=1&checkpoints=1`)
     await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes(' open in '), null, { timeout: 60000 })
     await open('Tasks.ktable', SMALL)
@@ -915,31 +915,30 @@ try {
       await page.keyboard.press('Enter')
       await until(async () => (await records(table.id))[0].values.title === text)
     }
-    /** Saves, and records the host's own checkpoint of the save, as Kition does. */
-    const save = async () => {
+    /** Saves and opens the document again as its last save left it, with its replica. */
+    const saveAndReload = async (text) => {
       const saved = await page.evaluate(() => window.devHost.connection().save())
-      const checkpoint = await page.evaluate(() => window.devHost.recordCheckpoint({ origin: 'save' }))
-      return saved.saved && checkpoint != null
+      await page.evaluate(() => window.devHost.reload())
+      await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes('Tasks.ktable open in '), null, { timeout: 60000 })
+      await editor().waitFor({ timeout: 30000 })
+      await until(async () => (await records(table.id))[0]?.values.title === text)
+      return saved.saved
     }
+    const history = async () => (await engine('records.history', { tableId: table.id, recordId: first.id })).items
+    const edits = (items) =>
+      items.filter((entry) => entry.action === 'update' && entry.field_id === title.id).map((entry) => [entry.before, entry.after, entry.actor])
     await retitle(first.values.title, 'Reviewed')
-    const savedOnce = await save()
+    const [session] = edits(await history())
+    step('the session tells the edit and its author', session?.[1] === 'Reviewed' && typeof session?.[2] === 'string' && session[2].length > 0, JSON.stringify(session))
+    const savedOnce = await saveAndReload('Reviewed')
     await retitle('Reviewed', 'History kept')
-    const checkpoints = async () =>
-      page.evaluate(() => window.devHost.history.checkpoints('Tasks.ktable').filter((checkpoint) => checkpoint.available).reverse().map(({ version, time }) => ({ version, time })))
-    const history = async () => (await engine('records.history', { tableId: table.id, recordId: first.id, checkpoints: await checkpoints() })).items
-    const edit = (items) => items.find((entry) => entry.action === 'update' && entry.field_id === title.id && entry.after === 'History kept')
-    const before = edit(await history())
-    step('the session tells the edit and its author', before?.before === 'Reviewed' && typeof before?.actor === 'string' && before.actor.length > 0, JSON.stringify(before))
-    const savedTwice = await save()
-    await page.evaluate(() => window.devHost.reload())
-    await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes('Tasks.ktable open in '), null, { timeout: 60000 })
-    await editor().waitFor({ timeout: 30000 })
-    await until(async () => (await records(table.id))[0]?.values.title === 'History kept')
-    const after = edit(await history())
+    const savedTwice = await saveAndReload('History kept')
+    const listed = edits(await history())
+    const author = session?.[2]
     step(
-      'after a save and a reload the record history still tells the edit and its author',
-      savedOnce && savedTwice && after?.before === 'Reviewed' && after?.actor === before?.actor,
-      JSON.stringify({ savedOnce, savedTwice, after, checkpoints: (await checkpoints()).length, items: await history() }),
+      'after two saves and reloads the record history lists both edits with their authors',
+      savedOnce && savedTwice && JSON.stringify(listed) === JSON.stringify([['Reviewed', 'History kept', author], [first.values.title, 'Reviewed', author]]),
+      JSON.stringify({ savedOnce, savedTwice, listed }),
     )
   })
 } catch (error) {

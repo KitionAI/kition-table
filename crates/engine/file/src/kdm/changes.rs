@@ -297,15 +297,16 @@ impl TableFile {
 
     /// A record's history before this session, newest first, derived from the replica's own
     /// history (the stored lineage the host handed back on open, data model 7.3); nothing is
-    /// stored for it. The history from where the replica starts (a full replica) or from the
-    /// first of `points` it reaches (a shallow one, whose root the KDM cannot read) to
-    /// [`TableFile::session_start`] is cut at `points` (the host's checkpoints, oldest first;
-    /// those the replica does not reach, or that are not between the two, are skipped). For each stretch, the record's creation, deletion or each field that differs
-    /// (before and after values, as the session's rows hold them), by the people and agents
-    /// whose changes the stretch holds (their principals, as the session's rows name them;
-    /// else the point's author), at the time of the point that ends it (0: unknown). A record
-    /// whose changes all came in this session, or a document opened from its file alone (no
-    /// stored history), has none.
+    /// stored for it. It runs from the earliest version the replica reads
+    /// ([`Replica::earliest_readable`]: the file's seal, for a replica rooted at a content file)
+    /// to [`TableFile::session_start`], one stretch per change ([`Replica::history_since`]; a
+    /// change made concurrently with the one before goes with the next that includes both).
+    /// For each stretch, the record's creation, deletion or each field that differs (before and
+    /// after values, as the session's rows hold them), by the people and agents whose changes it
+    /// holds (their principals, as the session's rows name them; else the author of the
+    /// checkpoint that holds it), at the time of the first of `points` (the host's checkpoints,
+    /// oldest first) that holds it (0: none does). A record whose changes all came in this
+    /// session, or a document opened from its file alone (no stored history), has none.
     pub fn stored_record_history(&self, table_id: i64, record_id: i64, points: &[HistoryPoint]) -> Result<Vec<crate::HistoryEntry>> {
         let record = self
             .conn
@@ -314,47 +315,43 @@ impl TableFile {
             .optional()?;
         let Some(record) = record.map(ObjectId::from_string) else { return Ok(Vec::new()) };
         let end = self.session_start.clone();
-        if !self.replica.version().includes(&end) {
+        let start = self.replica.earliest_readable();
+        if start.includes(&end) || !end.includes(&start) || !self.replica.version().includes(&end) {
             return Ok(Vec::new());
         }
-        // Where the replica's history starts: the empty version of a full replica. A shallow one
-        // (rooted at a content file's seal) cannot be read at its root: `Replica::shallow_root`
-        // names the version before the root's own change, which `fork_at` refuses, and the KDM
-        // names no version that includes it; its history is read from the first checkpoint on.
-        let mut stops: Vec<(Version, i64, Option<String>)> = Vec::new();
-        let root = self.replica.shallow_root().unwrap_or_else(Version::empty);
-        if self.replica.reaches(&root) && !root.includes(&end) {
-            stops.push((root, 0, None));
-        }
-        for point in points {
-            let after_last = stops.last().is_none_or(|(last, ..)| point.version.includes(last) && point.version != *last);
-            if after_last && end.includes(&point.version) && point.version != end && self.replica.reaches(&point.version) {
-                stops.push((point.version.clone(), point.time, point.author.clone()));
+        // The stops: each change up to the session's start, with the principals of the changes
+        // since the stop before (system changes name none).
+        let mut stops: Vec<(Version, Vec<String>)> = Vec::new();
+        let mut last = start.clone();
+        let mut principals: Vec<String> = Vec::new();
+        for change in self.replica.history_since(&start)? {
+            if !end.includes(&change.version) {
+                continue;
+            }
+            if let Some(origin) = change.origin.filter(|origin| origin.kind != OriginKind::System)
+                && !principals.contains(&origin.principal)
+            {
+                principals.push(origin.principal);
+            }
+            if change.version.includes(&last) && change.version != last {
+                last = change.version.clone();
+                stops.push((change.version, std::mem::take(&mut principals)));
             }
         }
-        if stops.is_empty() {
-            return Ok(Vec::new());
+        if last != end {
+            stops.push((end, principals));
         }
-        stops.push((end, 0, None));
         let document_id = self.info()?.document_id;
         let mut names = HashMap::new();
         let mut entries = Vec::new();
-        let mut stops = stops.into_iter();
-        let Some((first, ..)) = stops.next() else { return Ok(Vec::new()) };
-        let mut prev = fork(&self.replica, &first)?;
-        let mut prev_origins = origin_counts(&prev)?;
-        for (version, time, author) in stops {
+        let mut prev = fork(&self.replica, &start)?;
+        for (version, mut principals) in stops {
             let next = fork(&self.replica, &version)?;
-            let next_origins = origin_counts(&next)?;
-            let mut principals: Vec<&String> = next_origins
-                .iter()
-                .filter(|(key, count)| key.0 != OriginKind::System.as_str() && **count > prev_origins.get(*key).copied().unwrap_or(0))
-                .map(|((_, principal), _)| principal)
-                .collect();
+            let holding = points.iter().find(|point| point.version.includes(&version));
+            let time = holding.map_or(0, |point| point.time);
             principals.sort();
-            principals.dedup();
             let actor =
-                if principals.is_empty() { author.unwrap_or_default() } else { principals.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(", ") };
+                if principals.is_empty() { holding.and_then(|point| point.author.clone()).unwrap_or_default() } else { principals.join(", ") };
             let was = ModelView::new(&prev).table_of_record(&record)?.is_some();
             let is = ModelView::new(&next).table_of_record(&record)?.is_some();
             let (old, new) = (cells(&prev, &record)?, cells(&next, &record)?);
@@ -388,20 +385,10 @@ impl TableFile {
                 (false, false) => {}
             }
             prev = next;
-            prev_origins = next_origins;
         }
         entries.reverse();
         Ok(entries)
     }
-}
-
-/// How many changes of each origin (`(kind, principal)`) the replica's history holds.
-fn origin_counts(replica: &Replica) -> Result<HashMap<(String, String), usize>> {
-    let mut counts = HashMap::new();
-    for origin in Replica::snapshot_origins(&replica.snapshot()?)?.into_iter().flatten() {
-        *counts.entry((origin.kind.as_str().to_owned(), origin.principal)).or_insert(0) += 1;
-    }
-    Ok(counts)
 }
 
 /// The field row's `(id, name)` for a field object, live or deleted.

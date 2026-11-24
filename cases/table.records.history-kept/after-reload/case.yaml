@@ -16,7 +16,8 @@ source:
 input: []
 steps:
   - cargo-test: { package: kition-table-kit, filter: "a_record_keeps_its_history_and_author_through_the_stored_replica" }
-  - cargo-test: { package: kition-table-kit, filter: "checkpoints_cut_the_stored_history_and_name_each_stretchs_author" }
+  - cargo-test: { package: kition-table-kit, filter: "two_sessions_saved_and_reopened_keep_both_edits_and_their_authors" }
+  - cargo-test: { package: kition-table-kit, filter: "a_checkpoint_dates_the_changes_it_holds" }
 expected:
   - actual: out:exit
     compare: exit

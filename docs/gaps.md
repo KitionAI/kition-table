@@ -35,8 +35,8 @@ Found by reading the write handlers; not fixed yet:
 - `fields.duplicate` copies a symmetric partner claim.
 - Deleting a field or a table leaves lookups, formulas, partners, view settings and dashboards
   that name it dangling.
-- `views.update` replaces the whole config, its `filter_tree`, sorts and groups included; `patchField` writes its three
-  parts in three commits and a projection row outside the replica; `putSorts` and `putGroups`
+- `views.update` drops `filter_tree` but keeps sorts and groups; `patchField` writes its three
+  parts in three commits; `putSorts` and `putGroups`
   answer the request rather than what was stored, and report validation errors as internal.
 - Upsert imports write each match from a snapshot taken before the first write; `csv.import` and
   `import.run` map columns and convert cells differently.

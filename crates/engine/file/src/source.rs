@@ -421,14 +421,15 @@ impl TableFile {
         self.get_view(table_id, view_id)
     }
 
-    /// Patches a view. A new `config` replaces the old one whole: its sorts and groups (the ones
-    /// [`TableFile::replace_view_sorts`] and [`TableFile::replace_view_groups`] write) included.
+    /// Patches a view. A new `config` replaces the old one, except that its sorts and groups
+    /// (which [`TableFile::replace_view_sorts`] and [`TableFile::replace_view_groups`] write too)
+    /// are kept when the new config does not name them.
     pub fn update_view(&mut self, table_id: i64, view_id: i64, patch: &ViewPatch) -> Result<View> {
         self.writable()?;
         let view = view_object(&self.conn, table_id, view_id)?;
-        self.get_view(table_id, view_id)?;
+        let current = self.get_view(table_id, view_id)?;
         let config = match &patch.config {
-            Some(config) => Some(self.config_in(table_id, config)?),
+            Some(config) => Some(self.config_in(table_id, &crate::view_config::keep_orderings(&current.config, config)?)?),
             None => None,
         };
         let patch = ViewPatch { config, ..patch.clone() };

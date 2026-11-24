@@ -143,7 +143,7 @@ describe('useTableViewState', () => {
     // The removal is saved half a second later, and its answer is the view's.
     await advance(500)
     expect(update).toHaveBeenCalledTimes(2)
-    expect(update.mock.calls[1][0].config.sorts).toBeUndefined()
+    expect(update.mock.calls[1][0].config.sorts).toEqual([])
     await answer(answers, 1)
     await settle()
     expect(state.sortItems).toEqual([])

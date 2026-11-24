@@ -188,7 +188,10 @@ export function useTableViewState({
     const viewId = activeView.id
     const timer = window.setTimeout(() => {
       const save = ++latestSaveRef.current
-      void dataSource.views.update({ documentId, tableId, viewId, config }).then((updated) => {
+      // The sorts and groups are named even when there are none: a config without them keeps the
+      // stored ones (views.update), so an emptied list must be sent as one.
+      const written = { ...config, sorts: config.sorts ?? [], groups: config.groups ?? [] }
+      void dataSource.views.update({ documentId, tableId, viewId, config: written }).then((updated) => {
         // A later save was sent: its answer is the one to take.
         if (save !== latestSaveRef.current) return
         const settings = settingsRef.current

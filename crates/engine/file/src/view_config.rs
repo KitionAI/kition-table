@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 
 use kition_kdm::{ObjectId, Origin};
-use kition_time::now_millis;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -18,9 +17,35 @@ use crate::{Result, TableFile, TableFileError, json};
 const FILTER_TREE_KEY: &str = "filter_tree";
 const SORTS_KEY: &str = "sorts";
 const GROUPS_KEY: &str = "groups";
+/// The hidden columns (`View.hiddenFields`, which `views.patchField`'s visibility writes too).
+const HIDDEN_KEY: &str = "hidden_field_names";
 
 fn ordering_key(table: &str) -> &'static str {
     if table == "kition_view_groups" { GROUPS_KEY } else { SORTS_KEY }
+}
+
+/// A new view config that keeps the sorts, groups and hidden columns of `current` unless it
+/// names its own:
+/// a config written without them (an agent's `views.update`) keeps them. The editor names
+/// its own, an empty list included.
+pub(crate) fn keep_orderings(current: &Map<String, Value>, config: &Value) -> Result<Value> {
+    let mut parsed = match config {
+        Value::String(raw) if !raw.trim().is_empty() => match serde_json::from_str(raw) {
+            Ok(value) => value,
+            Err(_) => return Ok(config.clone()),
+        },
+        other => other.clone(),
+    };
+    if let Value::Object(map) = &mut parsed {
+        for key in [SORTS_KEY, GROUPS_KEY, HIDDEN_KEY] {
+            if !map.contains_key(key)
+                && let Some(kept) = current.get(key)
+            {
+                map.insert(key.to_owned(), kept.clone());
+            }
+        }
+    }
+    Ok(parsed)
 }
 
 fn field_names_by_id(conn: &Connection, table_id: i64) -> Result<HashMap<i64, String>> {
@@ -419,17 +444,17 @@ impl TableFile {
             }
             self.commit(|tx| model::update_view(tx, &view, &ViewPatch { config: Some(Value::Object(config)), ..Default::default() }))?;
         }
-        let now = now_millis();
-        self.conn.execute(
-            "INSERT INTO kition_view_fields (view_id, field_id, visible, width, position, frozen, created_at, updated_at) \
-             VALUES (?1, ?2, 1, 180, 0, 0, ?3, ?3) ON CONFLICT(view_id, field_id) DO NOTHING",
-            params![view_id, field_id, now],
-        )?;
-        let (visible, width, position, frozen): (i64, i64, i64, i64) = self.conn.query_row(
-            "SELECT visible, width, position, frozen FROM kition_view_fields WHERE view_id = ?1 AND field_id = ?2",
-            params![view_id, field_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )?;
+        // The projection's row, or the defaults of a column the view holds nothing for (shown, as
+        // wide as any): no row is written outside the replica.
+        let (visible, width, position, frozen): (i64, i64, i64, i64) = self
+            .conn
+            .query_row(
+                "SELECT visible, width, position, frozen FROM kition_view_fields WHERE view_id = ?1 AND field_id = ?2",
+                params![view_id, field_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()?
+            .unwrap_or((1, 180, 0, 0));
         Ok(ViewField { view_id, field_id, visible: visible != 0, width, position, frozen: frozen != 0 })
     }
 }

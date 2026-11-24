@@ -30,12 +30,9 @@ fn titles(doc: &mut TableDocument) -> Vec<String> {
 #[test]
 fn keeps_the_kit_sdk_contract() {
     let fixture = new_document().sealed_save().unwrap();
-    // kition-kit's contract check saves right after the edit without a host's `prepare_save`;
-    // the edit ends as every host's save starts, with the seal (`save` refuses a replica nobody
-    // sealed).
     kition_kit::testing::check_contract::<TableDocument>(&fixture, "Tasks.ktable", |doc| {
         add_record(doc, "Write the plan");
-        doc.prepare_save()
+        Ok(())
     })
     .unwrap();
 }

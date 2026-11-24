@@ -48,25 +48,24 @@ fn projection(file: &TableFile) -> (Rows, Rows, Rows) {
 }
 
 fn rewrite(path: &str) -> Vec<u8> {
-    let old = TableFile::open_bytes(&std::fs::read(format!("{ROOT}{path}")).unwrap()).unwrap();
-    let objects: Map<String, Value> = state(old.replica()).unwrap();
+    let mut file = TableFile::open_bytes(&std::fs::read(format!("{ROOT}{path}")).unwrap()).unwrap();
+    let before = projection(&file);
+    let blobs = file.all_blobs_section().unwrap();
+    let doc_id = file.replica().doc_id();
+    let objects: Map<String, Value> = state(file.replica()).unwrap();
     let schema = kition_table_file::kdm::schema();
-    let (replica, ()) =
-        Replica::create_with(schema.clone(), old.replica().doc_id(), kition_table_file::ids::actor(), &Origin::system("create"), |tx| {
-            write_state(tx, &schema, &Map::new(), &objects).map_err(|err| KdmError::Encoding(err.to_string()))
-        })
-        .unwrap();
-    let mut fresh = TableFile::create_from_replica_in_memory(&replica.snapshot().unwrap()).unwrap();
-    let blobs = old.all_blobs_section().unwrap();
-    if !blobs.is_empty() {
-        fresh.add_blob_section(&blobs).unwrap();
-    }
-    fresh.seal().unwrap();
-    let out = fresh.content_bytes().unwrap();
+    let (replica, ()) = Replica::create_with(schema.clone(), doc_id, kition_table_file::ids::actor(), &Origin::system("create"), |tx| {
+        write_state(tx, &schema, &Map::new(), &objects).map_err(|err| KdmError::Encoding(err.to_string()))
+    })
+    .unwrap();
+    // The file's own projection takes the new replica, so its rows keep their numbers.
+    file.adopt_replica(replica).unwrap();
+    file.seal().unwrap();
+    let out = file.content_bytes().unwrap();
     let reopened = TableFile::open_bytes(&out).unwrap();
-    assert_eq!(reopened.replica().doc_id(), old.replica().doc_id(), "{path}: the same document");
+    assert_eq!(reopened.replica().doc_id(), doc_id, "{path}: the same document");
     assert_eq!(state(reopened.replica()).unwrap(), objects, "{path}: the same objects, ids and values");
-    assert_eq!(projection(&reopened), projection(&old), "{path}: the same tables, fields and records");
+    assert_eq!(projection(&reopened), before, "{path}: the same tables, fields and records");
     assert_eq!(reopened.all_blobs_section().unwrap(), blobs, "{path}: the same blobs");
     out
 }
