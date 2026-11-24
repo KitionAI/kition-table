@@ -151,7 +151,8 @@ fn a_replica_from_the_file_and_one_with_the_whole_history_converge() {
     assert_eq!(records(&doc), records(&file));
     let record = doc.file().get_record(1, kept).unwrap();
     assert_eq!((record.values["title"].clone(), record.values["notes"].clone()), (json!("From the history"), json!("Start from the file")));
-    assert_eq!(doc.version(), file.version());
+    // The same version, compared as versions: its encoding lists the actors in no fixed order.
+    assert_eq!(doc.file().replica_version(), file.file().replica_version());
 }
 
 #[test]
