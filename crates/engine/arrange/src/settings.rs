@@ -1,9 +1,9 @@
 //! What a view does to its table's records: its filter, its groups and its sorts.
 //!
-//! A view's settings come from both places they are written: the editor's config keys
-//! (`filter_tree`, `sort_items`, `sort`, `group_items`, `group_field_name`) and the engine's
-//! (`views.putFilterTree`, `views.putSorts`, `views.putGroups`: the `filter_tree`, `sorts` and
-//! `groups` keys, or the filter rows of a file written before them). The editor's keys win.
+//! A view's settings are its config's `filter_tree`, `sorts` and `groups` (the view's `Filter`,
+//! `Sort` and `Group` objects), which the editor and the engine (`views.putFilterTree`,
+//! `views.putSorts`, `views.putGroups`) write alike, and the editor's `sort` and
+//! `group_field_name` when those name none.
 
 use kition_table_file::{Field, FilterTree, Record, TableFile, View, ViewSort};
 use serde_json::{Map, Value};
@@ -15,22 +15,7 @@ fn failed(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
-/// `[(field, descending)]` from the editor's `[{field_name, direction}]` items.
-fn named_items<'f>(config: &Map<String, Value>, key: &str, fields: &'f [Field]) -> Vec<(&'f Field, bool)> {
-    config
-        .get(key)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|item| {
-            let name = item.get("field_name").and_then(Value::as_str)?;
-            let field = fields.iter().find(|field| field.name == name)?;
-            Some((field, item.get("direction").and_then(Value::as_str) == Some("desc")))
-        })
-        .collect()
-}
-
-/// One of the engine's sorts or groups: its field by name or by id, and its direction.
+/// One sort or group: its field by name or by id, and its direction.
 struct Item {
     name: Option<String>,
     id: i64,
@@ -43,7 +28,7 @@ impl From<&ViewSort> for Item {
     }
 }
 
-/// The engine's sorts or groups as a config holds them (`[{field_name | field_id, direction}]`).
+/// The sorts or groups as a config holds them (`[{field_name | field_id, direction}]`).
 fn engine_items(config: &Map<String, Value>, key: &str) -> Option<Vec<Item>> {
     Some(
         config
@@ -79,10 +64,10 @@ impl Arrangement {
         }
     }
 
-    /// The settings of `view` with the editor's keys of `config` in place of the stored ones:
-    /// what the editor shows while its settings are not saved yet (or cannot be, read-only). The
-    /// engine's sorts and groups stay the stored ones unless `config` names its own, as a config
-    /// the editor writes keeps them (`views.update`).
+    /// The settings of `view` with the keys of `config` in place of the stored ones: what the
+    /// editor shows while its settings are not saved yet (or cannot be, read-only). The sorts and
+    /// groups stay the stored ones unless `config` names its own, as a config written without
+    /// them keeps them (`views.update`).
     pub fn of_config(file: &TableFile, fields: &[Field], view: &View, config: &Map<String, Value>) -> Result<Self, String> {
         let stored = &view.config;
         let filter = match config.get("filter_tree") {
@@ -105,10 +90,7 @@ impl Arrangement {
                 })
                 .collect())
         };
-        let mut groups: Vec<(&Field, bool)> = named_items(config, "group_items", fields);
-        if groups.is_empty() {
-            groups = engine("groups", &|| file.list_view_groups(view.id).map_err(failed))?;
-        }
+        let mut groups = engine("groups", &|| file.list_view_groups(view.id).map_err(failed))?;
         if groups.is_empty()
             && let Some(name) = config.get("group_field_name").and_then(Value::as_str)
             && let Some(field) = fields.iter().find(|field| field.name == name)
@@ -116,16 +98,13 @@ impl Arrangement {
         {
             groups.push((field, false));
         }
-        let mut sorts: Vec<(&Field, bool)> = named_items(config, "sort_items", fields);
+        let mut sorts = engine("sorts", &|| file.list_view_sorts(view.id).map_err(failed))?;
         if sorts.is_empty()
             && let Some(sort) = config.get("sort")
             && let Some(name) = sort.get("field_name").and_then(Value::as_str)
             && let Some(field) = fields.iter().find(|field| field.name == name)
         {
             sorts.push((field, sort.get("direction").and_then(Value::as_str) == Some("desc")));
-        }
-        if sorts.is_empty() {
-            sorts = engine("sorts", &|| file.list_view_sorts(view.id).map_err(failed))?;
         }
         let owned = |items: Vec<(&Field, bool)>| items.into_iter().map(|(field, descending)| (field.clone(), descending)).collect();
         Ok(Self { filter, groups: owned(groups), sorts: owned(sorts) })

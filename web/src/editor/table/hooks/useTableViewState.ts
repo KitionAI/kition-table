@@ -30,6 +30,14 @@ export type TableViewSettings = {
   frozenColumnCount: number
 }
 
+/**
+ * A view's sorts or groups as the editor lists them: each with an id, which the ones the engine
+ * wrote (`views.putSorts`, `views.putGroups`) do not carry; theirs is made from its place.
+ */
+function keyed<T extends { id?: string; field_name: string }>(items: T[] | undefined, kind: string): Array<T & { id: string }> {
+  return Array.isArray(items) ? items.map((item, index) => ({ ...item, id: item.id || `${kind}:${index}:${item.field_name}` })) : []
+}
+
 /** The settings a view's stored config gives, with the editor's defaults for what it leaves out. */
 export function viewSettingsOf(view: DataView | null | undefined): TableViewSettings {
   const config = readViewConfig(view)
@@ -41,9 +49,9 @@ export function viewSettingsOf(view: DataView | null | undefined): TableViewSett
     filterTree: parseFilterTree(config.filter_tree),
     sortFieldName: config.sort?.field_name || '',
     sortDirection: config.sort?.direction || 'asc',
-    sortItems: Array.isArray(config.sort_items) ? config.sort_items : [],
+    sortItems: keyed(config.sorts, 'sort'),
     groupFieldName: config.group_field_name || '',
-    groupItems: Array.isArray(config.group_items) ? config.group_items : [],
+    groupItems: keyed(config.groups, 'group'),
     coverFieldName: config.cover_field_name || '',
     rowHeightKey: config.row_height || 'medium',
     frozenColumnCount: typeof config.frozen_column_count === 'number' ? config.frozen_column_count : 1,
@@ -57,9 +65,9 @@ export function viewConfigOf(settings: TableViewSettings): DataInlineViewConfig 
     filter: settings.filterFieldName ? { field_name: settings.filterFieldName, operator: settings.filterOperator, value: settings.filterValue } : undefined,
     filter_tree: settings.filterTree && settings.filterTree.children.length > 0 ? settings.filterTree : undefined,
     sort: settings.sortFieldName ? { field_name: settings.sortFieldName, direction: settings.sortDirection } : undefined,
-    sort_items: settings.sortItems.length ? settings.sortItems : undefined,
+    sorts: settings.sortItems.length ? settings.sortItems : undefined,
     group_field_name: settings.groupFieldName || undefined,
-    group_items: settings.groupItems.length ? settings.groupItems : undefined,
+    groups: settings.groupItems.length ? settings.groupItems : undefined,
     cover_field_name: settings.coverFieldName || undefined,
     row_height: settings.rowHeightKey,
     frozen_column_count: settings.frozenColumnCount,

@@ -450,11 +450,10 @@ impl<'a> Projector<'a> {
 
     /// The view whose filters, sorts or groups hold `item`.
     fn view_of_item(&self, item: &ObjectId) -> Option<ObjectId> {
-        self.replica.objects_of_type(VIEW).into_iter().find(|view| {
-            ["filters", "sorts", "groups", "sortItems", "groupItems"]
-                .iter()
-                .any(|list| self.replica.list(view, list).is_ok_and(|items| items.contains(item)))
-        })
+        self.replica
+            .objects_of_type(VIEW)
+            .into_iter()
+            .find(|view| ["filters", "sorts", "groups"].iter().any(|list| self.replica.list(view, list).is_ok_and(|items| items.contains(item))))
     }
 
     /// The field whose options or other choices hold `choice`.
@@ -1929,7 +1928,7 @@ fn read_view(replica: &Replica, id: &ObjectId) -> Result<ViewRow> {
         locked: replica.get(id, "locked")? == Value::Bool(true),
         config: super::view_store::assemble(replica, id)?,
         widths: replica.map_entries(id, "widths")?.into_iter().filter_map(|(key, value)| Some((key, value.as_i64()?))).collect(),
-        hidden: replica.map_entries(id, "hidden")?.into_iter().filter_map(|(key, value)| Some((key, value.as_bool()?))).collect(),
+        hidden: replica.map_entries(id, super::view_store::HIDDEN_FIELDS)?.into_iter().map(|(key, _)| (key, true)).collect(),
     })
 }
 

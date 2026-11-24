@@ -23,28 +23,6 @@ fn ordering_key(table: &str) -> &'static str {
     if table == "kition_view_groups" { GROUPS_KEY } else { SORTS_KEY }
 }
 
-/// A new view config that keeps the sorts and groups of `current` unless it names its own:
-/// the table editor writes whole configs and knows nothing of them.
-pub(crate) fn keep_orderings(current: &Map<String, Value>, config: &Value) -> Result<Value> {
-    let mut parsed = match config {
-        Value::String(raw) if !raw.trim().is_empty() => match serde_json::from_str(raw) {
-            Ok(value) => value,
-            Err(_) => return Ok(config.clone()),
-        },
-        other => other.clone(),
-    };
-    if let Value::Object(map) = &mut parsed {
-        for key in [SORTS_KEY, GROUPS_KEY] {
-            if !map.contains_key(key)
-                && let Some(kept) = current.get(key)
-            {
-                map.insert(key.to_owned(), kept.clone());
-            }
-        }
-    }
-    Ok(parsed)
-}
-
 fn field_names_by_id(conn: &Connection, table_id: i64) -> Result<HashMap<i64, String>> {
     let mut statement = conn.prepare("SELECT id, name FROM kition_fields WHERE table_id = ?1 AND deleted_at IS NULL")?;
     let rows = statement.query_map([table_id], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<std::result::Result<_, _>>()?;

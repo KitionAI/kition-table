@@ -255,7 +255,7 @@ test('gridOpen and gridSync answer the arrangement as axis bytes the editor read
     return Array.from({ length: view.getUint32(16, true) }, (_, index) => view.getFloat64(32 + index * 8, true))
   }
   const byTitle = Object.fromEntries(call(doc, 'records.list', { tableId: table.id }).result.items.map((record) => [record.values[primary], record.id]))
-  const sorted = doc.gridOpen(JSON.stringify({ tableId: table.id, viewId: table.views[0].id, config: { sort_items: [{ id: 's', field_name: primary, direction: 'asc' }] } }))
+  const sorted = doc.gridOpen(JSON.stringify({ tableId: table.id, viewId: table.views[0].id, config: { sorts: [{ id: 's', field_name: primary, direction: 'asc' }] } }))
   assert.ok(sorted instanceof Uint8Array)
   assert.deepEqual(ids(sorted), [byTitle.a, byTitle.b, byTitle.c])
   assert.equal(doc.gridSync().length, 0)

@@ -329,7 +329,7 @@ try {
     // as a person sees the rows sorted before removing the rule again. Removed while that save is
     // under way, the rule came back with the save's answer, and the next steps found the rows
     // sorted (seen in WebKit on a hosted runner).
-    const savedSorts = async () => (await tables())[0].views[0].config?.sort_items?.length ?? 0
+    const savedSorts = async () => (await tables())[0].views[0].config?.sorts?.length ?? 0
     await until(async () => (await savedSorts()) === 1, 100)
     const label = await direction.locator('select[aria-label="Sort direction"]').evaluate((select) => select.selectedOptions[0]?.text ?? '')
     const [menuBox, rowBox, fieldBox, directionBox, removeBox] = await Promise.all([menu, row, field, direction, remove].map((part) => part.boundingBox()))

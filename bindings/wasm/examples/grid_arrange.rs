@@ -28,7 +28,7 @@ fn main() -> Result<(), String> {
         ("table order", json!({ "tableId": table_id, "viewId": all, "config": {} })),
         (
             "sort by Text 1",
-            json!({ "tableId": table_id, "viewId": all, "config": { "sort_items": [{ "id": "s", "field_name": text, "direction": "asc" }] } }),
+            json!({ "tableId": table_id, "viewId": all, "config": { "sorts": [{ "id": "s", "field_name": text, "direction": "asc" }] } }),
         ),
         ("view Grouped as stored", json!({ "tableId": table_id, "viewId": view("Grouped").unwrap_or(all) })),
         (
@@ -40,7 +40,7 @@ fn main() -> Result<(), String> {
         ("search \"review\"", json!({ "tableId": table_id, "viewId": all, "config": {}, "query": "review" })),
         (
             "sort by Text 1 again",
-            json!({ "tableId": table_id, "viewId": all, "config": { "sort_items": [{ "id": "s", "field_name": text, "direction": "asc" }] } }),
+            json!({ "tableId": table_id, "viewId": all, "config": { "sorts": [{ "id": "s", "field_name": text, "direction": "asc" }] } }),
         ),
     ];
     for (label, params) in &scenarios {

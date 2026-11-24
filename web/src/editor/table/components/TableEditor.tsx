@@ -255,9 +255,9 @@ function TableEditorBody({
     return {
       filter_tree: config.filter_tree,
       sort: config.sort,
-      sort_items: config.sort_items,
+      sorts: config.sorts,
       group_field_name: config.group_field_name,
-      group_items: config.group_items,
+      groups: config.groups,
     } as Record<string, unknown>
   }, [hiddenFieldNames, filterFieldName, filterOperator, filterValue, filterTree, sortFieldName, sortDirection, sortItems, groupFieldName, groupItems, coverFieldName, rowHeightKey, frozenColumnCount])
   const arrangedRevision = useMemo(() => ({}), [records, fields])

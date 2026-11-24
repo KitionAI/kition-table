@@ -52,14 +52,18 @@ export type ImagePreviewState = { items: DataAttachment[]; index: number } | nul
 export type RowDropPosition = 'before' | 'after'
 export type RecordContextMenuState = { recordId: number; x: number; y: number } | null
 export type ColumnHeaderMenuState = { fieldId: number; x: number; y: number } | null
+/** One of a view's sorts (`sorts`, the view's `Sort` objects); `field_id` as the engine answers it. */
 export type DataInlineSortItem = {
   id: string
   field_name: string
+  field_id?: number
   direction: SortDirection
 }
+/** One of a view's groups (`groups`, the view's `Group` objects). */
 export type DataInlineGroupItem = {
   id: string
   field_name: string
+  field_id?: number
   direction: SortDirection
 }
 export type DataInlineViewConfig = {
@@ -67,9 +71,9 @@ export type DataInlineViewConfig = {
   filter?: { field_name?: string; operator?: string; value?: string }
   filter_tree?: DataInlineFilterGroup
   sort?: { field_name?: string; direction?: SortDirection }
-  sort_items?: DataInlineSortItem[]
+  sorts?: DataInlineSortItem[]
   group_field_name?: string
-  group_items?: DataInlineGroupItem[]
+  groups?: DataInlineGroupItem[]
   cover_field_name?: string
   row_height?: GridRowHeightKey
   frozen_column_count?: number

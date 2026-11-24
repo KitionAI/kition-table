@@ -148,7 +148,7 @@ fn the_axes_follow_the_editors_config_before_it_is_saved() {
     assert_eq!(stored["rowRuns"], json!([[40.0, 70], [32.0, 1]]));
     assert_eq!(stored["columns"].as_array().unwrap().len(), 7);
     // Groups the editor has not saved yet: headers, and no drag handle in the row head.
-    let groups = json!({ "group_items": [{ "id": "g", "field_name": "status", "direction": "asc" }] });
+    let groups = json!({ "groups": [{ "id": "g", "field_name": "status", "direction": "asc" }] });
     let axis = doc.grid_open(&json!({ "tableId": table_id, "viewId": grid, "config": groups.clone() })).unwrap();
     let grouped = doc.grid_axes(&axis, &json!({ "tableId": table_id, "viewId": grid, "config": groups })).unwrap();
     assert_eq!(grouped["rowHeadWidth"], json!(48.0));

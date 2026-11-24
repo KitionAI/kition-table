@@ -227,7 +227,7 @@ fn a_view_config_names_fields_by_id_and_never_stores_the_search() {
     let view = ok(here.get_table(c.table)).views.first().map(|view| view.id).unwrap_or_default();
     let config = json!({
         "search_query": "secret words",
-        "sort_items": [{ "field_name": "status", "direction": "desc" }],
+        "sorts": [{ "field_name": "status", "direction": "desc" }],
         "group_field_name": "status",
         "hidden_field_names": ["notes"],
         "filter_tree": { "kind": "group", "conjunction": "and", "children": [
@@ -237,7 +237,9 @@ fn a_view_config_names_fields_by_id_and_never_stores_the_search() {
     let updated = ok(here.update_view(c.table, view, &ViewPatch { config: Some(config), ..ViewPatch::default() }));
     // The projection, which the API and the editor read, names the fields by name.
     assert_eq!(updated.config.get("search_query"), None);
-    assert_eq!(updated.config["sort_items"], json!([{ "field_name": "status", "direction": "desc" }]));
+    let sorts = updated.config["sorts"].as_array().cloned().unwrap_or_default();
+    assert_eq!(sorts.len(), 1, "{sorts:?}");
+    assert_eq!((&sorts[0]["field_name"], &sorts[0]["direction"]), (&json!("status"), &json!("desc")), "{sorts:?}");
     assert_eq!(updated.config["group_field_name"], json!("status"));
     assert_eq!(updated.config["hidden_field_names"], json!(["notes"]));
     assert_eq!(updated.config["filter_tree"]["children"][0]["field_name"], json!("title"));
@@ -246,9 +248,9 @@ fn a_view_config_names_fields_by_id_and_never_stores_the_search() {
     let register = ok(here.replica().get(&object, "config"));
     let stored = ok(kition_table_file::kdm::view_store::assemble(here.replica(), &object));
     let status = status_object(&here);
-    assert_eq!(stored["sort_items"], json!([{ "field": status, "direction": "desc" }]));
-    assert_eq!(ok(here.replica().list(&object, "sortItems")).len(), 1, "the editor's sorts are Sort objects");
-    assert!(register.get("sort_items").is_none(), "not in the config register: {register}");
+    assert_eq!(stored["sorts"], json!([{ "field": status, "direction": "desc" }]));
+    assert_eq!(ok(here.replica().list(&object, "sorts")).len(), 1, "the sorts are Sort objects");
+    assert!(register.get("sorts").is_none(), "not in the config register: {register}");
     assert_eq!(register["group_field"], json!(status));
     assert!(register.get("search_query").is_none() && register.get("group_field_name").is_none());
     assert!(!String::from_utf8_lossy(&ok(here.replica().snapshot())).contains("secret words"), "the search is in no byte of the replica");
@@ -315,21 +317,21 @@ fn sorts_reordered_on_one_side_and_added_on_the_other_merge() {
         json!(names.iter().map(|name| json!({ "id": format!("s-{name}"), "field_name": name, "direction": "asc" })).collect::<Vec<_>>())
     };
     edit_view(&mut c.here, c.table, |config| {
-        config.insert("sort_items".into(), items(&["title", "status"]));
+        config.insert("sorts".into(), items(&["title", "status"]));
     });
     let start = ok(c.here.export_replica_changes(&c.there.replica_version()));
     ok(c.there.import_replica_changes(&start));
     edit_view(&mut c.here, c.table, |config| {
-        config.insert("sort_items".into(), items(&["status", "title"]));
+        config.insert("sorts".into(), items(&["status", "title"]));
     });
     edit_view(&mut c.there, c.table, |config| {
-        config.insert("sort_items".into(), items(&["title", "status", "notes"]));
+        config.insert("sorts".into(), items(&["title", "status", "notes"]));
     });
     c.exchange();
     let (here, there) = (view_config(&c.here, c.table), view_config(&c.there, c.table));
     assert_eq!(here, there);
     let names: Vec<&str> =
-        here["sort_items"].as_array().unwrap_or_else(|| panic!("{here:?}")).iter().filter_map(|item| item["field_name"].as_str()).collect();
+        here["sorts"].as_array().unwrap_or_else(|| panic!("{here:?}")).iter().filter_map(|item| item["field_name"].as_str()).collect();
     assert_eq!(names.len(), 3, "{names:?}");
     let at = |name: &str| names.iter().position(|found| *found == name).unwrap_or_else(|| panic!("{name} in {names:?}"));
     assert!(at("status") < at("title"), "the reorder is kept: {names:?}");

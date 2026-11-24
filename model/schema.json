@@ -82,12 +82,9 @@
         "filters": { "kind": "list", "of": "Filter" },
         "sorts": { "kind": "list", "of": "Sort" },
         "groups": { "kind": "list", "of": "Group" },
-        "sortItems": { "kind": "list", "of": "Sort" },
-        "groupItems": { "kind": "list", "of": "Group" },
         "hiddenFields": { "kind": "map" },
         "layout": { "kind": "map" },
-        "widths": { "kind": "map" },
-        "hidden": { "kind": "map" }
+        "widths": { "kind": "map" }
       }
     },
     "Filter": {

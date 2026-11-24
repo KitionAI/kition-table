@@ -7,10 +7,11 @@
 //! - `filter_tree` is `View.filters`: a list of `Filter` objects, groups and conditions, each
 //!   naming its group (`parent`; none: the root group) and, a condition, its field by object id.
 //!   Two filters added at once are both kept.
-//! - `sorts` and `groups` (the API's) are `View.sorts` and `View.groups`, `sort_items` and
-//!   `group_items` (the editor's) `View.sortItems` and `View.groupItems`: lists of `Sort` and
-//!   `Group` objects (`{key, field, direction}`), so sorts added and reordered at once merge.
-//! - `hidden_fields` is the map `View.hiddenFields` (field id to its place in the list) and
+//! - `sorts` and `groups` (the editor's and the API's alike) are `View.sorts` and `View.groups`:
+//!   lists of `Sort` and `Group` objects (`{key, field, direction}`), so sorts added and
+//!   reordered at once merge.
+//! - `hidden_fields` is the map `View.hiddenFields` (field id to its place in the list), the one
+//!   place a hidden column is kept (`views.patchField`'s `visible` writes it too), and
 //!   `field_layout` the map `View.layout` (field id to `{position, frozen}`): one entry per field.
 //!
 //! What stays in the `config` register changes as a unit: `row_height`, `frozen_column_count`,
@@ -29,10 +30,12 @@ use super::model::{Listing, place_items};
 use crate::Result;
 
 /// `(config key, View list field, item type)`.
-const LISTS: [(&str, &str, &str); 4] =
-    [("sorts", "sorts", "Sort"), ("groups", "groups", "Group"), ("sort_items", "sortItems", "Sort"), ("group_items", "groupItems", "Group")];
+const LISTS: [(&str, &str, &str); 2] = [("sorts", "sorts", "Sort"), ("groups", "groups", "Group")];
 const FILTER_TREE: &str = "filter_tree";
 const HIDDEN: (&str, &str) = ("hidden_fields", "hiddenFields");
+
+/// The view map that holds the hidden columns: field id to its place among them.
+pub const HIDDEN_FIELDS: &str = HIDDEN.1;
 const LAYOUT: (&str, &str) = ("field_layout", "layout");
 
 /// The config keys that are containers of the view, not part of its `config` register.

@@ -394,6 +394,17 @@ export type GroupItem = {
   direction: SortDirection
 }
 
+/**
+ * One of a view config's `sorts` or `groups` (the view's `Sort` and `Group` objects): its field by
+ * name and, as the engine answers it, by id; the editor's carry their own `id`.
+ */
+export type ViewOrderingEntry = {
+  id?: string
+  field_name?: string
+  field_id?: number
+  direction: SortDirection
+}
+
 export type RowHeight = 'short' | 'medium' | 'tall' | 'extra_tall'
 
 export type ViewFieldLayout = {
@@ -407,8 +418,8 @@ export type ViewFieldLayout = {
 
 export type DataViewConfig = {
   filter_tree?: FilterGroup | null
-  sorts?: SortItem[]
-  groups?: GroupItem[]
+  sorts?: ViewOrderingEntry[]
+  groups?: ViewOrderingEntry[]
   row_height?: RowHeight
   frozen_column_count?: number
   hidden_field_names?: string[]

@@ -1,7 +1,7 @@
 //! Field references inside a view's config.
 //!
 //! Writers (the editor, the API) name a view config's fields by name (`field_name` in the entries
-//! of `filter_tree`, `sorts`, `groups`, `sort_items`, `group_items`, `sort` and `filter`; `group_field_name`,
+//! of `filter_tree`, `sorts`, `groups`, `sort` and `filter`; `group_field_name`,
 //! `cover_field_name`, `hidden_field_names`), and the API's sorts and groups also by the field's
 //! integer id (`field_id`), which is local to one file's projection. The document names them by
 //! object id instead (`field`, `group_field`, `cover_field`, `hidden_fields`), so the references
@@ -16,7 +16,7 @@ use kition_kdm::ObjectId;
 use serde_json::{Map, Value, json};
 
 /// Config keys whose value is a list of entries naming a field.
-const ENTRY_LISTS: [&str; 4] = ["sorts", "groups", "sort_items", "group_items"];
+const ENTRY_LISTS: [&str; 2] = ["sorts", "groups"];
 /// Config keys whose value is one entry naming a field: the editor's single sort and filter.
 const ENTRY_KEYS: [&str; 2] = ["sort", "filter"];
 /// Entry lists whose entries the projection also gives the field's integer id, as the API wrote them.

@@ -600,7 +600,7 @@ fn table_of_view(tx: &Tx<'_>, view: &ObjectId) -> Result<Option<ObjectId>> {
 }
 
 /// The lists of a view whose items are its own: its filters, sorts and groups.
-const VIEW_ITEM_LISTS: [&str; 5] = ["filters", "sorts", "groups", "sortItems", "groupItems"];
+const VIEW_ITEM_LISTS: [&str; 3] = ["filters", "sorts", "groups"];
 
 /// Deletes a view's filters, sorts and groups.
 fn delete_view_items(tx: &mut Tx<'_>, view: &ObjectId) -> Result<()> {
@@ -624,11 +624,17 @@ pub fn set_view_width(tx: &mut Tx<'_>, view: &ObjectId, field: &ObjectId, width:
     Ok(())
 }
 
-/// Hides or shows a column. Both states are stored, so the latest choice wins under concurrency.
+/// Hides or shows a column: an entry of the view's hidden columns (`View.hiddenFields`, field id
+/// to its place among them), added after the others or removed.
 pub fn set_view_hidden(tx: &mut Tx<'_>, view: &ObjectId, field: &ObjectId, hidden: bool) -> Result<()> {
     require(tx, view, VIEW)?;
-    if tx.map_get(view, "hidden", field.as_str())? != json!(hidden) {
-        tx.map_set(view, "hidden", field.as_str(), json!(hidden))?;
+    let map = super::view_store::HIDDEN_FIELDS;
+    let held = !tx.map_get(view, map, field.as_str())?.is_null();
+    if hidden && !held {
+        let next = tx.map_entries(view, map)?.iter().filter_map(|(_, place)| place.as_i64()).max().map_or(0, |last| last + 1);
+        tx.map_set(view, map, field.as_str(), json!(next))?;
+    } else if !hidden && held {
+        tx.map_delete(view, map, field.as_str())?;
     }
     Ok(())
 }

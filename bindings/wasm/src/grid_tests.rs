@@ -75,7 +75,7 @@ impl Table {
     }
 
     fn sorted_by_title(&self) -> Value {
-        json!({ "config": { "sort_items": [{ "id": "s", "field_name": self.title, "direction": "asc" }] } })
+        json!({ "config": { "sorts": [{ "id": "s", "field_name": self.title, "direction": "asc" }] } })
     }
 }
 
@@ -218,7 +218,7 @@ fn changes_imported_from_a_co_editor_are_arranged() {
 #[test]
 fn collapsed_groups_are_marked_without_arranging_again() {
     let mut t = table();
-    let config = json!({ "config": { "group_items": [{ "id": "g", "field_name": t.score, "direction": "desc" }] } });
+    let config = json!({ "config": { "groups": [{ "id": "g", "field_name": t.score, "direction": "desc" }] } });
     let open = t.open(config.clone());
     assert_eq!(t.titles(&open), ["a", "b", "c"]);
     assert_eq!(open.groups.iter().map(|group| group.id.as_str()).collect::<Vec<_>>(), ["g0:3", "g0:2", "g0:1"]);

@@ -379,10 +379,10 @@ impl<'a> ModelView<'a> {
             .collect();
         let hidden = self
             .replica
-            .map_entries(id, "hidden")?
+            .map_entries(id, super::view_store::HIDDEN_FIELDS)?
             .into_iter()
             .filter(|(key, _)| keep(key))
-            .filter_map(|(key, value)| Some((ObjectId::from_string(key), value.as_bool()?)))
+            .map(|(key, _)| (ObjectId::from_string(key), true))
             .collect();
         Ok(ViewData {
             id: id.clone(),

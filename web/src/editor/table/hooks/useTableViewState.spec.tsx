@@ -135,7 +135,7 @@ describe('useTableViewState', () => {
     // The first save starts half a second after the change, and is under way.
     await advance(500)
     expect(update).toHaveBeenCalledTimes(1)
-    expect(update.mock.calls[0][0].config.sort_items).toEqual([rule])
+    expect(update.mock.calls[0][0].config.sorts).toEqual([rule])
     // The rule is removed before that save answers; then it answers with the view holding the rule.
     act(() => state.setSortItems([]))
     await answer(answers, 0)
@@ -143,7 +143,7 @@ describe('useTableViewState', () => {
     // The removal is saved half a second later, and its answer is the view's.
     await advance(500)
     expect(update).toHaveBeenCalledTimes(2)
-    expect(update.mock.calls[1][0].config.sort_items).toBeUndefined()
+    expect(update.mock.calls[1][0].config.sorts).toBeUndefined()
     await answer(answers, 1)
     await settle()
     expect(state.sortItems).toEqual([])
@@ -171,7 +171,7 @@ describe('useTableViewState', () => {
 
 describe('viewConfigUnchanged', () => {
   it('takes the defaults the editor spells out for what a stored config leaves out', () => {
-    const stored = view({ sort_items: [{ field_name: 'name', direction: 'asc' }] })
+    const stored = view({ sorts: [{ field_name: 'name', direction: 'asc' }] })
     expect(viewConfigUnchanged(stored, viewConfigOf(viewSettingsOf(stored)))).toBe(true)
     expect(viewConfigUnchanged(view(null), { hidden_field_names: [], row_height: 'medium', frozen_column_count: 1 })).toBe(true)
     expect(viewConfigUnchanged(stored, { ...viewConfigOf(viewSettingsOf(stored)), row_height: 'short' })).toBe(false)

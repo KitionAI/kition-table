@@ -52,7 +52,7 @@ export function createTaskTrackerTemplate(
         type: 'grid',
         config: {
           group_field_name: 'progress',
-          group_items: [{ field_name: 'progress', direction: 'asc' }],
+          groups: [{ field_name: 'progress', direction: 'asc' }],
           frozen_column_count: 1,
         },
       }],

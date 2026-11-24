@@ -179,9 +179,10 @@ What the document holds, for raw writes: a select's options are `Choice` objects
 and `field`, and its `text`, which merges per character); a field's AI prompt is its `aiPrompt` text.
 A view's filters are `Filter` objects in `View.filters` (groups and conditions, each naming its
 group by `parent` and, a condition, its field by object id); its sorts and groups are `Sort` and
-`Group` objects in `View.sorts`, `View.groups` (the API's) and `View.sortItems`,
-`View.groupItems` (the editor's); its hidden columns and column layout are the maps
-`View.hiddenFields` and `View.layout`; `View.config` keeps the rest, which changes as a unit
+`Group` objects in `View.sorts` and `View.groups` (the config's `sorts` and `groups`, which the
+editor and `views.putSorts`/`views.putGroups` write alike); its hidden columns and column layout
+are the maps `View.hiddenFields` (the config's `hidden_field_names`, which `views.patchField`'s
+visibility writes too) and `View.layout`; `View.config` keeps the rest, which changes as a unit
 (row height, frozen columns, `group_field`, `cover_field`). A dashboard's widgets are `Widget`
 objects in `Dashboard.widgets` (`key`, `title`, `type`, `query` naming fields by object id,
 `settings`, `layout`). An AI action's instruction is the field's `aiPrompt` text, not a key of
