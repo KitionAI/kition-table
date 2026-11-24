@@ -205,13 +205,7 @@ fn arrange(file: &TableFile, table: &Table, view: Option<View>, rows: Option<(us
     // The editor freezes the first column unless the view says otherwise.
     let frozen = config.get("frozen_column_count").and_then(Value::as_u64).map_or(1, |count| count as usize);
     let primary = fields.iter().find(|field| field.is_primary).or_else(|| fields.first());
-    let board_field = groups
-        .first()
-        .copied()
-        .or_else(|| config.get("group_field_name").and_then(Value::as_str).and_then(|name| fields.iter().find(|field| field.name == name)))
-        .or_else(|| fields.iter().find(|field| field.field_type == "single_select"))
-        .or(primary)
-        .cloned();
+    let board_field = groups.first().copied().or_else(|| fields.iter().find(|field| field.field_type == "single_select")).or(primary).cloned();
     let cover_field = config
         .get("cover_field_name")
         .and_then(Value::as_str)

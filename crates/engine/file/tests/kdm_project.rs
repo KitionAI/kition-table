@@ -1100,7 +1100,7 @@ impl Twin {
                 table,
                 title: format!("V{}", rng.below(3)),
                 view_type: ["grid", "calendar", "kanban", "gallery", "bogus"][rng.below(5)].to_owned(),
-                config: if coin(rng, 50) { json!({ "sort": [{ "field": "title" }] }) } else { Value::Null },
+                config: if coin(rng, 50) { json!({ "density": [{ "field": "title" }] }) } else { Value::Null },
             },
             7 if view_count > 0 => Op::UpdateView {
                 table,

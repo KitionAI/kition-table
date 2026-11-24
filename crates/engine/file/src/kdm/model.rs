@@ -571,7 +571,10 @@ pub fn update_view(tx: &mut Tx<'_>, view: &ObjectId, patch: &ViewPatch) -> Resul
         let config = decode_json(config)?;
         let config = match table_of_view(tx, view)? {
             Some(table) => config_in(tx, &table, &config)?,
-            None => view_refs::config_to_kdm(&config, &|_| None),
+            None => match view_refs::refused_key(&config) {
+                Some((key, instead)) => return Err(TableFileError::invalid(format!("a view config has no `{key}`: its setting is `{instead}`"))),
+                None => view_refs::config_to_kdm(&config, &|_| None),
+            },
         };
         // A view without a config reads as `{}`: writing that back changes nothing (`store`).
         super::view_store::store(tx, view, &config)?;
@@ -582,6 +585,9 @@ pub fn update_view(tx: &mut Tx<'_>, view: &ObjectId, patch: &ViewPatch) -> Resul
 /// A view config in the document's form: fields named by name become object ids of `table`'s
 /// fields ([`view_refs::config_to_kdm`]), and the editor's private keys are left out.
 fn config_in(tx: &Tx<'_>, table: &ObjectId, config: &Value) -> Result<Value> {
+    if let Some((key, instead)) = view_refs::refused_key(config) {
+        return Err(TableFileError::invalid(format!("a view config has no `{key}`: its setting is `{instead}`")));
+    }
     let mut names: HashMap<String, ObjectId> = HashMap::new();
     for field in Listing::read(tx, table, "fields")?.ids() {
         names.entry(string(tx, &field, "name")?).or_insert(field);

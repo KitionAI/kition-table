@@ -2,8 +2,7 @@
 //!
 //! A view's settings are its config's `filter_tree`, `sorts` and `groups` (the view's `Filter`,
 //! `Sort` and `Group` objects), which the editor and the engine (`views.putFilterTree`,
-//! `views.putSorts`, `views.putGroups`) write alike, and the editor's `sort` and
-//! `group_field_name` when those name none.
+//! `views.putSorts`, `views.putGroups`) write alike.
 
 use kition_table_file::{Field, FilterTree, Record, TableFile, View, ViewSort};
 use serde_json::{Map, Value};
@@ -90,22 +89,8 @@ impl Arrangement {
                 })
                 .collect())
         };
-        let mut groups = engine("groups", &|| file.list_view_groups(view.id).map_err(failed))?;
-        if groups.is_empty()
-            && let Some(name) = config.get("group_field_name").and_then(Value::as_str)
-            && let Some(field) = fields.iter().find(|field| field.name == name)
-            && view.view_type == "grid"
-        {
-            groups.push((field, false));
-        }
-        let mut sorts = engine("sorts", &|| file.list_view_sorts(view.id).map_err(failed))?;
-        if sorts.is_empty()
-            && let Some(sort) = config.get("sort")
-            && let Some(name) = sort.get("field_name").and_then(Value::as_str)
-            && let Some(field) = fields.iter().find(|field| field.name == name)
-        {
-            sorts.push((field, sort.get("direction").and_then(Value::as_str) == Some("desc")));
-        }
+        let groups = engine("groups", &|| file.list_view_groups(view.id).map_err(failed))?;
+        let sorts = engine("sorts", &|| file.list_view_sorts(view.id).map_err(failed))?;
         let owned = |items: Vec<(&Field, bool)>| items.into_iter().map(|(field, descending)| (field.clone(), descending)).collect();
         Ok(Self { filter, groups: owned(groups), sorts: owned(sorts) })
     }

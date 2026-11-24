@@ -140,7 +140,11 @@ const ENGINE_VIEW_KEYS = new Set([
   'search_query',
   'hidden_field_names',
   'cover_field_name',
+  // Keys a view config no longer has: the engine refuses them.
+  'sort',
+  'filter',
   'group_field_name',
+  'group_field',
 ])
 /** At most this many inert option or config keys a design sets on one field or view. */
 const MAX_INERT_KEYS = 8
@@ -423,7 +427,7 @@ export function fieldSeeds(plan: TablePlan) {
  * The views of `tables.create`: a calendar only when the table has a date field; a kind the engine
  * has no view for is a grid. A view's config takes `groupField` (kanban: a single_select or checkbox
  * field) and `coverField` (gallery: an attachment or url field) by the field's title, as the
- * engine's `group_field_name` and `cover_field_name`; a title that names no such field is left out.
+ * engine's first `groups` entry and `cover_field_name`; a title that names no such field is left out.
  * Config keys the engine reads are never taken from a design as given; other keys only as short
  * inert scalars.
  */
@@ -451,7 +455,7 @@ export function viewSeeds(plan: TablePlan) {
           inert += 1
         }
         const group = type === 'kanban' ? fieldNamed(view.config.groupField, ['single_select', 'checkbox']) : undefined
-        if (group) kept.group_field_name = group
+        if (group) kept.groups = [{ field_name: group, direction: 'asc' }]
         const cover = type === 'gallery' ? fieldNamed(view.config.coverField, ['attachment', 'url']) : undefined
         if (cover) kept.cover_field_name = cover
         config = Object.keys(kept).length ? kept : null

@@ -368,7 +368,7 @@ fn references(file: &TableFile, needs: &mut Needs, selected: &mut Selection, tab
                         }
                     }
                 }
-                if matches!(key.as_str(), "field_name" | "group_field_name" | "cover_field_name" | "group_by_field_name" | "source_field_name") {
+                if matches!(key.as_str(), "field_name" | "cover_field_name" | "group_by_field_name" | "source_field_name") {
                     if let Some(name) = value.as_str() {
                         selected.name(table, name);
                     }

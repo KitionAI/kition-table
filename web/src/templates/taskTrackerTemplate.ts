@@ -51,7 +51,6 @@ export function createTaskTrackerTemplate(
         title: 'Grid view',
         type: 'grid',
         config: {
-          group_field_name: 'progress',
           groups: [{ field_name: 'progress', direction: 'asc' }],
           frozen_column_count: 1,
         },

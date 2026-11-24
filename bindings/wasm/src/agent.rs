@@ -326,7 +326,7 @@ const VIEW_TYPE_NOTES: &[(&str, &str)] = &[
     ("grid", "Rows and columns."),
     (
         "kanban",
-        "Cards in columns, one per choice of a single_select field (config group_field_name, else the first single_select) or per checkbox value.",
+        "Cards in columns, one per choice of a single_select field (the field of the config's first groups entry, else the first single_select) or per checkbox value.",
     ),
     ("calendar", "Records placed on the table's first date or datetime field."),
     ("gallery", "Cards with a cover picture (config cover_field_name, else the first attachment or url field)."),

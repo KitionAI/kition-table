@@ -1581,7 +1581,7 @@
                     "calendar",
                     "gallery"
                   ],
-                  "description": "The view's type (default grid).\ngrid: Rows and columns.\nkanban: Cards in columns, one per choice of a single_select field (config group_field_name, else the first single_select) or per checkbox value.\ncalendar: Records placed on the table's first date or datetime field.\ngallery: Cards with a cover picture (config cover_field_name, else the first attachment or url field)."
+                  "description": "The view's type (default grid).\ngrid: Rows and columns.\nkanban: Cards in columns, one per choice of a single_select field (the field of the config's first groups entry, else the first single_select) or per checkbox value.\ncalendar: Records placed on the table's first date or datetime field.\ngallery: Cards with a cover picture (config cover_field_name, else the first attachment or url field)."
                 },
                 "config": {}
               },
@@ -4726,7 +4726,7 @@
               "calendar",
               "gallery"
             ],
-            "description": "The view's type (default grid).\ngrid: Rows and columns.\nkanban: Cards in columns, one per choice of a single_select field (config group_field_name, else the first single_select) or per checkbox value.\ncalendar: Records placed on the table's first date or datetime field.\ngallery: Cards with a cover picture (config cover_field_name, else the first attachment or url field)."
+            "description": "The view's type (default grid).\ngrid: Rows and columns.\nkanban: Cards in columns, one per choice of a single_select field (the field of the config's first groups entry, else the first single_select) or per checkbox value.\ncalendar: Records placed on the table's first date or datetime field.\ngallery: Cards with a cover picture (config cover_field_name, else the first attachment or url field)."
           },
           "config": {},
           "asOrigin": {
@@ -4967,7 +4967,7 @@
               "calendar",
               "gallery"
             ],
-            "description": "The view's type (default grid).\ngrid: Rows and columns.\nkanban: Cards in columns, one per choice of a single_select field (config group_field_name, else the first single_select) or per checkbox value.\ncalendar: Records placed on the table's first date or datetime field.\ngallery: Cards with a cover picture (config cover_field_name, else the first attachment or url field)."
+            "description": "The view's type (default grid).\ngrid: Rows and columns.\nkanban: Cards in columns, one per choice of a single_select field (the field of the config's first groups entry, else the first single_select) or per checkbox value.\ncalendar: Records placed on the table's first date or datetime field.\ngallery: Cards with a cover picture (config cover_field_name, else the first attachment or url field)."
           },
           "config": {
             "description": "The view's configuration object."

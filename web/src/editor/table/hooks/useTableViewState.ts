@@ -10,20 +10,13 @@ import {
   type DataInlineViewConfig,
   type DataInlineViewMode,
   type GridRowHeightKey,
-  type SortDirection,
 } from '../lib/tableEditorShared'
 
 /** The view settings the editor holds as state, and persists as the view's config. */
 export type TableViewSettings = {
   hiddenFieldNames: ReadonlySet<string>
-  filterFieldName: string
-  filterOperator: string
-  filterValue: string
   filterTree: DataInlineFilterGroup | null
-  sortFieldName: string
-  sortDirection: SortDirection
   sortItems: DataInlineSortItem[]
-  groupFieldName: string
   groupItems: DataInlineGroupItem[]
   coverFieldName: string
   rowHeightKey: GridRowHeightKey
@@ -43,14 +36,8 @@ export function viewSettingsOf(view: DataView | null | undefined): TableViewSett
   const config = readViewConfig(view)
   return {
     hiddenFieldNames: new Set(config.hidden_field_names || []),
-    filterFieldName: config.filter?.field_name || '',
-    filterOperator: config.filter?.operator || 'contains',
-    filterValue: config.filter?.value || '',
     filterTree: parseFilterTree(config.filter_tree),
-    sortFieldName: config.sort?.field_name || '',
-    sortDirection: config.sort?.direction || 'asc',
     sortItems: keyed(config.sorts, 'sort'),
-    groupFieldName: config.group_field_name || '',
     groupItems: keyed(config.groups, 'group'),
     coverFieldName: config.cover_field_name || '',
     rowHeightKey: config.row_height || 'medium',
@@ -62,11 +49,8 @@ export function viewSettingsOf(view: DataView | null | undefined): TableViewSett
 export function viewConfigOf(settings: TableViewSettings): DataInlineViewConfig {
   return {
     hidden_field_names: Array.from(settings.hiddenFieldNames),
-    filter: settings.filterFieldName ? { field_name: settings.filterFieldName, operator: settings.filterOperator, value: settings.filterValue } : undefined,
     filter_tree: settings.filterTree && settings.filterTree.children.length > 0 ? settings.filterTree : undefined,
-    sort: settings.sortFieldName ? { field_name: settings.sortFieldName, direction: settings.sortDirection } : undefined,
     sorts: settings.sortItems.length ? settings.sortItems : undefined,
-    group_field_name: settings.groupFieldName || undefined,
     groups: settings.groupItems.length ? settings.groupItems : undefined,
     cover_field_name: settings.coverFieldName || undefined,
     row_height: settings.rowHeightKey,
@@ -103,15 +87,9 @@ export function useTableViewState({
 }: UseTableViewStateArgs) {
   const dataSource = useTableDataSource()
   const [hiddenFieldNames, setHiddenFieldNames] = useState<Set<string>>(new Set())
-  const [sortFieldName, setSortFieldName] = useState('')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [sortItems, setSortItems] = useState<DataInlineSortItem[]>([])
-  const [groupFieldName, setGroupFieldName] = useState('')
   const [groupItems, setGroupItems] = useState<DataInlineGroupItem[]>([])
   const [coverFieldName, setCoverFieldName] = useState('')
-  const [filterFieldName, setFilterFieldName] = useState('')
-  const [filterOperator, setFilterOperator] = useState<string>('contains')
-  const [filterValue, setFilterValue] = useState('')
   const [filterTree, setFilterTree] = useState<DataInlineFilterGroup | null>(null)
   const [rowHeightKey, setRowHeightKey] = useState<GridRowHeightKey>('medium')
   const [frozenColumnCount, setFrozenColumnCount] = useState(1)
@@ -140,14 +118,8 @@ export function useTableViewState({
     const settings = viewSettingsOf(activeView)
     settingsRef.current = { viewId: activeView?.id ?? null, config: JSON.stringify(viewConfigOf(settings)) }
     setHiddenFieldNames(new Set(settings.hiddenFieldNames))
-    setFilterFieldName(settings.filterFieldName)
-    setFilterOperator(settings.filterOperator)
-    setFilterValue(settings.filterValue)
     setFilterTree(settings.filterTree)
-    setSortFieldName(settings.sortFieldName)
-    setSortDirection(settings.sortDirection)
     setSortItems(settings.sortItems)
-    setGroupFieldName(settings.groupFieldName)
     setGroupItems(settings.groupItems)
     setCoverFieldName(settings.coverFieldName)
     setRowHeightKey(settings.rowHeightKey)
@@ -167,14 +139,8 @@ export function useTableViewState({
     }
     const config = viewConfigOf({
       hiddenFieldNames,
-      filterFieldName,
-      filterOperator,
-      filterValue,
       filterTree,
-      sortFieldName,
-      sortDirection,
       sortItems,
-      groupFieldName,
       groupItems,
       coverFieldName,
       rowHeightKey,
@@ -213,47 +179,29 @@ export function useTableViewState({
     activeView,
     coverFieldName,
     document?.id,
-    filterFieldName,
-    filterOperator,
     filterTree,
-    filterValue,
     frozenColumnCount,
-    groupFieldName,
     groupItems,
     hiddenFieldNames,
     rowHeightKey,
     setDocument,
-    sortDirection,
-    sortFieldName,
     sortItems,
   ])
 
   return {
     coverFieldName,
-    filterFieldName,
-    filterOperator,
     filterTree,
-    filterValue,
     frozenColumnCount,
-    groupFieldName,
     groupItems,
     hiddenFieldNames,
     rowHeightKey,
     setCoverFieldName,
-    setFilterFieldName,
-    setFilterOperator,
     setFilterTree,
-    setFilterValue,
     setFrozenColumnCount,
-    setGroupFieldName,
     setGroupItems,
     setHiddenFieldNames,
     setRowHeightKey,
-    setSortDirection,
-    setSortFieldName,
     setSortItems,
-    sortDirection,
-    sortFieldName,
     sortItems,
     viewMode,
   }

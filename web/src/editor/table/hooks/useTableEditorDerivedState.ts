@@ -6,7 +6,6 @@ import {
   normalizeChoiceList,
   type DataInlineGroupItem,
   type DataInlineSortItem,
-  type SortDirection,
 } from '../lib/tableEditorShared'
 
 type UseTableEditorDerivedStateArgs = {
@@ -15,12 +14,9 @@ type UseTableEditorDerivedStateArgs = {
   fields: DataField[]
   hiddenFieldNames: Set<string>
   coverFieldName: string
-  groupFieldName: string
   groupItems?: DataInlineGroupItem[]
   recordContextMenuRecordId: number | null
   records: DataRecord[]
-  sortDirection: SortDirection
-  sortFieldName: string
   sortItems?: DataInlineSortItem[]
   viewMode: string
 }
@@ -30,12 +26,9 @@ export function useTableEditorDerivedState({
   fields,
   hiddenFieldNames,
   coverFieldName,
-  groupFieldName,
   groupItems,
   recordContextMenuRecordId,
   records,
-  sortDirection,
-  sortFieldName,
   sortItems,
   viewMode,
 }: UseTableEditorDerivedStateArgs) {
@@ -48,24 +41,14 @@ export function useTableEditorDerivedState({
   const coverFields = useMemo(() => {
     return fields.filter((field) => field.type === 'attachment' || field.type === 'url' || field.type === 'text')
   }, [fields])
-  const effectiveSortItems = useMemo<DataInlineSortItem[]>(() => {
-    if (sortItems && sortItems.length > 0) {
-      return sortItems.filter((item) => fields.some((field) => field.name === item.field_name))
-    }
-    if (sortFieldName) {
-      return [{ id: `legacy:${sortFieldName}`, field_name: sortFieldName, direction: sortDirection }]
-    }
-    return []
-  }, [fields, sortItems, sortFieldName, sortDirection])
-  const effectiveGroupItems = useMemo<DataInlineGroupItem[]>(() => {
-    if (groupItems && groupItems.length > 0) {
-      return groupItems.filter((item) => fields.some((field) => field.name === item.field_name))
-    }
-    if (groupFieldName) {
-      return [{ id: `legacy:${groupFieldName}`, field_name: groupFieldName, direction: 'asc' }]
-    }
-    return []
-  }, [fields, groupItems, groupFieldName])
+  const effectiveSortItems = useMemo<DataInlineSortItem[]>(
+    () => (sortItems ?? []).filter((item) => fields.some((field) => field.name === item.field_name)),
+    [fields, sortItems],
+  )
+  const effectiveGroupItems = useMemo<DataInlineGroupItem[]>(
+    () => (groupItems ?? []).filter((item) => fields.some((field) => field.name === item.field_name)),
+    [fields, groupItems],
+  )
   const primaryGroupFieldName = effectiveGroupItems[0]?.field_name || ''
   const groupField = useMemo(() => {
     return (

@@ -424,7 +424,6 @@ export type DataViewConfig = {
   frozen_column_count?: number
   hidden_field_names?: string[]
   cover_field_name?: string
-  group_field_name?: string
   [key: string]: unknown
 }
 

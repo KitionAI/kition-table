@@ -68,11 +68,8 @@ export type DataInlineGroupItem = {
 }
 export type DataInlineViewConfig = {
   hidden_field_names?: string[]
-  filter?: { field_name?: string; operator?: string; value?: string }
   filter_tree?: DataInlineFilterGroup
-  sort?: { field_name?: string; direction?: SortDirection }
   sorts?: DataInlineSortItem[]
-  group_field_name?: string
   groups?: DataInlineGroupItem[]
   cover_field_name?: string
   row_height?: GridRowHeightKey

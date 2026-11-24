@@ -183,7 +183,7 @@ group by `parent` and, a condition, its field by object id); its sorts and group
 editor and `views.putSorts`/`views.putGroups` write alike); its hidden columns and column layout
 are the maps `View.hiddenFields` (the config's `hidden_field_names`, which `views.patchField`'s
 visibility writes too) and `View.layout`; `View.config` keeps the rest, which changes as a unit
-(row height, frozen columns, `group_field`, `cover_field`). A dashboard's widgets are `Widget`
+(row height, frozen columns, `cover_field`). A dashboard's widgets are `Widget`
 objects in `Dashboard.widgets` (`key`, `title`, `type`, `query` naming fields by object id,
 `settings`, `layout`). An AI action's instruction is the field's `aiPrompt` text, not a key of
 `options.ai_config`. The commands take and answer plain values (option

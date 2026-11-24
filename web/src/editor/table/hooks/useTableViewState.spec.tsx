@@ -98,7 +98,7 @@ describe('useTableViewState', () => {
   it.each([
     ['no config', null],
     ['an empty config', {}],
-    ['a config with settings', { hidden_field_names: ['notes'], sort: { field_name: 'name', direction: 'desc' }, row_height: 'tall', frozen_column_count: 2 }],
+    ['a config with settings', { hidden_field_names: ['notes'], sorts: [{ id: 'sort_1', field_name: 'name', direction: 'desc' }], row_height: 'tall', frozen_column_count: 2 }],
   ])('opening a view with %s writes nothing', async (_name, config) => {
     mount(config as DataView['config'])
     await settle()

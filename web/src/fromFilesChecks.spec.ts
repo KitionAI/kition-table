@@ -195,7 +195,7 @@ describe('D4: the model sets only what the kit allows', () => {
       }),
     )
     expect(viewSeeds(plan)).toEqual([
-      { title: 'Board', type: 'kanban', config: { group_field_name: 'status' } },
+      { title: 'Board', type: 'kanban', config: { groups: [{ field_name: 'status', direction: 'asc' }] } },
       { title: 'Wrong board', type: 'kanban', config: null },
       { title: 'Covers', type: 'gallery', config: { cover_field_name: 'attachment' } },
     ])

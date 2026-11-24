@@ -174,30 +174,18 @@ function TableEditorBody({
   }, [activeViewId, tableViews])
   const {
     coverFieldName,
-    filterFieldName,
-    filterOperator,
     filterTree,
-    filterValue,
     frozenColumnCount,
-    groupFieldName,
     groupItems,
     hiddenFieldNames,
     rowHeightKey,
     setCoverFieldName,
-    setFilterFieldName,
-    setFilterOperator,
     setFilterTree,
-    setFilterValue,
     setFrozenColumnCount,
-    setGroupFieldName,
     setGroupItems,
     setHiddenFieldNames,
     setRowHeightKey,
-    setSortDirection,
-    setSortFieldName,
     setSortItems,
-    sortDirection,
-    sortFieldName,
     sortItems,
     viewMode,
   } = useTableViewState({
@@ -223,30 +211,18 @@ function TableEditorBody({
   // the row height arranges nothing again).
   const viewConfig = useMemo(() => viewConfigOf({
     hiddenFieldNames,
-    filterFieldName,
-    filterOperator,
-    filterValue,
     filterTree,
-    sortFieldName,
-    sortDirection,
     sortItems,
-    groupFieldName,
     groupItems,
     coverFieldName,
     rowHeightKey,
     frozenColumnCount,
-  }) as Record<string, unknown>, [hiddenFieldNames, filterFieldName, filterOperator, filterValue, filterTree, sortFieldName, sortDirection, sortItems, groupFieldName, groupItems, coverFieldName, rowHeightKey, frozenColumnCount])
+  }) as Record<string, unknown>, [hiddenFieldNames, filterTree, sortItems, groupItems, coverFieldName, rowHeightKey, frozenColumnCount])
   const arrangedConfig = useMemo(() => {
     const config = viewConfigOf({
       hiddenFieldNames,
-      filterFieldName,
-      filterOperator,
-      filterValue,
       filterTree,
-      sortFieldName,
-      sortDirection,
       sortItems,
-      groupFieldName,
       groupItems,
       coverFieldName,
       rowHeightKey,
@@ -254,12 +230,10 @@ function TableEditorBody({
     })
     return {
       filter_tree: config.filter_tree,
-      sort: config.sort,
-      sorts: config.sorts,
-      group_field_name: config.group_field_name,
-      groups: config.groups,
+      sorts: config.sorts ?? [],
+      groups: config.groups ?? [],
     } as Record<string, unknown>
-  }, [hiddenFieldNames, filterFieldName, filterOperator, filterValue, filterTree, sortFieldName, sortDirection, sortItems, groupFieldName, groupItems, coverFieldName, rowHeightKey, frozenColumnCount])
+  }, [hiddenFieldNames, filterTree, sortItems, groupItems, coverFieldName, rowHeightKey, frozenColumnCount])
   const arrangedRevision = useMemo(() => ({}), [records, fields])
   const axis = useTableArrangement({
     tableId: activeTable?.id ?? null,
@@ -289,12 +263,9 @@ function TableEditorBody({
     fields,
     hiddenFieldNames,
     coverFieldName,
-    groupFieldName,
     groupItems,
     recordContextMenuRecordId: recordContextMenu?.recordId ?? null,
     records,
-    sortDirection,
-    sortFieldName,
     sortItems,
     viewMode,
   })

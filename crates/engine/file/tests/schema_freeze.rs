@@ -228,7 +228,7 @@ fn a_view_config_names_fields_by_id_and_never_stores_the_search() {
     let config = json!({
         "search_query": "secret words",
         "sorts": [{ "field_name": "status", "direction": "desc" }],
-        "group_field_name": "status",
+        "cover_field_name": "status",
         "hidden_field_names": ["notes"],
         "filter_tree": { "kind": "group", "conjunction": "and", "children": [
             { "kind": "condition", "field_name": "title", "operator": "contains", "value": "a" }
@@ -240,7 +240,7 @@ fn a_view_config_names_fields_by_id_and_never_stores_the_search() {
     let sorts = updated.config["sorts"].as_array().cloned().unwrap_or_default();
     assert_eq!(sorts.len(), 1, "{sorts:?}");
     assert_eq!((&sorts[0]["field_name"], &sorts[0]["direction"]), (&json!("status"), &json!("desc")), "{sorts:?}");
-    assert_eq!(updated.config["group_field_name"], json!("status"));
+    assert_eq!(updated.config["cover_field_name"], json!("status"));
     assert_eq!(updated.config["hidden_field_names"], json!(["notes"]));
     assert_eq!(updated.config["filter_tree"]["children"][0]["field_name"], json!("title"));
     // The document names them by object id, and holds no search.
@@ -251,8 +251,8 @@ fn a_view_config_names_fields_by_id_and_never_stores_the_search() {
     assert_eq!(stored["sorts"], json!([{ "field": status, "direction": "desc" }]));
     assert_eq!(ok(here.replica().list(&object, "sorts")).len(), 1, "the sorts are Sort objects");
     assert!(register.get("sorts").is_none(), "not in the config register: {register}");
-    assert_eq!(register["group_field"], json!(status));
-    assert!(register.get("search_query").is_none() && register.get("group_field_name").is_none());
+    assert_eq!(register["cover_field"], json!(status));
+    assert!(register.get("search_query").is_none() && register.get("cover_field_name").is_none());
     assert!(!String::from_utf8_lossy(&ok(here.replica().snapshot())).contains("secret words"), "the search is in no byte of the replica");
     // The API's sorts name the field by its integer id; the document does not.
     let est = ok(here.create_field(c.table, &field("Est", "number"))).id;

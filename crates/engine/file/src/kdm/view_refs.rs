@@ -1,10 +1,10 @@
 //! Field references inside a view's config.
 //!
 //! Writers (the editor, the API) name a view config's fields by name (`field_name` in the entries
-//! of `filter_tree`, `sorts`, `groups`, `sort` and `filter`; `group_field_name`,
-//! `cover_field_name`, `hidden_field_names`), and the API's sorts and groups also by the field's
-//! integer id (`field_id`), which is local to one file's projection. The document names them by
-//! object id instead (`field`, `group_field`, `cover_field`, `hidden_fields`), so the references
+//! of `filter_tree`, `sorts` and `groups`; `cover_field_name`, `hidden_field_names`), and the
+//! API's sorts and groups also by the field's integer id (`field_id`), which is local to one
+//! file's projection. The document names them by object id instead (`field`, `cover_field`,
+//! `hidden_fields`), so the references
 //! survive a rename and mean the same field in every replica; [`config_to_kdm`] and
 //! [`config_from_kdm`] convert between the two forms. A name that names no field of the view's
 //! table is stored as `null` (a list of names leaves it out).
@@ -17,12 +17,21 @@ use serde_json::{Map, Value, json};
 
 /// Config keys whose value is a list of entries naming a field.
 const ENTRY_LISTS: [&str; 2] = ["sorts", "groups"];
-/// Config keys whose value is one entry naming a field: the editor's single sort and filter.
-const ENTRY_KEYS: [&str; 2] = ["sort", "filter"];
 /// Entry lists whose entries the projection also gives the field's integer id, as the API wrote them.
 const WITH_LOCAL_IDS: [&str; 2] = ["sorts", "groups"];
 /// `(relational, document)` keys naming one field.
-const FIELD_KEYS: [(&str, &str); 2] = [("group_field_name", "group_field"), ("cover_field_name", "cover_field")];
+const FIELD_KEYS: [(&str, &str); 1] = [("cover_field_name", "cover_field")];
+
+/// Config keys a view no longer has, each a second form of a setting it keeps: a single sort (one
+/// of `sorts`), a single filter (a condition of `filter_tree`) and a group field (the first of
+/// `groups`, also a board's columns). A config naming one is refused ([`refused_key`]).
+pub const REMOVED_KEYS: [(&str, &str); 4] = [("sort", "sorts"), ("filter", "filter_tree"), ("group_field_name", "groups"), ("group_field", "groups")];
+
+/// The first key of `config` a view no longer has, with the one that holds its setting.
+pub fn refused_key(config: &Value) -> Option<(&'static str, &'static str)> {
+    let map = config.as_object()?;
+    REMOVED_KEYS.into_iter().find(|(key, _)| map.contains_key(*key))
+}
 /// `(relational, document)` keys naming a list of fields.
 const FIELD_LISTS: [(&str, &str); 1] = [("hidden_field_names", "hidden_fields")];
 /// The filter tree's key.
@@ -47,11 +56,6 @@ pub fn config_to_kdm(config: &Value, field_of_name: &dyn Fn(&str) -> Option<Obje
             for item in items {
                 entry_to_kdm(item, field_of_name);
             }
-        }
-    }
-    for key in ENTRY_KEYS {
-        if let Some(item) = out.get_mut(key) {
-            entry_to_kdm(item, field_of_name);
         }
     }
     if let Some(tree) = out.get_mut(FILTER_TREE) {
@@ -115,11 +119,6 @@ pub fn config_from_kdm(config: &Value, describe: &dyn Fn(&ObjectId) -> Described
             for item in items {
                 entry_from_kdm(item, describe, local);
             }
-        }
-    }
-    for key in ENTRY_KEYS {
-        if let Some(item) = out.get_mut(key) {
-            entry_from_kdm(item, describe, false);
         }
     }
     if let Some(tree) = out.get_mut(FILTER_TREE) {
@@ -199,11 +198,6 @@ pub fn name_local_ids(config: &Value, name_of_local: &dyn Fn(i64) -> Option<Stri
             for item in items {
                 name(item);
             }
-        }
-    }
-    for key in ENTRY_KEYS {
-        if let Some(item) = out.get_mut(key) {
-            name(item);
         }
     }
     fn tree(node: &mut Value, name: &dyn Fn(&mut Value)) {

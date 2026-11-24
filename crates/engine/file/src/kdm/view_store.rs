@@ -15,7 +15,7 @@
 //!   `field_layout` the map `View.layout` (field id to `{position, frozen}`): one entry per field.
 //!
 //! What stays in the `config` register changes as a unit: `row_height`, `frozen_column_count`,
-//! the editor's single `sort` and `filter`, `group_field`, `cover_field`, and keys the kit does not
+//! `cover_field`, and keys the kit does not
 //! know.
 //!
 //! [`store`] writes a config (a write replaces the whole config: a collection it leaves out is
