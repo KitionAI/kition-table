@@ -989,7 +989,9 @@ try {
         }
       }),
     )
-    const when = (checkpoint) => (checkpoint ? new Date(checkpoint.time).toLocaleString('en-US') : null)
+    // Formatted in the editor's frame, whose time zone the panel uses (the test's process may have another).
+    const times = await frame().evaluate((recorded) => recorded.map((checkpoint) => (checkpoint ? new Date(checkpoint.time).toLocaleString('en-US') : null)), recorded)
+    const when = (checkpoint) => times[recorded.indexOf(checkpoint)] ?? null
     const expected = [
       { action: 'update', before: 'Reviewed', after: 'History kept', actor: recorded[0]?.author, time: when(recorded[0]) },
       { action: 'update', before: first.values.title, after: 'Reviewed', actor: recorded[1]?.author, time: when(recorded[1]) },
