@@ -15,7 +15,10 @@ use serde_json::{Map, Value, json};
 
 #[track_caller]
 fn ok<T, E: Display>(result: Result<T, E>) -> T {
-    result.unwrap_or_else(|err| panic!("unexpected error: {err}"))
+    match result {
+        Ok(value) => value,
+        Err(err) => panic!("unexpected error: {err}"),
+    }
 }
 
 fn person() -> Origin {
