@@ -196,9 +196,11 @@ fn a_request_is_one_undo_step() {
 #[test]
 fn a_change_undo_does_not_revert_keeps_the_document_unsaved() {
     let bytes = new_document().saved_bytes().unwrap();
-    let mut left = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     let mut right = TableDocument::open("Tasks.ktable", &bytes).unwrap();
+    // Another replica on the same line of changes (the KDM takes changes in order).
+    let mut left = TableDocument::open_with_replica("Tasks.ktable", &[], &right.snapshot().unwrap(), &[]).unwrap();
     add_record(&mut right, "Mine");
+    left.import_changes(&right.export_changes(&left.version()).unwrap()).unwrap();
     add_record(&mut left, "Theirs");
     right.import_changes(&left.export_changes(&right.version()).unwrap()).unwrap();
     assert!(right.dirty());

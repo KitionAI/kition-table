@@ -193,20 +193,22 @@ fn check_doc_id(conn: &Connection, replica: &Replica) -> Result<()> {
 /// rolled back (its SQL transaction failed or was abandoned) would skip the changes made in
 /// between: the engine already reflects them, but they never reached storage.
 ///
-/// On a content file's store ([`write_content`]) the first write stores `replica`'s whole snapshot
-/// instead ([`compact`]): the content opens on a new line of changes each time it is loaded, so
-/// change rows after it would follow no line a later load continues.
+/// The whole snapshot is stored instead ([`compact`]) when the row would make the log one to
+/// compact ([`should_compact`]): the row would be written only to be deleted, and its pages left
+/// free. So it is on a content file's store ([`write_content`]): the content opens on a new line of
+/// changes each time it is loaded, so change rows after it would follow no line a later load
+/// continues.
 pub fn append(conn: &Connection, replica: &Replica, since: &Version, origin: &str, now: i64) -> Result<i64> {
     check_doc_id(conn, replica)?;
     if since.includes(&replica.version()) {
         return last_seq(conn);
     }
-    if holds_content(conn)? {
+    let bytes = replica.export_changes(since)?;
+    if holds_content(conn)? || compacts_with(conn, &bytes)? {
         compact(conn, replica, now)?;
         record_origin(conn, &replica.version(), origin, now)?;
         return last_seq(conn);
     }
-    let bytes = replica.export_changes(since)?;
     conn.execute("INSERT INTO kition_kdm_changes (bytes, origin, created_at) VALUES (?1, ?2, ?3)", params![bytes, origin, now])?;
     let seq = conn.last_insert_rowid();
     record_origin(conn, &replica.version(), origin, now)?;
@@ -356,6 +358,18 @@ pub fn stored(conn: &Connection) -> Result<(Vec<u8>, i64)> {
 pub fn should_compact(conn: &Connection) -> Result<bool> {
     let (count, bytes): (i64, i64) =
         conn.query_row("SELECT COUNT(*), COALESCE(SUM(LENGTH(bytes)), 0) FROM kition_kdm_changes", [], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    log_wants_compaction(conn, count, bytes)
+}
+
+/// Whether the change log with one more row of `row` would be one to compact ([`should_compact`]).
+fn compacts_with(conn: &Connection, row: &[u8]) -> Result<bool> {
+    let (count, bytes): (i64, i64) =
+        conn.query_row("SELECT COUNT(*), COALESCE(SUM(LENGTH(bytes)), 0) FROM kition_kdm_changes", [], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    log_wants_compaction(conn, count + 1, bytes.saturating_add(i64::try_from(row.len()).unwrap_or(i64::MAX)))
+}
+
+/// [`should_compact`] for a log of `count` rows holding `bytes`.
+fn log_wants_compaction(conn: &Connection, count: i64, bytes: i64) -> Result<bool> {
     if count > COMPACT_MAX_CHANGES {
         return Ok(true);
     }

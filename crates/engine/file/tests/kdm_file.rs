@@ -1,5 +1,6 @@
 //! `TableFile` on the KDM: every mutation is one stored change and one undo step, writes from
-//! several handles and several copies merge, and failures leave file and memory consistent.
+//! several handles on one line of changes reach each other, and failures leave file and memory
+//! consistent.
 
 #![allow(clippy::disallowed_methods, reason = "native timing tests read the clock")]
 
@@ -226,42 +227,6 @@ fn undo_of_create_table_removes_it_and_redo_restores_the_same_ids() {
 }
 
 #[test]
-fn edits_of_two_fields_in_two_copies_merge() {
-    let dir = temp();
-    let (path, mut file) = create(dir.path(), "shared.ktable");
-    let (table_id, record_id) = tasks(&mut file);
-    file.close();
-    let other = dir.path().join("other.ktable");
-    ok(fs::copy(&path, &other));
-
-    let mut here = open(&path);
-    let mut there = open(&other);
-    ok(here.update_record(table_id, record_id, &values(json!({ "status": "doing" })), None));
-    ok(there.update_record(table_id, record_id, &values(json!({ "title": "Write more" })), None));
-    assert!(!here.changed_on_disk());
-    there.close();
-
-    replace_with(&path, &other);
-    assert!(here.changed_on_disk());
-    let outcome = ok(here.reopen_merging());
-    let MergeOutcome::Merged(change) = outcome else {
-        panic!("expected a merge, got {outcome:?}");
-    };
-    assert!(change.records_upserted.iter().any(|(table, _)| *table == table_id));
-    let record = ok(here.get_record(table_id, record_id));
-    assert_eq!(record.values.get("status"), Some(&json!("doing")));
-    assert_eq!(record.values.get("title"), Some(&json!("Write more")));
-    assert!(!here.changed_on_disk());
-    here.close();
-
-    // The merge is in the file, not only in memory.
-    let again = open(&path);
-    let record = ok(again.get_record(table_id, record_id));
-    assert_eq!(record.values.get("status"), Some(&json!("doing")));
-    assert_eq!(record.values.get("title"), Some(&json!("Write more")));
-}
-
-#[test]
 fn two_handles_on_one_file_keep_each_others_writes() {
     let dir = temp();
     let (path, mut file) = create(dir.path(), "two.ktable");
@@ -463,39 +428,6 @@ fn a_read_only_file_opens_read_only() {
     assert_eq!(ok(file.list_records(table_id)).len(), 1);
     assert_refused(file.delete_record(table_id, record_id));
     set_read_only(&path, false);
-}
-
-#[test]
-fn an_overwrite_by_another_copy_at_the_same_position_is_caught_up() {
-    let dir = temp();
-    let (path, mut file) = create(dir.path(), "shared.ktable");
-    let (table_id, record_id) = tasks(&mut file);
-    file.close();
-    let other = dir.path().join("other.ktable");
-    ok(fs::copy(&path, &other));
-
-    let mut here = open(&path);
-    ok(here.update_record(table_id, record_id, &values(json!({ "status": "here" })), None));
-    let mut there = open(&other);
-    ok(there.update_record(table_id, record_id, &values(json!({ "title": "There" })), None));
-    // One more SQL commit so the copy's change counter differs, as a real copy's would.
-    ok(there.set_meta("touched", "1"));
-    there.close();
-    assert_eq!(
-        ok(store::stored_position(&ok(Connection::open(&other)))),
-        ok(store::stored_position(here.conn())),
-        "both copies are at the same position"
-    );
-    // Overwritten in place: the handle's connection now reads the other copy.
-    ok(fs::copy(&other, &path));
-    ok(here.update_record(table_id, record_id, &values(json!({ "done": true })), None));
-    here.close();
-
-    let again = open(&path);
-    let record = ok(again.get_record(table_id, record_id));
-    assert_eq!(record.values.get("status"), Some(&json!("here")));
-    assert_eq!(record.values.get("title"), Some(&json!("There")));
-    assert_eq!(record.values.get("done"), Some(&json!(true)));
 }
 
 #[test]

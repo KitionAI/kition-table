@@ -31,6 +31,14 @@ const CONTRACT: &[&str] = &[
     "blobs",
     "addBlobs",
     "blobsSince",
+    // kition-sdk's `export_kit_session!` members (engine contract 2), which the table adds by hand.
+    "modelDescribe",
+    "modelBatch",
+    "mergeChanges",
+    "compareChanges",
+    "restoreState",
+    "changesSince",
+    "modelReply",
 ];
 
 /// The `TableDocument` methods the binding's source exports, by their JavaScript names, with the

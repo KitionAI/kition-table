@@ -1136,15 +1136,19 @@ fn random_op(replica: &mut Replica, rng: &mut Rng, base: &ObjectId) -> Option<&'
     result.ok().and_then(|()| OPS.get(kind).copied())
 }
 
-/// Random local writes, imports, undos, and redos on a replica that stays repaired (as a
-/// `TableFile`'s replica does): after each, the incremental repair writes exactly what a full
-/// pass writes on a copy of the same state, and the index it carries stays usable.
+/// Random local writes, imports, merged drafts, undos, and redos on a replica that stays repaired
+/// (as a `TableFile`'s replica does): after each, the incremental repair writes exactly what a
+/// full pass writes on a copy of the same state, and the index it carries stays usable. A draft
+/// (a fork made some steps before, as an agent's draft is) takes random writes of its own and is
+/// merged in now and then; one the document refuses (both changed one field) changes nothing.
 fn run_incremental_matches_full(seed: u64, steps: usize) {
     let (mut target, base, ids) = shared();
     write(&mut target, |tx| model::create_field(tx, &ids.table, &field("Rel", "link_to_record")));
     let mut rng = Rng::new(seed.wrapping_add(2000));
     let mut index = repair::RepairIndex::default();
     let mut repaired = 0;
+    let mut draft = ok(target.fork(ActorId::random()));
+    let mut draft_base = target.version();
     for step in 0..steps {
         let start = target.version();
         target.take_changed();
@@ -1153,8 +1157,18 @@ fn run_incremental_matches_full(seed: u64, steps: usize) {
             0..=3 => {
                 random_op(&mut target, &mut rng, &base);
             }
-            4 | 5 => {
+            4 => {
                 imported(&mut target, |peer| random_op(peer, &mut rng, &base));
+            }
+            5 => {
+                random_op(&mut draft, &mut rng, &base);
+                if rng.below(2) == 0 {
+                    let changes = ok(draft.export_changes(&draft_base));
+                    // A refused merge (`stale`) changes nothing.
+                    let _ = target.merge_changes(&changes, &person());
+                    draft = ok(target.fork(ActorId::random()));
+                    draft_base = target.version();
+                }
             }
             6 => {
                 ok(target.undo());
