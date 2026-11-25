@@ -5,7 +5,7 @@ import type {
 } from '../../types/dataDocument'
 
 /** Seeds (template dashboards, naming their source table by name) into dashboards ready for
- * the data source's `dashboards.upsert`, once `document`'s tables exist to resolve
+ * the data source's `dashboard.set`, once `document`'s tables exist to resolve
  * `source_table_name` against. */
 export function materializeDashboardSeeds(
   document: DataDocument,

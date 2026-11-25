@@ -38,9 +38,9 @@ function sample() {
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
     return answer.result
   }
-  const starter = call('documents.get').tables[0]
+  const starter = call('file.get').tables[0]
 
-  const tasks = call('tables.create', {
+  const tasks = call('table.add', {
     title: 'Tasks',
     fields: [
       { name: 'task', title: 'Task', type: 'text', primary: true },
@@ -53,7 +53,7 @@ function sample() {
     ],
     views: [{ title: 'All tasks', type: 'grid' }, { title: 'Board', type: 'kanban' }],
   })
-  const team = call('tables.create', {
+  const team = call('table.add', {
     title: 'Team',
     fields: [
       { name: 'name', title: 'Name', type: 'text', primary: true },
@@ -62,7 +62,7 @@ function sample() {
     ],
     views: [{ title: 'Everyone', type: 'grid' }],
   })
-  const milestones = call('tables.create', {
+  const milestones = call('table.add', {
     title: 'Milestones',
     fields: [
       { name: 'milestone', title: 'Milestone', type: 'text', primary: true },
@@ -70,30 +70,30 @@ function sample() {
     ],
     views: [{ title: 'Timeline', type: 'grid' }],
   })
-  call('tables.delete', { tableId: starter.id })
+  call('table.delete', { tableId: starter.id })
 
-  const owner = call('fields.create', { tableId: tasks.id, name: 'owner', title: 'Owner', type: 'link_to_record', options: { target_table_id: team.id } })
-  const milestone = call('fields.create', { tableId: tasks.id, name: 'milestone', title: 'Milestone', type: 'link_to_record', options: { target_table_id: milestones.id } })
-  const teamTasks = call('fields.create', { tableId: team.id, name: 'tasks', title: 'Tasks', type: 'link_to_record', options: { target_table_id: tasks.id, allow_multiple: true, symmetric_field_id: owner.id } })
-  call('fields.create', { tableId: team.id, name: 'open_hours', title: 'Hours planned', type: 'rollup', options: { link_field_id: teamTasks.id, target_field_id: tasks.fields.find((field) => field.name === 'estimate').id, aggregation: 'sum' } })
-  const milestoneTasks = call('fields.create', { tableId: milestones.id, name: 'tasks', title: 'Tasks', type: 'link_to_record', options: { target_table_id: tasks.id, allow_multiple: true, symmetric_field_id: milestone.id } })
-  call('fields.create', { tableId: milestones.id, name: 'task_count', title: 'Task count', type: 'rollup', options: { link_field_id: milestoneTasks.id, aggregation: 'count' } })
-  call('fields.create', { tableId: tasks.id, name: 'owner_role', title: 'Owner role', type: 'lookup', options: { link_field_id: owner.id, target_field_id: team.fields.find((field) => field.name === 'role').id } })
+  const owner = call('field.add', { tableId: tasks.id, name: 'owner', title: 'Owner', type: 'link_to_record', options: { target_table_id: team.id } })
+  const milestone = call('field.add', { tableId: tasks.id, name: 'milestone', title: 'Milestone', type: 'link_to_record', options: { target_table_id: milestones.id } })
+  const teamTasks = call('field.add', { tableId: team.id, name: 'tasks', title: 'Tasks', type: 'link_to_record', options: { target_table_id: tasks.id, allow_multiple: true, symmetric_field_id: owner.id } })
+  call('field.add', { tableId: team.id, name: 'open_hours', title: 'Hours planned', type: 'rollup', options: { link_field_id: teamTasks.id, target_field_id: tasks.fields.find((field) => field.name === 'estimate').id, aggregation: 'sum' } })
+  const milestoneTasks = call('field.add', { tableId: milestones.id, name: 'tasks', title: 'Tasks', type: 'link_to_record', options: { target_table_id: tasks.id, allow_multiple: true, symmetric_field_id: milestone.id } })
+  call('field.add', { tableId: milestones.id, name: 'task_count', title: 'Task count', type: 'rollup', options: { link_field_id: milestoneTasks.id, aggregation: 'count' } })
+  call('field.add', { tableId: tasks.id, name: 'owner_role', title: 'Owner role', type: 'lookup', options: { link_field_id: owner.id, target_field_id: team.fields.find((field) => field.name === 'role').id } })
 
   // Column widths that fit each table in the shots' 1440-pixel view.
   const widths = (table, sizes) => {
-    const { fields, views } = call('documents.get').tables.find((candidate) => candidate.id === table)
+    const { fields, views } = call('file.get').tables.find((candidate) => candidate.id === table)
     for (const [name, width] of Object.entries(sizes)) {
       const field = fields.find((candidate) => candidate.name === name)
-      for (const view of views) call('views.patchField', { tableId: table, viewId: view.id, fieldId: field.id, width })
+      for (const view of views) call('tableView.setField', { tableId: table, viewId: view.id, fieldId: field.id, width })
     }
   }
   widths(tasks.id, { task: 225, status: 120, priority: 100, area: 110, due: 110, estimate: 110, confidence: 120, owner: 125, milestone: 170, owner_role: 135 })
   widths(team.id, { name: 180, role: 170, email: 220, tasks: 300, open_hours: 140 })
   widths(milestones.id, { milestone: 220, date: 140, tasks: 300, task_count: 130 })
-  call('views.update', { tableId: tasks.id, viewId: tasks.views[0].id, title: 'All tasks' })
+  call('tableView.set', { tableId: tasks.id, viewId: tasks.views[0].id, title: 'All tasks' })
   // Extra-tall rows on Team, so each person's linked tasks show one per line.
-  call('views.update', { tableId: team.id, viewId: team.views[0].id, config: { row_height: 'extra_tall' } })
+  call('tableView.set', { tableId: team.id, viewId: team.views[0].id, config: { row_height: 'extra_tall' } })
 
   const people = {}
   for (const [name, role] of [
@@ -105,7 +105,7 @@ function sample() {
     ['Omar Haddad', 'Engineer'],
   ]) {
     const email = `${name.split(' ')[0].toLowerCase()}@launch.example`
-    people[name] = call('records.create', { tableId: team.id, values: { name, role, email } }).id
+    people[name] = call('record.add', { tableId: team.id, values: { name, role, email } }).id
   }
   const stages = {}
   for (const [name, date] of [
@@ -113,7 +113,7 @@ function sample() {
     ['Preview', '2026-11-24'],
     ['General availability', '2026-12-08'],
   ]) {
-    stages[name] = call('records.create', { tableId: milestones.id, values: { milestone: name, date } }).id
+    stages[name] = call('record.add', { tableId: milestones.id, values: { milestone: name, date } }).id
   }
   for (const [task, status, priority, area, due, estimate, confidence, who, stage] of [
     ['Freeze the feature list', 'Done', 'High', 'Product', '2026-11-03', 4, 5, 'Maya Chen', 'Beta'],
@@ -129,14 +129,14 @@ function sample() {
     ['Launch announcement', 'Backlog', 'High', 'Marketing', '2026-12-08', 4, 3, 'Maya Chen', 'General availability'],
     ['Release notes', 'Backlog', 'Low', 'Product', '2026-12-08', 3, 4, 'Sam Ortiz', 'General availability'],
   ]) {
-    call('records.create', {
+    call('record.add', {
       tableId: tasks.id,
       values: { task, status, priority, area, due, estimate, confidence, owner: [people[who]], milestone: [stages[stage]] },
     })
   }
 
   const dashboard = 'launch-overview'
-  call('dashboards.upsert', {
+  call('dashboard.set', {
     dashboardId: dashboard,
     title: 'Launch overview',
     source_table_id: tasks.id,

@@ -3,7 +3,7 @@ id: table.records.history-kept/after-reload
 feature: table.records.history-kept
 intent: >-
   A record's history survives closing the document. The saved .ktable holds no history and the
-  host keeps no changes, only a snapshot per checkpoint; records.history tells what came before
+  host keeps no changes, only a snapshot per checkpoint; record.history tells what came before
   the session from the differences between consecutive checkpoints, each at the later one's time
   and by its author (coarser than change by change: several changes between two checkpoints show
   as one, and what came after the newest checkpoint has no time or author); a file opened alone,

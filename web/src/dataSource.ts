@@ -29,18 +29,18 @@ export type TableEngineAccess = {
 
 /** The methods that only read (the engine's `READ_METHODS`): they run without refreshing the shell. */
 export const READS: ReadonlySet<string> = new Set([
-  'documents.get',
-  'fields.linkCandidates',
-  'views.listFields',
-  'records.list',
-  'records.history',
-  'csv.export',
-  'historyState',
-  'dashboards.list',
-  'attachments.read',
-  'import.preview',
+  'file.get',
+  'field.linkCandidates',
+  'tableView.listFields',
+  'record.list',
+  'record.history',
+  'file.exportCsv',
+  'history.state',
+  'dashboard.list',
+  'attachment.get',
+  'file.previewImport',
   'ai.prepare',
-  'changes.since',
+  'change.list',
 ])
 
 export function toBase64(bytes: Uint8Array) {
@@ -56,7 +56,7 @@ export function fromBase64(text: string) {
   return bytes
 }
 
-/** What `attachments.read` answers: a blob held in the file, its bytes in base64. */
+/** What `attachment.get` answers: a blob held in the file, its bytes in base64. */
 type StoredBlob = { hash: string; name: string; mimeType: string; sizeBytes: number; data: string }
 
 /**
@@ -128,7 +128,7 @@ function own<T extends { documentId?: number }>({ documentId: _documentId, ...pa
  * command `table.<method>`, which runs the same `kition-table-api` request Kition's runtime
  * routes run, so the editor gets the answers it gets in Kition. The engine holds one document,
  * `path`, which `documents.*` answer. Attachments are blobs held in the file
- * (`attachments.put`, `attachments.read`, bytes in base64): the editor shows them from object
+ * (`attachment.add`, `attachment.get`, bytes in base64): the editor shows them from object
  * URLs and uploads into the file, with nothing outside the document.
  *
  * `onChange` reports what the editor did not do through this source: changes imported from
@@ -148,7 +148,7 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
 
   async function call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     const read = READS.has(method)
-    const answer = await engine.run(`table.${method}`, params, read ? 'none' : 'all').catch((error: unknown) => {
+    const answer = await engine.run(method, params, read ? 'none' : 'all').catch((error: unknown) => {
       throw refusalMessage(error)
     })
     if (answer == null) throw new Error('The table is not open.')
@@ -160,7 +160,7 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
   }
 
   async function document() {
-    const opened = await call<DataDocument>('documents.get')
+    const opened = await call<DataDocument>('file.get')
     return { ...opened, path, tables: opened.tables?.map(normalizeTable) }
   }
 
@@ -187,29 +187,29 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
       },
     },
     tables: {
-      create: async (params) => normalizeTable(await call<DataTable>('tables.create', own(params))),
-      update: async (params) => normalizeTable(await call<DataTable>('tables.update', own(params))),
-      delete: (params) => call('tables.delete', own(params)),
+      create: async (params) => normalizeTable(await call<DataTable>('table.add', own(params))),
+      update: async (params) => normalizeTable(await call<DataTable>('table.set', own(params))),
+      delete: (params) => call('table.delete', own(params)),
     },
     fields: {
-      create: async (params) => normalizeField(await call<DataField>('fields.create', own(params))),
-      update: async (params) => normalizeField(await call<DataField>('fields.update', own(params))),
-      delete: (params) => call('fields.delete', own(params)),
-      duplicate: async (params) => normalizeField(await call<DataField>('fields.duplicate', own(params))),
-      linkCandidates: (params) => call('fields.linkCandidates', own(params)),
+      create: async (params) => normalizeField(await call<DataField>('field.add', own(params))),
+      update: async (params) => normalizeField(await call<DataField>('field.set', own(params))),
+      delete: (params) => call('field.delete', own(params)),
+      duplicate: async (params) => normalizeField(await call<DataField>('field.duplicate', own(params))),
+      linkCandidates: (params) => call('field.linkCandidates', own(params)),
     },
     views: {
-      create: (params) => call('views.create', own(params)),
-      update: (params) => call('views.update', own(params)),
-      delete: (params) => call('views.delete', own(params)),
-      listFields: (params) => call('views.listFields', own(params)),
-      patchField: (params) => call('views.patchField', own(params)),
+      create: (params) => call('tableView.add', own(params)),
+      update: (params) => call('tableView.set', own(params)),
+      delete: (params) => call('tableView.delete', own(params)),
+      listFields: (params) => call('tableView.listFields', own(params)),
+      patchField: (params) => call('tableView.setField', own(params)),
     },
     records: {
-      list: (params) => call('records.list', own(params)),
-      create: (params) => call('records.create', own(params)),
-      update: (params) => call('records.update', own(params)),
-      delete: (params) => call('records.delete', own(params)),
+      list: (params) => call('record.list', own(params)),
+      create: (params) => call('record.add', own(params)),
+      update: (params) => call('record.set', own(params)),
+      delete: (params) => call('record.delete', own(params)),
       history: async (params) => {
         // The host's checkpoints tell the history before this session; a host that answers none
         // (or fails) leaves only this session's.
@@ -217,36 +217,36 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
         if (checkpoints?.length) {
           // Checkpoints the engine cannot take (a document too large to send its snapshots, one
           // that is no longer this document's) leave this session's history, said as such.
-          const told = await call<RecordHistoryResponse>('records.history', { ...own(params), checkpoints }).catch(() => null)
+          const told = await call<RecordHistoryResponse>('record.history', { ...own(params), checkpoints }).catch(() => null)
           if (told) return { ...told, kept: history.kept ?? false }
-          return { ...(await call<RecordHistoryResponse>('records.history', own(params))), kept: false }
+          return { ...(await call<RecordHistoryResponse>('record.history', own(params))), kept: false }
         }
-        const answer = await call<RecordHistoryResponse>('records.history', own(params))
+        const answer = await call<RecordHistoryResponse>('record.history', own(params))
         // A stored snapshot holds no changes: without checkpoints nothing tells what came before.
         return { ...answer, kept: (history.kept ?? false) && checkpoints !== null }
       },
-      bulkDelete: (params) => call('records.bulkDelete', own(params)),
-      bulkCopy: (params) => call('records.bulkCopy', own(params)),
+      bulkDelete: (params) => call('record.bulkDelete', own(params)),
+      bulkCopy: (params) => call('record.bulkCopy', own(params)),
     },
     links: {
-      replace: (params) => call('links.replace', own(params)),
+      replace: (params) => call('recordLink.replace', own(params)),
     },
-    transact: (params) => call('transact', own(params)),
-    undo: () => call('undo'),
-    redo: () => call('redo'),
-    historyState: () => call('historyState'),
+    transact: (params) => call('edit.transact', own(params)),
+    undo: () => call('history.undo'),
+    redo: () => call('history.redo'),
+    historyState: () => call('history.state'),
     dashboards: {
-      list: () => call('dashboards.list'),
-      upsert: ({ documentId: _documentId, dashboardId, id: _id, ...dashboard }) => call('dashboards.upsert', { ...dashboard, dashboardId }),
+      list: () => call('dashboard.list'),
+      upsert: ({ documentId: _documentId, dashboardId, id: _id, ...dashboard }) => call('dashboard.set', { ...dashboard, dashboardId }),
     },
     attachments: {
       read: async ({ hash }) => {
-        const blob = await call<StoredBlob>('attachments.read', { hash })
+        const blob = await call<StoredBlob>('attachment.get', { hash })
         return { data: fromBase64(blob.data), mimeType: blob.mimeType, name: blob.name }
       },
       put: async ({ tableId, file }) => {
         const data = toBase64(new Uint8Array(await file.arrayBuffer()))
-        return call<DataAttachment>('attachments.put', { tableId, name: file.name, mimeType: file.type, data })
+        return call<DataAttachment>('attachment.add', { tableId, name: file.name, mimeType: file.type, data })
       },
     },
     onChange(_documentId, listener) {

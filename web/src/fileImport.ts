@@ -41,7 +41,7 @@ export function engineFileImport(source: EngineTableDataSource): NonNullable<Tab
         source: { kind: 'upload', upload_name: file.name },
         ...(options?.sheet ? { sheet: options.sheet } : {}),
       }
-      const preview = await source.command<DataImportPreview>('import.preview', { ...request, ...(await bytesOf(file)) })
+      const preview = await source.command<DataImportPreview>('file.previewImport', { ...request, ...(await bytesOf(file)) })
       return { file, preview }
     },
     async execute({ fieldTypes, prepared, target, writeMode }) {
@@ -61,7 +61,7 @@ export function engineFileImport(source: EngineTableDataSource): NonNullable<Tab
           options: field.options,
         })),
       }
-      const result = await source.command<DataImportResult>('import.run', { ...request, ...(await bytesOf(prepared.file)) })
+      const result = await source.command<DataImportResult>('file.runImport', { ...request, ...(await bytesOf(prepared.file)) })
       return { result }
     },
   }

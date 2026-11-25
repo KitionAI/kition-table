@@ -29,26 +29,30 @@ fn call(doc: &mut TableDocument, method: &str, params: Value) -> Value {
 fn document() -> (TableDocument, i64, i64, i64) {
     fonts();
     let mut doc = TableDocument::create("Interaction.ktable", 0, 0).unwrap();
-    let table = call(&mut doc, "documents.get", json!({}))["tables"][0].clone();
+    let table = call(&mut doc, "file.get", json!({}))["tables"][0].clone();
     let table_id = table["id"].as_i64().unwrap();
     let grid = table["views"][0]["id"].as_i64().unwrap();
     let primary = table["fields"].as_array().unwrap().iter().find(|field| field["is_primary"] == true).unwrap()["name"].as_str().unwrap().to_owned();
     for field in table["fields"].as_array().unwrap().iter().filter(|field| field["is_primary"] != true) {
-        call(&mut doc, "fields.delete", json!({ "tableId": table_id, "fieldId": field["id"] }));
+        call(&mut doc, "field.delete", json!({ "tableId": table_id, "fieldId": field["id"] }));
     }
     let made = call(
         &mut doc,
-        "fields.create",
+        "field.add",
         json!({ "tableId": table_id, "title": "Status", "type": "single_select", "options": { "choices": ["To do", "Done"] } }),
     );
     let status = if made["field"].is_object() { made["field"].clone() } else { made };
     let records: Vec<Value> = (0..9)
         .map(|i| json!({ primary.clone(): format!("Record {i}"), status["name"].as_str().unwrap(): if i % 3 == 0 { "Done" } else { "To do" } }))
         .collect();
-    call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }));
-    let grouped = call(&mut doc, "views.create", json!({ "tableId": table_id, "title": "Grouped", "type": "grid" }));
+    call(&mut doc, "edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }));
+    let grouped = call(&mut doc, "tableView.add", json!({ "tableId": table_id, "title": "Grouped", "type": "grid" }));
     let grouped = grouped["id"].as_i64().or_else(|| grouped["view"]["id"].as_i64()).unwrap();
-    call(&mut doc, "views.putGroups", json!({ "tableId": table_id, "viewId": grouped, "items": [{ "field_id": status["id"], "direction": "asc" }] }));
+    call(
+        &mut doc,
+        "tableView.setGroups",
+        json!({ "tableId": table_id, "viewId": grouped, "items": [{ "field_id": status["id"], "direction": "asc" }] }),
+    );
     (doc, table_id, grid, grouped)
 }
 
@@ -137,7 +141,7 @@ fn grid_rows_name_each_linear_row() {
 fn row_head_controls_have_a_slot_each_centred_on_the_row_at_every_height() {
     let (mut doc, table_id, grid, grouped) = document();
     for (name, height) in [("short", 32.0f32), ("medium", 40.0), ("tall", 56.0), ("extra_tall", 88.0)] {
-        call(&mut doc, "views.patchConfig", json!({ "tableId": table_id, "viewId": grid, "row_height": name }));
+        call(&mut doc, "tableView.setConfig", json!({ "tableId": table_id, "viewId": grid, "row_height": name }));
         let (_, axes) = open(&mut doc, table_id, grid, json!({}));
         let epoch = axes["epoch"].as_u64().unwrap() as u32;
         let head = band(&mut doc, epoch, Layer::RowHead as u32);

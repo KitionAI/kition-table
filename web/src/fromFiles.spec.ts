@@ -99,7 +99,7 @@ function sourceOf(doc: Doc): EngineTableDataSource {
   return createWorkerTableDataSource(access, 'Receipts.ktable')
 }
 
-const call = <T,>(doc: Doc, method: string, params: Record<string, unknown> = {}) => (JSON.parse(doc.execute(`table.${method}`, JSON.stringify(params))) as { result: T }).result
+const call = <T,>(doc: Doc, method: string, params: Record<string, unknown> = {}) => (JSON.parse(doc.execute(method, JSON.stringify(params))) as { result: T }).result
 
 /** A receipt: a file whose bytes say who sold what for how much. */
 const receipt = (name: string, merchant: string, total: string) => new File([`merchant=${merchant};total=${total}`], name, { type: 'image/png' })
@@ -136,9 +136,9 @@ function model() {
 
 type Row = { id: number; values: Record<string, unknown> }
 function rows(doc: Doc, tableId: number) {
-  const table = call<{ tables: Array<{ id: number; title: string; fields: Array<{ name: string; title: string }> }> }>(doc, 'documents.get').tables.find((each) => each.id === tableId)!
+  const table = call<{ tables: Array<{ id: number; title: string; fields: Array<{ name: string; title: string }> }> }>(doc, 'file.get').tables.find((each) => each.id === tableId)!
   const name = (title: string) => table.fields.find((field) => field.title === title)!.name
-  return call<{ items: Row[] }>(doc, 'records.list', { tableId }).items.map((row) => ({
+  return call<{ items: Row[] }>(doc, 'record.list', { tableId }).items.map((row) => ({
     file: row.values[name('File Name')],
     attached: (row.values[name('Receipt')] as Array<{ name?: string }> | null)?.map((item) => item.name) ?? [],
     merchant: row.values[name('Merchant')] ?? null,
@@ -190,7 +190,7 @@ describe('a table from receipts, over the engine', () => {
     const made = await tableFromFiles({ source, services: { generates: false, generate }, files: [receipt('cafe.png', 'Blue Cafe', '12.50')], request: '' })
     expect(generate).not.toHaveBeenCalled()
     expect(made).toMatchObject({ records: 1, aiFields: 2 })
-    const table = call<{ tables: Array<{ id: number; title: string }> }>(doc, 'documents.get').tables.find((each) => each.id === made.tableId)
+    const table = call<{ tables: Array<{ id: number; title: string }> }>(doc, 'file.get').tables.find((each) => each.id === made.tableId)
     expect(table?.title).toBe('Files')
     doc.free()
   })
@@ -198,7 +198,7 @@ describe('a table from receipts, over the engine', () => {
   it('leaves no table behind when the run is canceled, and makes nothing for a design it cannot build', async () => {
     const doc = TableDocument.create('Receipts.ktable', 0, 0)
     const source = sourceOf(doc)
-    const before = call<{ tables: Array<{ id: number }> }>(doc, 'documents.get').tables.map((table) => table.id)
+    const before = call<{ tables: Array<{ id: number }> }>(doc, 'file.get').tables.map((table) => table.id)
     const { services } = model()
     const stop = new AbortController()
     const canceled = tableFromFiles({
@@ -212,11 +212,11 @@ describe('a table from receipts, over the engine', () => {
       signal: stop.signal,
     })
     await expect(canceled).rejects.toMatchObject({ name: 'AbortError' })
-    expect(call<{ tables: Array<{ id: number }> }>(doc, 'documents.get').tables.map((table) => table.id)).toEqual(before)
+    expect(call<{ tables: Array<{ id: number }> }>(doc, 'file.get').tables.map((table) => table.id)).toEqual(before)
 
     const bad = { generates: true, generate: vi.fn(async () => ({ text: 'I would make a nice table.' })) }
     await expect(tableFromFiles({ source, services: bad, files: [receipt('cafe.png', 'Blue Cafe', '12.50')], request: 'x' })).rejects.toThrow('The design is not JSON')
-    expect(call<{ tables: Array<{ id: number }> }>(doc, 'documents.get').tables.map((table) => table.id)).toEqual(before)
+    expect(call<{ tables: Array<{ id: number }> }>(doc, 'file.get').tables.map((table) => table.id)).toEqual(before)
     doc.free()
   })
 

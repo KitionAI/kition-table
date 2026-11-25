@@ -67,7 +67,7 @@ describe('co-editing a table', () => {
     const commands = JSON.parse(doc.commands()) as Array<{ id: string; mutates?: boolean }>
     expect(commands.length).toBeGreaterThan(40)
     for (const command of commands) {
-      const method = command.id.replace(/^table\./, '')
+      const method = command.id
       // The read-only rules every editor runs under refuse exactly what the engine says edits.
       expect([command.id, editsDocument(command)]).toEqual([command.id, command.mutates === true])
       if (READS.has(method)) expect([command.id, editsDocument(command)]).toEqual([command.id, false])
@@ -77,7 +77,7 @@ describe('co-editing a table', () => {
     for (const id of ['record.add', 'record.set', 'record.delete', 'field.add', 'table.delete', 'edit.undo']) {
       expect([id, editsDocument(byId.get(id)!)]).toEqual([id, true])
     }
-    for (const method of READS) expect([method, byId.has(`table.${method}`)]).toEqual([method, true])
+    for (const method of READS) expect([method, byId.has(method)]).toEqual([method, true])
     doc.free()
   })
 

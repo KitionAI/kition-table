@@ -100,14 +100,14 @@ fn an_unknown_field_type_is_invalid_params_naming_type_and_the_valid_values() {
 }
 
 /// Command search matches words in titles (KHP A5c): every title is words a person reads
-/// ("Update a table"), not the command's route name ("tables.update").
+/// ("Update a table"), not the command's route name ("table.set").
 #[test]
 fn every_listed_command_has_a_human_title() {
     let (mut kit, id, _folder) = new_document("titled");
     let mut problems = Vec::new();
     for command in kit.commands(Some(&id)).unwrap() {
         let title = command.title.as_str();
-        let route = command.id.strip_prefix("table.").unwrap_or(&command.id);
+        let route = command.id.as_str();
         // A camelCase word (`linkCandidates`) is a route's; an all-capital one (CSV, AI) is a word.
         let camel = |word: &str| word.chars().any(char::is_lowercase) && word.chars().skip(1).any(char::is_uppercase);
         let words = title.chars().next().is_some_and(char::is_uppercase) && !title.contains('.') && !title.split(' ').any(camel);

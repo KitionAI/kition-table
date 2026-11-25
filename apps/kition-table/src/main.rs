@@ -10,7 +10,7 @@ use std::sync::Arc;
 use kition_headless::{EmbeddedReplica, FileIdentity, Headless, KitInfo};
 use kition_kit_server::{ErrorReason, RpcError};
 
-/// Commands whose params name no file of the host's: `import.run`'s `target` is a table, and its
+/// Commands whose params name no file of the host's: `file.runImport`'s `target` is a table, and its
 /// bytes come in the params.
 const SANDBOXED: &[&str] = &["file.previewImport", "file.runImport"];
 

@@ -7,7 +7,7 @@ intent: >-
   running without it; every key a command reads is in its schema, so a valid call still runs.
   Before, every one of the 54 schema'd commands ran with an unknown key or refused it without
   naming it, history.undo and history.redo read a `scope` their schema left out, and the editor sent
-  keys the engine ignored (ai.prepare's scope and force, dashboards.upsert's id).
+  keys the engine ignored (ai.prepare's scope and force, dashboard.set's id).
 layer: gate
 source:
   kind: probe

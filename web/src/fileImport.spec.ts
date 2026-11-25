@@ -19,7 +19,7 @@ const preview = {
 
 function setup() {
   const result = { table_id: 9, rows_total: 2, rows_created: 2, rows_updated: 0, rows_skipped: 0, fields_created: 2, fields_updated: 0, warnings: [] }
-  const command = vi.fn(async (method: string) => (method === 'import.preview' ? preview : result))
+  const command = vi.fn(async (method: string) => (method === 'file.previewImport' ? preview : result))
   return { importer: engineFileImport({ command } as unknown as EngineTableDataSource), command, result }
 }
 
@@ -30,7 +30,7 @@ describe('file import through the engine', () => {
 
     const prepared = await importer.prepare(file, { sheet: 'Sheet1' })
     expect(prepared.preview.import_token).toBe('token-1')
-    expect(command).toHaveBeenNthCalledWith(1, 'import.preview', {
+    expect(command).toHaveBeenNthCalledWith(1, 'file.previewImport', {
       source: { kind: 'upload', upload_name: 'issues.csv' },
       sheet: 'Sheet1',
       fileName: 'issues.csv',
@@ -39,7 +39,7 @@ describe('file import through the engine', () => {
 
     const done = await importer.execute({ fieldTypes: ['long_text'], prepared, target: { kind: 'new_table', documentId: 4, tableTitle: 'Issues' }, writeMode: 'replace' })
     expect(done.result).toBe(result)
-    expect(command).toHaveBeenNthCalledWith(2, 'import.run', {
+    expect(command).toHaveBeenNthCalledWith(2, 'file.runImport', {
       import_token: 'token-1',
       target: { kind: 'new_table', document_id: 4, table_title: 'Issues' },
       write_mode: 'append',
@@ -58,7 +58,7 @@ describe('file import through the engine', () => {
     const file = new File(['a'], 'rows.tsv')
     const prepared = await importer.prepare(file)
     await importer.execute({ fieldTypes: [], prepared, target: { kind: 'existing_table', documentId: 4, table: { id: 2 } as never }, writeMode: 'replace' })
-    expect(command).toHaveBeenLastCalledWith('import.run', expect.objectContaining({
+    expect(command).toHaveBeenLastCalledWith('file.runImport', expect.objectContaining({
       target: { kind: 'existing_table', document_id: 4, table_id: 2 },
       write_mode: 'replace',
     }))

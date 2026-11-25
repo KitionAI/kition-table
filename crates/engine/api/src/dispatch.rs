@@ -9,51 +9,51 @@ use crate::{ApiError, ApiResult, DocRef, TableFile, attachments, dashboards, nam
 /// Every method [`handle`] answers, with the runtime route it mirrors (relative to
 /// `/v1/data-documents/{documentId}`).
 pub const METHODS: &[(&str, &str)] = &[
-    ("tables.list", "GET /tables"),
-    ("tables.create", "POST /tables"),
-    ("tables.update", "PATCH /tables/{tableId}"),
-    ("tables.delete", "DELETE /tables/{tableId}"),
-    ("fields.list", "GET /tables/{tableId}/fields"),
-    ("fields.create", "POST /tables/{tableId}/fields"),
-    ("fields.update", "PATCH /tables/{tableId}/fields/{fieldId}"),
-    ("fields.delete", "DELETE /tables/{tableId}/fields/{fieldId}"),
-    ("fields.duplicate", "POST /tables/{tableId}/fields/{fieldId}/duplicate"),
-    ("fields.linkCandidates", "GET /tables/{tableId}/fields/{fieldId}/link-candidates"),
-    ("views.list", "GET /tables/{tableId}/views"),
-    ("views.create", "POST /tables/{tableId}/views"),
-    ("views.update", "PATCH /tables/{tableId}/views/{viewId}"),
-    ("views.delete", "DELETE /tables/{tableId}/views/{viewId}"),
-    ("views.getFilterTree", "GET /tables/{tableId}/views/{viewId}/filter-tree"),
-    ("views.putFilterTree", "PUT /tables/{tableId}/views/{viewId}/filter-tree"),
-    ("views.getSorts", "GET /tables/{tableId}/views/{viewId}/sorts"),
-    ("views.putSorts", "PUT /tables/{tableId}/views/{viewId}/sorts"),
-    ("views.getGroups", "GET /tables/{tableId}/views/{viewId}/groups"),
-    ("views.putGroups", "PUT /tables/{tableId}/views/{viewId}/groups"),
-    ("views.patchConfig", "PATCH /tables/{tableId}/views/{viewId}/config"),
-    ("views.listFields", "GET /tables/{tableId}/views/{viewId}/view-fields"),
-    ("views.patchField", "PATCH /tables/{tableId}/views/{viewId}/view-fields/{fieldId}"),
-    ("records.list", "GET /tables/{tableId}/records"),
-    ("records.create", "POST /tables/{tableId}/records"),
-    ("records.update", "PATCH /tables/{tableId}/records/{recordId}"),
-    ("records.delete", "DELETE /tables/{tableId}/records/{recordId}"),
-    ("records.history", "GET /tables/{tableId}/records/{recordId}/history"),
-    ("records.bulkDelete", "POST /tables/{tableId}/records/bulk-delete"),
-    ("records.bulkCopy", "POST /tables/{tableId}/records/bulk-copy"),
-    ("links.list", "GET /tables/{tableId}/records/{recordId}/links"),
-    ("links.replace", "POST /tables/{tableId}/records/{recordId}/links"),
-    ("links.delete", "DELETE /tables/{tableId}/records/{recordId}/links"),
-    ("csv.import", "POST /tables/{tableId}/import/csv"),
-    ("csv.export", "GET /tables/{tableId}/export/csv"),
-    ("markdown.export", "GET /tables/{tableId}/export/markdown"),
-    ("transact", "POST /transact"),
-    ("undo", "POST /undo"),
-    ("redo", "POST /redo"),
-    ("historyState", "GET /history-state"),
-    ("dashboards.list", "GET /dashboards"),
-    ("dashboards.upsert", "PUT /dashboards/{dashboardId}"),
-    ("dashboards.delete", "DELETE /dashboards/{dashboardId}"),
-    ("attachments.put", "POST /tables/{tableId}/attachments"),
-    ("attachments.read", "GET /blobs/{hash}"),
+    ("table.list", "GET /tables"),
+    ("table.add", "POST /tables"),
+    ("table.set", "PATCH /tables/{tableId}"),
+    ("table.delete", "DELETE /tables/{tableId}"),
+    ("field.list", "GET /tables/{tableId}/fields"),
+    ("field.add", "POST /tables/{tableId}/fields"),
+    ("field.set", "PATCH /tables/{tableId}/fields/{fieldId}"),
+    ("field.delete", "DELETE /tables/{tableId}/fields/{fieldId}"),
+    ("field.duplicate", "POST /tables/{tableId}/fields/{fieldId}/duplicate"),
+    ("field.linkCandidates", "GET /tables/{tableId}/fields/{fieldId}/link-candidates"),
+    ("tableView.list", "GET /tables/{tableId}/views"),
+    ("tableView.add", "POST /tables/{tableId}/views"),
+    ("tableView.set", "PATCH /tables/{tableId}/views/{viewId}"),
+    ("tableView.delete", "DELETE /tables/{tableId}/views/{viewId}"),
+    ("tableView.getFilterTree", "GET /tables/{tableId}/views/{viewId}/filter-tree"),
+    ("tableView.setFilterTree", "PUT /tables/{tableId}/views/{viewId}/filter-tree"),
+    ("tableView.getSorts", "GET /tables/{tableId}/views/{viewId}/sorts"),
+    ("tableView.setSorts", "PUT /tables/{tableId}/views/{viewId}/sorts"),
+    ("tableView.getGroups", "GET /tables/{tableId}/views/{viewId}/groups"),
+    ("tableView.setGroups", "PUT /tables/{tableId}/views/{viewId}/groups"),
+    ("tableView.setConfig", "PATCH /tables/{tableId}/views/{viewId}/config"),
+    ("tableView.listFields", "GET /tables/{tableId}/views/{viewId}/view-fields"),
+    ("tableView.setField", "PATCH /tables/{tableId}/views/{viewId}/view-fields/{fieldId}"),
+    ("record.list", "GET /tables/{tableId}/records"),
+    ("record.add", "POST /tables/{tableId}/records"),
+    ("record.set", "PATCH /tables/{tableId}/records/{recordId}"),
+    ("record.delete", "DELETE /tables/{tableId}/records/{recordId}"),
+    ("record.history", "GET /tables/{tableId}/records/{recordId}/history"),
+    ("record.bulkDelete", "POST /tables/{tableId}/records/bulk-delete"),
+    ("record.bulkCopy", "POST /tables/{tableId}/records/bulk-copy"),
+    ("recordLink.list", "GET /tables/{tableId}/records/{recordId}/links"),
+    ("recordLink.replace", "POST /tables/{tableId}/records/{recordId}/links"),
+    ("recordLink.delete", "DELETE /tables/{tableId}/records/{recordId}/links"),
+    ("file.importCsv", "POST /tables/{tableId}/import/csv"),
+    ("file.exportCsv", "GET /tables/{tableId}/export/csv"),
+    ("file.exportMarkdown", "GET /tables/{tableId}/export/markdown"),
+    ("edit.transact", "POST /transact"),
+    ("history.undo", "POST /undo"),
+    ("history.redo", "POST /redo"),
+    ("history.state", "GET /history-state"),
+    ("dashboard.list", "GET /dashboards"),
+    ("dashboard.set", "PUT /dashboards/{dashboardId}"),
+    ("dashboard.delete", "DELETE /dashboards/{dashboardId}"),
+    ("attachment.add", "POST /tables/{tableId}/attachments"),
+    ("attachment.get", "GET /blobs/{hash}"),
 ];
 
 /// Answers one request against `file`, as the runtime route named in [`METHODS`] answers it
@@ -61,9 +61,9 @@ pub const METHODS: &[(&str, &str)] = &[
 /// ids (`tableId`, `fieldId`, `viewId`, `recordId`, `dashboardId`; numbers or decimal strings),
 /// its query values (`limit`, `offset`, `field_id`, `q`), and its body's fields.
 ///
-/// `csv.export` answers `{ "name", "content" }`, what the route sends as a file download.
-/// `attachments.put` takes the file's bytes as `data` (base64) next to `name` and `mimeType`,
-/// where the route takes a multipart upload; `attachments.read` answers the blob with its bytes
+/// `file.exportCsv` answers `{ "name", "content" }`, what the route sends as a file download.
+/// `attachment.add` takes the file's bytes as `data` (base64) next to `name` and `mimeType`,
+/// where the route takes a multipart upload; `attachment.get` answers the blob with its bytes
 /// as `data` (base64), where the route sends them as the response body.
 /// Writes act as the file's current origin ([`TableFile::set_origin`]).
 pub fn handle(file: &mut TableFile, doc: &DocRef, method: &str, params: &Value) -> ApiResult<Value> {
@@ -79,65 +79,65 @@ pub fn handle(file: &mut TableFile, doc: &DocRef, method: &str, params: &Value) 
     values::refuse_unknown_keys(file, method, params)?;
     names::refuse_rewritten_names(file, method, params)?;
     match method {
-        "tables.list" => tables::list_tables(file, doc),
-        "tables.create" => tables::create_table(file, doc, &p.body()?),
-        "tables.update" => {
+        "table.list" => tables::list_tables(file, doc),
+        "table.add" => tables::create_table(file, doc, &p.body()?),
+        "table.set" => {
             let table_id = p.id("tableId")?;
             tables::update_table(file, doc, table_id, params)
         }
-        "tables.delete" => tables::delete_table(file, p.id("tableId")?),
-        "fields.list" => tables::list_fields(file, doc, p.id("tableId")?),
-        "fields.create" => {
+        "table.delete" => tables::delete_table(file, p.id("tableId")?),
+        "field.list" => tables::list_fields(file, doc, p.id("tableId")?),
+        "field.add" => {
             let table_id = p.id("tableId")?;
             tables::create_field(file, doc, table_id, p.body()?)
         }
-        "fields.update" => {
+        "field.set" => {
             let (table_id, field_id) = (p.id("tableId")?, p.id("fieldId")?);
             tables::update_field(file, doc, table_id, field_id, params)
         }
-        "fields.delete" => tables::delete_field(file, p.id("tableId")?, p.id("fieldId")?),
-        "fields.duplicate" => {
+        "field.delete" => tables::delete_field(file, p.id("tableId")?, p.id("fieldId")?),
+        "field.duplicate" => {
             let (table_id, field_id) = (p.id("tableId")?, p.id("fieldId")?);
             tables::duplicate_field(file, doc, table_id, field_id)
         }
-        "fields.linkCandidates" => {
+        "field.linkCandidates" => {
             let field_id = p.id("fieldId")?;
             let limit = records::candidate_limit(p.text("limit").as_deref());
             let query = p.text("q").unwrap_or_default();
             records::link_candidates(file, field_id, &query, limit)
         }
-        "views.list" => tables::list_views(file, doc, p.id("tableId")?),
-        "views.create" => {
+        "tableView.list" => tables::list_views(file, doc, p.id("tableId")?),
+        "tableView.add" => {
             let table_id = p.id("tableId")?;
             tables::create_view(file, doc, table_id, p.body()?)
         }
-        "views.update" => {
+        "tableView.set" => {
             let (table_id, view_id) = (p.id("tableId")?, p.id("viewId")?);
             tables::update_view(file, doc, table_id, view_id, params)
         }
-        "views.delete" => tables::delete_view(file, p.id("tableId")?, p.id("viewId")?),
-        "views.getFilterTree" => view_config::get_filter_tree(file, p.view(file)?),
-        "views.putFilterTree" => {
+        "tableView.delete" => tables::delete_view(file, p.id("tableId")?, p.id("viewId")?),
+        "tableView.getFilterTree" => view_config::get_filter_tree(file, p.view(file)?),
+        "tableView.setFilterTree" => {
             let request = p.body()?;
             view_config::put_filter_tree(file, p.view(file)?, request)
         }
-        "views.getSorts" => view_config::get_sorts(file, p.view(file)?),
-        "views.putSorts" => {
+        "tableView.getSorts" => view_config::get_sorts(file, p.view(file)?),
+        "tableView.setSorts" => {
             let request = p.body()?;
             view_config::put_sorts(file, p.view(file)?, request)
         }
-        "views.getGroups" => view_config::get_groups(file, p.view(file)?),
-        "views.putGroups" => {
+        "tableView.getGroups" => view_config::get_groups(file, p.view(file)?),
+        "tableView.setGroups" => {
             let request = p.body()?;
             view_config::put_groups(file, p.view(file)?, request)
         }
-        "views.patchConfig" => {
+        "tableView.setConfig" => {
             let request = p.body()?;
             let (table_id, view_id) = (p.id("tableId")?, p.id("viewId")?);
             view_config::patch_config(file, table_id, view_id, request)
         }
-        "views.listFields" => view_config::list_view_fields(file, p.view(file)?),
-        "views.patchField" => {
+        "tableView.listFields" => view_config::list_view_fields(file, p.view(file)?),
+        "tableView.setField" => {
             let request = p.body()?;
             let view_id = p.view(file)?;
             let field_id = p.id("fieldId")?;
@@ -147,18 +147,18 @@ pub fn handle(file: &mut TableFile, doc: &DocRef, method: &str, params: &Value) 
             }
             view_config::patch_view_field(file, view_id, field_id, request)
         }
-        "records.list" => {
+        "record.list" => {
             let (limit, offset) = p.window();
             records::list(file, doc, p.id("tableId")?, limit, offset)
         }
-        "records.create" => {
+        "record.add" => {
             let request = p.body()?;
             let record = records::create(file, p.id("tableId")?, request)?;
             let mut answer = respond::record(doc, &record);
             answer["changed"] = Value::Bool(true);
             Ok(answer)
         }
-        "records.update" => {
+        "record.set" => {
             let request = p.body()?;
             let (table_id, record_id) = (p.id("tableId")?, p.id("recordId")?);
             let (record, previous) = records::update(file, table_id, record_id, request)?;
@@ -166,60 +166,60 @@ pub fn handle(file: &mut TableFile, doc: &DocRef, method: &str, params: &Value) 
             answer["changed"] = Value::Bool(previous.is_none_or(|(values, order)| values != record.values || order != record.order));
             Ok(answer)
         }
-        "records.delete" => records::delete(file, p.id("tableId")?, p.id("recordId")?),
-        "records.history" => {
+        "record.delete" => records::delete(file, p.id("tableId")?, p.id("recordId")?),
+        "record.history" => {
             let (table_id, record_id) = (p.id("tableId")?, p.id("recordId")?);
             let (limit, offset) = p.window();
             let points = records::history_points(p.0.get("checkpoints"))?;
             records::history(file, table_id, record_id, limit, offset, &points)
         }
-        "records.bulkDelete" => {
+        "record.bulkDelete" => {
             let request = p.body()?;
             view_config::bulk_delete(file, p.id("tableId")?, request)
         }
-        "records.bulkCopy" => {
+        "record.bulkCopy" => {
             let request = p.body()?;
             view_config::bulk_copy(file, p.id("tableId")?, request)
         }
-        "links.list" => {
+        "recordLink.list" => {
             let (table_id, record_id) = (p.id("tableId")?, p.id("recordId")?);
             let field_id = records::link_field_id(p.text("field_id").as_deref())?;
             records::list_links(file, table_id, record_id, field_id)
         }
-        "links.replace" | "links.delete" => {
+        "recordLink.replace" | "recordLink.delete" => {
             let (table_id, record_id) = (p.id("tableId")?, p.id("recordId")?);
             let request = p.body::<records::LinkRequest>().map_err(|_| ApiError::bad_request("Invalid request body"))?.check()?;
-            if method == "links.replace" {
+            if method == "recordLink.replace" {
                 records::replace_links(file, table_id, record_id, request)
             } else {
                 records::delete_links(file, table_id, record_id, request)
             }
         }
-        "csv.import" => {
+        "file.importCsv" => {
             let request: records::CsvRequest = p.body()?;
             let rows = records::parse_csv(&request.content.unwrap_or_default())?;
             records::import_csv(file, p.id("tableId")?, &rows)
         }
-        "csv.export" => {
+        "file.exportCsv" => {
             let (name, content) = records::export_csv(file, p.id("tableId")?)?;
             Ok(serde_json::json!({ "name": name, "content": content }))
         }
-        "markdown.export" => records::export_markdown(file, p.id("tableId")?),
-        "transact" => {
+        "file.exportMarkdown" => records::export_markdown(file, p.id("tableId")?),
+        "edit.transact" => {
             let request = p.body::<transact::TransactRequest>()?.check()?;
             Ok(transact::transact(file, doc, &request)?.0)
         }
-        "undo" => Ok(transact::undo_or_redo(file, doc, false, p.undo_scope()?)?.0),
-        "redo" => Ok(transact::undo_or_redo(file, doc, true, p.undo_scope()?)?.0),
-        "historyState" => Ok(transact::history_state(file)),
-        "dashboards.list" => dashboards::list(file),
-        "dashboards.upsert" => dashboards::upsert(file, &p.key("dashboardId"), params),
-        "dashboards.delete" => dashboards::delete(file, &p.key("dashboardId")),
-        "attachments.put" => {
+        "history.undo" => Ok(transact::undo_or_redo(file, doc, false, p.undo_scope()?)?.0),
+        "history.redo" => Ok(transact::undo_or_redo(file, doc, true, p.undo_scope()?)?.0),
+        "history.state" => Ok(transact::history_state(file)),
+        "dashboard.list" => dashboards::list(file),
+        "dashboard.set" => dashboards::upsert(file, &p.key("dashboardId"), params),
+        "dashboard.delete" => dashboards::delete(file, &p.key("dashboardId")),
+        "attachment.add" => {
             let request = p.body()?;
             attachments::put_request(file, p.id("tableId")?, &request)
         }
-        "attachments.read" => attachments::read(file, &p.key("hash")),
+        "attachment.get" => attachments::read(file, &p.key("hash")),
         other => Err(ApiError::UnknownMethod(other.to_owned())),
     }
 }

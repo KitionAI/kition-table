@@ -15,7 +15,7 @@ pub(crate) fn fonts() {
     assert_eq!(found, kition_table_fonts::CHECKOUT_FILES.len(), "the kition-fonts checkout at {} (set KITION_FONTS_DIR)", dir.display());
 }
 
-/// A picture held in the file, as `attachments.put` names it.
+/// A picture held in the file, as `attachment.add` names it.
 const PHOTO: &str = "kition-blob:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
 fn field(id: i64, name: &str, kind: &str, options: Value) -> Field {

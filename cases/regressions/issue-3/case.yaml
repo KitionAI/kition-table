@@ -7,7 +7,7 @@ intent: >-
   command really answers, nested as the answer is: the route's answer in `result`, beside
   `change` (what the call changed, or null). Before, 18 commands answered an untyped "route's
   answer" and the typed ones left out most keys (ids, order, timestamps), and descriptions named
-  things the commands do not do (record counts, form views, a view's filters in records.list).
+  things the commands do not do (record counts, form views, a view's filters in record.list).
 layer: gate
 source:
   kind: issue

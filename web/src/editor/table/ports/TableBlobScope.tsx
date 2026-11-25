@@ -7,7 +7,7 @@ type BlobURL = { state: 'loading' } | { state: 'ready'; url: string } | { state:
 
 /**
  * Object URLs of the blobs of one document, made from the bytes the data source reads
- * (`attachments.read`): loaded on first use, kept while the document is open, revoked after.
+ * (`attachment.get`): loaded on first use, kept while the document is open, revoked after.
  */
 class BlobURLCache {
   private readonly entries = new Map<string, BlobURL>()
@@ -68,8 +68,8 @@ export function useTableBlobDocument(documentId: number | null) {
  *
  * - `resolveFileURL` resolves a blob URL with the app's `resolveBlobURL` (a URL the page loads,
  *   such as a runtime route), or else with an object URL made from the bytes the data source's
- *   `attachments.read` answers; other URLs go to the app's `resolveFileURL` as before.
- * - `uploadAttachment` is the app's, or else the data source's `attachments.put`.
+ *   `attachment.get` answers; other URLs go to the app's `resolveFileURL` as before.
+ * - `uploadAttachment` is the app's, or else the data source's `attachment.add`.
  *
  * The host changes when a blob finishes loading, so what shows it draws again.
  */

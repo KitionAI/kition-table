@@ -22,10 +22,10 @@ async function fixture(titles) {
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
     return answer.result
   }
-  const table = call('documents.get').tables[0]
+  const table = call('file.get').tables[0]
   const primary = table.fields.find((field) => field.is_primary)
   const records = Array.from({ length: 40 }, (_, i) => ({ [primary.name]: titles[i % titles.length] }))
-  call('transact', { ops: [{ op: 'records.create', tableId: table.id, at: null, records }] })
+  call('edit.transact', { ops: [{ op: 'records.create', tableId: table.id, at: null, records }] })
   doc.markSaved()
   const bytes = doc.save()
   doc.free()

@@ -4,7 +4,7 @@
 //! ([`parse`]), and writing the rows into an open [`TableFile`] ([`write`]): fields created or
 //! adapted, values converted to the field types, and new records written in batches. Plain
 //! functions, no server, no jobs: [`preview`] and [`run`] take the JSON params of the engine
-//! commands `import.preview` and `import.run` and answer the JSON of Kition's
+//! commands `file.previewImport` and `file.runImport` and answer the JSON of Kition's
 //! `contracts/runtime/data-import.schema.json` (`DataImportPreviewResponse`, and the job's
 //! `DataImportResult`).
 //!
@@ -147,7 +147,7 @@ pub fn read_source(params: &SourceParams) -> ApiResult<SourceFile> {
 }
 
 /// The preview's `import_token`: the SHA-256 of the file's bytes (`sha256:<hex>`). The kit keeps
-/// no previews; `import.run` carries the file again and, when it names a token, checks it.
+/// no previews; `file.runImport` carries the file again and, when it names a token, checks it.
 pub fn import_token(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
@@ -165,7 +165,7 @@ pub fn parse_source(file: &SourceFile) -> ApiResult<(ImportPreview, Vec<Vec<Stri
     Ok((parsed, rows))
 }
 
-/// `import.preview`: the preview request's params (`source`, `sheet`) with `fileName` and
+/// `file.previewImport`: the preview request's params (`source`, `sheet`) with `fileName` and
 /// `content`; answers `DataImportPreviewResponse`.
 pub fn preview(params: &Value) -> ApiResult<Value> {
     let params: SourceParams = serde_json::from_value(params.clone()).map_err(|_| ApiError::InvalidBody)?;
@@ -174,7 +174,7 @@ pub fn preview(params: &Value) -> ApiResult<Value> {
     Ok(serde_json::to_value(preview)?)
 }
 
-/// `import.run`: the execute request's params (`target`, `write_mode`, `schema_mode`,
+/// `file.runImport`: the execute request's params (`target`, `write_mode`, `schema_mode`,
 /// `unique_by`, `field_overrides`, and optionally `import_token`) with `fileName`, `content`,
 /// and `sheet` (the preview's `selected_sheet`); writes the rows into `file` and answers
 /// `DataImportResult`. `document_id` and `path` are what the result names the document by.

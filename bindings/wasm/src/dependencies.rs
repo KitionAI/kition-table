@@ -155,12 +155,12 @@ fn narrow_select_labels(file: &TableFile, needs: &mut Needs, labels: &Labels) {
 fn creation_names(file: &TableFile, needs: &mut Needs, selected: &mut Selection, method: &str, params: &Value) {
     let table = params["tableId"].as_i64().unwrap_or_default();
     let table_creation =
-        method == "tables.create" || (method == "import.run" && matches!(params["target"]["kind"].as_str(), Some("new_table" | "new_document")));
+        method == "table.add" || (method == "file.runImport" && matches!(params["target"]["kind"].as_str(), Some("new_table" | "new_document")));
     let title = match method {
-        "tables.create" => params["title"].as_str().filter(|title| !title.trim().is_empty()).unwrap_or("Table").to_owned(),
-        "import.run" if table_creation => params["target"]["table_title"].as_str().unwrap_or("Table").to_owned(),
-        "fields.create" => params["title"].as_str().filter(|title| !title.trim().is_empty()).unwrap_or("Field").to_owned(),
-        "fields.duplicate" => {
+        "table.add" => params["title"].as_str().filter(|title| !title.trim().is_empty()).unwrap_or("Table").to_owned(),
+        "file.runImport" if table_creation => params["target"]["table_title"].as_str().unwrap_or("Table").to_owned(),
+        "field.add" => params["title"].as_str().filter(|title| !title.trim().is_empty()).unwrap_or("Field").to_owned(),
+        "field.duplicate" => {
             let Ok(field) = file.get_field(table, params["fieldId"].as_i64().unwrap_or_default()) else { return };
             format!("{} copy", field.title)
         }
@@ -490,7 +490,7 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
     let table = params["tableId"].as_i64().unwrap_or_default();
     creation_names(file, needs, &mut selected, method, params);
     match method {
-        "tables.create" => {
+        "table.add" => {
             for field in params["fields"].as_array().into_iter().flatten() {
                 schema(
                     file,
@@ -502,15 +502,15 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
                 );
             }
         }
-        "import.run" => import(file, needs, &mut selected, params),
-        "csv.import" => {
+        "file.runImport" => import(file, needs, &mut selected, params),
+        "file.importCsv" => {
             table_schema(file, needs, &mut selected, table);
         }
-        "records.bulkCopy" => stored_fields(file, needs, table),
-        "records.create" | "records.update" => {
+        "record.bulkCopy" => stored_fields(file, needs, table),
+        "record.add" | "record.set" => {
             values(file, needs, &mut selected, table, params.get("recordId").and_then(|v| resolve(file, "Record", v)), &params["values"])
         }
-        "transact" => {
+        "edit.transact" => {
             for op in params["ops"].as_array().into_iter().flatten() {
                 let table = op["tableId"].as_i64().unwrap_or_default();
                 for row in op["records"].as_array().into_iter().flatten() {
@@ -527,7 +527,7 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
                 }
             }
         }
-        "links.replace" | "links.delete" => {
+        "recordLink.replace" | "recordLink.delete" => {
             for value in crate::params::values(params, "target_row_keys") {
                 if let Some(id) = resolve(file, "Record", value) {
                     needs.set(id, Vec::new(), Vec::new());
@@ -545,7 +545,7 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
                 link_write(file, needs, &mut selected, &field, record.as_deref(), &targets);
             }
         }
-        "fields.create" | "fields.update" => {
+        "field.add" | "field.set" => {
             // What the call writes names (its options and formula); an update leaves the stored
             // ones as they are, and a duplicate copies its source whole (held whole).
             let existing = params["fieldId"].as_i64().and_then(|field| file.get_field(table, field).ok());
@@ -586,7 +586,7 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
         }
         _ => {}
     }
-    if method.starts_with("views.") {
+    if method.starts_with("tableView.") {
         // A view's config is stored as given; a filter, sort or group writes its field's name
         // beside its id.
         references(file, needs, &mut selected, table, &params["config"], &[]);
@@ -594,7 +594,7 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
             references(file, needs, &mut selected, table, &params[key], &["name"]);
         }
     }
-    if method == "dashboards.upsert" {
+    if method == "dashboard.set" {
         // Widgets are stored as given: the fields they name by id are there, those by name are
         // the table's names.
         let table = params["source_table_id"].as_i64().unwrap_or_default();
@@ -602,7 +602,7 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
     }
     // A type change writes the stored cells again in the new type's shape, from what they hold
     // when it runs, so it does not rest on them; a delete takes them.
-    if method == "fields.delete"
+    if method == "field.delete"
         && let (Some(table), Some(field)) = (resolve(file, "Table", &params["tableId"]), resolve(file, "Field", &params["fieldId"]))
     {
         selected.row_tables.insert(table);
@@ -611,14 +611,14 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
             needs.add(record.row_key, vec![format!("cells.{field}")]);
         }
     }
-    if matches!(method, "records.delete" | "records.bulkDelete") {
+    if matches!(method, "record.delete" | "record.bulkDelete") {
         for value in params.get("recordId").into_iter().chain(crate::params::values(params, "row_keys")) {
             if let Some(id) = resolve(file, "Record", value) {
                 selected.record_links.insert(id);
             }
         }
     }
-    if method == "tables.delete"
+    if method == "table.delete"
         && let Some(table) = params["tableId"].as_i64()
     {
         selected.record_links.extend(file.list_records(table).unwrap_or_default().into_iter().map(|r| r.row_key));
@@ -633,8 +633,8 @@ pub(crate) fn refine(file: &TableFile, method: &str, params: &Value, needs: &mut
     }
     let mut labels = Labels::new();
     match method {
-        "records.create" | "records.update" => select_labels(file, &mut labels, table, &params["values"]),
-        "transact" => {
+        "record.add" | "record.set" => select_labels(file, &mut labels, table, &params["values"]),
+        "edit.transact" => {
             for op in params["ops"].as_array().into_iter().flatten() {
                 for row in op["records"].as_array().into_iter().flatten() {
                     match op["op"].as_str() {

@@ -46,13 +46,13 @@ Commands by namespace (the part of the id before the first dot):
   `no rows in result set`.
 - **Record values are keyed by the field's `name`**, not its `title`: a field titled `Status` is
   written as `{"status": "Done"}`. A key that names no field of the table is refused with
-  `invalid_params`, one `data.errors` entry per key at `/values/<key>` (in `transact`,
+  `invalid_params`, one `data.errors` entry per key at `/values/<key>` (in `edit.transact`,
   `/ops/<i>/records/<j>/values/<key>` for `cells.set` and `/ops/<i>/records/<j>/<key>` for
   `records.create`), and the call changes nothing. When the key is a field's title, or its name
   in another case or with spaces for underscores, the message names the field:
   `` `values.Primary channel` names no field of table 2; the field titled "Primary channel" is named `primary_channel` ``.
 - **A `link_to_record` value** is a list of the linked records' row keys or record ids
-  (`{"members": [3, 4]}`), in `record.add`, `record.set` and `transact`;
+  (`{"members": [3, 4]}`), in `record.add`, `record.set` and `edit.transact`;
   records read it back as `{row_key, display}` objects, and `null` or `[]` unlinks. A link field
   whose `symmetric_field_id` names the target table's link field back shows the links made from
   either side.

@@ -40,7 +40,7 @@ export function aiUnavailable(services: Pick<HostServices, 'acts' | 'action'>, m
 /**
  * What the table editor asks of its app, in a kit: toasts through @kition/sdk/editor; attachments by URL only
  * where a URL loads by itself (`http(s):`, `data:`, `blob:`), while attachments held in the file
- * go through the data source (`attachments.read`, `attachments.put`); CSV, TSV, and XLSX import
+ * go through the data source (`attachment.get`, `attachment.add`); CSV, TSV, and XLSX import
  * through the engine. What needs the host is offered only when the host lists it (Kit UI protocol
  * section 7j): AI field runs with `generate`, design from a record with `action:design.fromRecord`,
  * and a button's workflow with `action:workflow.run`. Without them the editor hides those controls.

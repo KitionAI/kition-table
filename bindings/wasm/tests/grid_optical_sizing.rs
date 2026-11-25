@@ -176,11 +176,11 @@ fn the_raster_draws_with_the_setting_the_grid_measures_with() {
 /// A table of one record whose primary field holds `TEXT`; its id and its grid view's.
 fn table(doc: &mut TableDocument) -> (i64, i64) {
     let call = |doc: &mut TableDocument, method: &str, params: Value| doc.call(method, &params).unwrap()["result"].clone();
-    let table = call(doc, "documents.get", json!({}))["tables"][0].clone();
+    let table = call(doc, "file.get", json!({}))["tables"][0].clone();
     let table_id = table["id"].as_i64().unwrap();
     let view = table["views"][0]["id"].as_i64().unwrap();
     let primary = table["fields"].as_array().unwrap().iter().find(|field| field["is_primary"] == true).unwrap()["name"].as_str().unwrap().to_owned();
-    call(doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": [{ primary: TEXT }] }] }));
+    call(doc, "edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": [{ primary: TEXT }] }] }));
     (table_id, view)
 }
 

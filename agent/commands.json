@@ -452,7 +452,7 @@
     },
     {
       "command": "file.get",
-      "tool": "table_table_documents_get",
+      "tool": "table_file_get",
       "title": "Read the document",
       "description": "Reads the document's title, every table with its fields and views, and its dashboards' ids and titles, without changing anything.",
       "mutates": false,
@@ -909,7 +909,7 @@
     },
     {
       "command": "table.list",
-      "tool": "table_table_tables_list",
+      "tool": "table_table_list",
       "title": "List tables",
       "description": "Lists every table with its id, name, title, fields (ids, names, types, options) and views; start here to learn the ids and field names other calls need.",
       "mutates": false,
@@ -1301,7 +1301,7 @@
     },
     {
       "command": "table.add",
-      "tool": "table_table_tables_create",
+      "tool": "table_table_add",
       "title": "Create a table",
       "description": "Creates a table from a title and optionally its fields (each with a type and options) and views; without fields it gets a primary text field Title, without views a grid view All. Answers the table with its ids.",
       "mutates": true,
@@ -1964,7 +1964,7 @@
     },
     {
       "command": "table.set",
-      "tool": "table_table_tables_update",
+      "tool": "table_table_set",
       "title": "Update a table",
       "description": "Changes a table's title, description, metadata or primary field; its fields and records stay as they are.",
       "mutates": true,
@@ -2383,7 +2383,7 @@
     },
     {
       "command": "table.delete",
-      "tool": "table_table_tables_delete",
+      "tool": "table_table_delete",
       "title": "Delete a table",
       "description": "Deletes a table with its fields, records and views, and every link to or from its records.",
       "mutates": true,
@@ -2548,7 +2548,7 @@
     },
     {
       "command": "field.list",
-      "tool": "table_table_fields_list",
+      "tool": "table_field_list",
       "title": "List fields",
       "description": "Lists a table's fields (columns) in order, with their ids, names, types and options.",
       "mutates": false,
@@ -2823,7 +2823,7 @@
     },
     {
       "command": "field.add",
-      "tool": "table_table_fields_create",
+      "tool": "table_field_add",
       "title": "Create a field",
       "description": "Adds a field (column) to a table: its title, its type (text, number, single_select, date, link_to_record, formula, ai, ...) and the options that type reads; answers the field with its id and name.",
       "mutates": true,
@@ -3319,7 +3319,7 @@
     },
     {
       "command": "field.set",
-      "tool": "table_table_fields_update",
+      "tool": "table_field_set",
       "title": "Update a field",
       "description": "Changes a field's title, type, options, formula, AI prompt, flags or primary status; values already stored stay as they are when the type changes.",
       "mutates": true,
@@ -3820,7 +3820,7 @@
     },
     {
       "command": "field.delete",
-      "tool": "table_table_fields_delete",
+      "tool": "table_field_delete",
       "title": "Delete a field",
       "description": "Deletes a field and its values from every record.",
       "mutates": true,
@@ -3997,7 +3997,7 @@
     },
     {
       "command": "field.duplicate",
-      "tool": "table_table_fields_duplicate",
+      "tool": "table_field_duplicate",
       "title": "Duplicate a field",
       "description": "Adds a copy of a field's definition (type, options, formula) next to it, titled with \"copy\"; the copy starts with no values.",
       "mutates": true,
@@ -4274,7 +4274,7 @@
     },
     {
       "command": "field.linkCandidates",
-      "tool": "table_table_fields_linkCandidates",
+      "tool": "table_field_linkCandidates",
       "title": "Find records to link",
       "description": "Searches the records a link_to_record field can link to (in its target table) by their display text, for choosing link values; changes nothing.",
       "mutates": false,
@@ -4469,7 +4469,7 @@
     },
     {
       "command": "tableView.list",
-      "tool": "table_table_views_list",
+      "tool": "table_tableView_list",
       "title": "List views",
       "description": "Lists a table's views (grid, kanban, calendar, gallery) with their ids, types and configuration.",
       "mutates": false,
@@ -4695,7 +4695,7 @@
     },
     {
       "command": "tableView.add",
-      "tool": "table_table_views_create",
+      "tool": "table_tableView_add",
       "title": "Create a view",
       "description": "Creates a view of a table with a title, a type (grid, kanban, calendar or gallery) and a configuration; answers the view with its id.",
       "mutates": true,
@@ -4926,7 +4926,7 @@
     },
     {
       "command": "tableView.set",
-      "tool": "table_table_views_update",
+      "tool": "table_tableView_set",
       "title": "Update a view",
       "description": "Renames a view, changes its type, or replaces its configuration.",
       "mutates": true,
@@ -5170,7 +5170,7 @@
     },
     {
       "command": "tableView.delete",
-      "tool": "table_table_views_delete",
+      "tool": "table_tableView_delete",
       "title": "Delete a view",
       "description": "Deletes a view; the table's data is not affected.",
       "mutates": true,
@@ -5347,7 +5347,7 @@
     },
     {
       "command": "tableView.getFilterTree",
-      "tool": "table_table_views_getFilterTree",
+      "tool": "table_tableView_getFilterTree",
       "title": "Read a view's filter",
       "description": "Reads a view's filter as a tree of and/or groups of field conditions (null when it has none).",
       "mutates": false,
@@ -5613,7 +5613,7 @@
     },
     {
       "command": "tableView.setFilterTree",
-      "tool": "table_table_views_putFilterTree",
+      "tool": "table_tableView_setFilterTree",
       "title": "Set a view's filter",
       "description": "Replaces a view's filter conditions with a tree of and/or groups of field conditions.",
       "mutates": true,
@@ -5938,7 +5938,7 @@
     },
     {
       "command": "tableView.getSorts",
-      "tool": "table_table_views_getSorts",
+      "tool": "table_tableView_getSorts",
       "title": "Read a view's sorts",
       "description": "Reads a view's sort order: the fields and directions, first to last.",
       "mutates": false,
@@ -6129,7 +6129,7 @@
     },
     {
       "command": "tableView.setSorts",
-      "tool": "table_table_views_putSorts",
+      "tool": "table_tableView_setSorts",
       "title": "Set a view's sorts",
       "description": "Replaces a view's sort order with a list of fields and directions.",
       "mutates": true,
@@ -6348,7 +6348,7 @@
     },
     {
       "command": "tableView.getGroups",
-      "tool": "table_table_views_getGroups",
+      "tool": "table_tableView_getGroups",
       "title": "Read a view's groups",
       "description": "Reads how a view groups its records: the fields and directions.",
       "mutates": false,
@@ -6539,7 +6539,7 @@
     },
     {
       "command": "tableView.setGroups",
-      "tool": "table_table_views_putGroups",
+      "tool": "table_tableView_setGroups",
       "title": "Set a view's groups",
       "description": "Replaces how a view groups its records with a list of fields and directions.",
       "mutates": true,
@@ -6758,7 +6758,7 @@
     },
     {
       "command": "tableView.setConfig",
-      "tool": "table_table_views_patchConfig",
+      "tool": "table_tableView_setConfig",
       "title": "Change a view's row height or frozen columns",
       "description": "Changes a view's row height or frozen column count, keeping the rest of its configuration; answers the whole configuration.",
       "mutates": true,
@@ -6942,7 +6942,7 @@
     },
     {
       "command": "tableView.listFields",
-      "tool": "table_table_views_listFields",
+      "tool": "table_tableView_listFields",
       "title": "List a view's field settings",
       "description": "Lists the per-field settings a view stores (visibility, width, position, frozen); fields without settings show with the defaults.",
       "mutates": false,
@@ -7145,7 +7145,7 @@
     },
     {
       "command": "tableView.setField",
-      "tool": "table_table_views_patchField",
+      "tool": "table_tableView_setField",
       "title": "Show, hide, resize or move a field in a view",
       "description": "Shows, hides, resizes, moves or freezes one field in one view.",
       "mutates": true,
@@ -7366,7 +7366,7 @@
     },
     {
       "command": "record.list",
-      "tool": "table_table_records_list",
+      "tool": "table_record_list",
       "title": "List records",
       "description": "Reads a table's records (rows) with their values keyed by field name, a page at a time (limit, offset), with the total.",
       "mutates": false,
@@ -7594,7 +7594,7 @@
     },
     {
       "command": "record.add",
-      "tool": "table_table_records_create",
+      "tool": "table_record_add",
       "title": "Create a record",
       "description": "Adds one record to a table with values keyed by field name (not title); a key that names no field is refused and nothing is written. Answers the record with its id and row_key.",
       "mutates": true,
@@ -7813,7 +7813,7 @@
     },
     {
       "command": "record.set",
-      "tool": "table_table_records_update",
+      "tool": "table_record_set",
       "title": "Update a record",
       "description": "Changes values of one record, keyed by field name (null clears one); fields not named keep their values, and a key that names no field is refused, changing nothing.",
       "mutates": true,
@@ -8044,7 +8044,7 @@
     },
     {
       "command": "record.delete",
-      "tool": "table_table_records_delete",
+      "tool": "table_record_delete",
       "title": "Delete a record",
       "description": "Deletes one record and its links.",
       "mutates": true,
@@ -8221,7 +8221,7 @@
     },
     {
       "command": "record.history",
-      "tool": "table_table_records_history",
+      "tool": "table_record_history",
       "title": "Read a record's history",
       "description": "Reads one record's change history, newest first: its creation and each field update, with the values before and after, who made it and when.",
       "mutates": false,
@@ -8500,7 +8500,7 @@
     },
     {
       "command": "record.bulkDelete",
-      "tool": "table_table_records_bulkDelete",
+      "tool": "table_record_bulkDelete",
       "title": "Delete many records",
       "description": "Deletes many records at once by row_key, as one step; answers how many went and which keys named no record.",
       "mutates": true,
@@ -8690,7 +8690,7 @@
     },
     {
       "command": "record.bulkCopy",
-      "tool": "table_table_records_bulkCopy",
+      "tool": "table_record_bulkCopy",
       "title": "Copy records",
       "description": "Copies records by row_key into the same table at a position, as one step; answers the copies' row keys.",
       "mutates": true,
@@ -8880,7 +8880,7 @@
     },
     {
       "command": "recordLink.list",
-      "tool": "table_table_links_list",
+      "tool": "table_recordLink_list",
       "title": "List a record's links",
       "description": "Reads the records one record links to through a link_to_record field, as row keys and display text.",
       "mutates": false,
@@ -9079,7 +9079,7 @@
     },
     {
       "command": "recordLink.replace",
-      "tool": "table_table_links_replace",
+      "tool": "table_recordLink_replace",
       "title": "Set a record's links",
       "description": "Sets the records one record links to through a link_to_record field, replacing its current links.",
       "mutates": true,
@@ -9293,7 +9293,7 @@
     },
     {
       "command": "recordLink.delete",
-      "tool": "table_table_links_delete",
+      "tool": "table_recordLink_delete",
       "title": "Remove a record's links",
       "description": "Removes some of one record's links in a link_to_record field, by the linked records' row keys.",
       "mutates": true,
@@ -9493,7 +9493,7 @@
     },
     {
       "command": "file.importCsv",
-      "tool": "table_table_csv_import",
+      "tool": "table_file_importCsv",
       "title": "Import CSV text into a table",
       "description": "Adds one record per row of CSV text to an existing table; the header row names fields by title or name, and other columns are left out.",
       "mutates": true,
@@ -9661,7 +9661,7 @@
     },
     {
       "command": "file.exportCsv",
-      "tool": "table_table_csv_export",
+      "tool": "table_file_exportCsv",
       "title": "Export a table as CSV text",
       "description": "Answers a table as CSV text with a file name, without changing anything.",
       "mutates": false,
@@ -9826,7 +9826,7 @@
     },
     {
       "command": "file.exportMarkdown",
-      "tool": "table_table_markdown_export",
+      "tool": "table_file_exportMarkdown",
       "title": "Export a table as a Markdown table",
       "description": "Answers a table as a Markdown table, without changing anything.",
       "mutates": false,
@@ -9987,7 +9987,7 @@
     },
     {
       "command": "edit.transact",
-      "tool": "table_table_transact",
+      "tool": "table_edit_transact",
       "title": "Run record and field operations as one step",
       "description": "Runs several record and field operations (set cells, create, delete or move records, move fields) as one atomic step that undoes together; a values key that names no field refuses the whole call.",
       "mutates": true,
@@ -10491,7 +10491,7 @@
     },
     {
       "command": "history.undo",
-      "tool": "table_table_undo",
+      "tool": "table_history_undo",
       "title": "Undo a step",
       "description": "Takes back the last step of one scope (person or agent; by default the caller's own) and answers what it changed, as edit.undo does.",
       "mutates": true,
@@ -10715,7 +10715,7 @@
     },
     {
       "command": "history.redo",
-      "tool": "table_table_redo",
+      "tool": "table_history_redo",
       "title": "Redo a step",
       "description": "Puts back the last undone step of one scope (by default the caller's own) and answers what it changed, as edit.redo does.",
       "mutates": true,
@@ -10939,7 +10939,7 @@
     },
     {
       "command": "history.state",
-      "tool": "table_table_historyState",
+      "tool": "table_history_state",
       "title": "Read whether undo and redo are possible",
       "description": "Reads whether there is a step to undo and a step to redo.",
       "mutates": false,
@@ -11089,7 +11089,7 @@
     },
     {
       "command": "dashboard.list",
-      "tool": "table_table_dashboards_list",
+      "tool": "table_dashboard_list",
       "title": "List dashboards",
       "description": "Lists the dashboards with their ids, titles, layout and widgets.",
       "mutates": false,
@@ -11274,7 +11274,7 @@
     },
     {
       "command": "dashboard.set",
-      "tool": "table_table_dashboards_upsert",
+      "tool": "table_dashboard_set",
       "title": "Create or replace a dashboard",
       "description": "Creates or replaces a dashboard by its id: its title, source table, layout and widgets (charts, numbers, lists over tables).",
       "mutates": true,
@@ -11493,7 +11493,7 @@
     },
     {
       "command": "dashboard.delete",
-      "tool": "table_table_dashboards_delete",
+      "tool": "table_dashboard_delete",
       "title": "Delete a dashboard",
       "description": "Deletes a dashboard; tables are not affected.",
       "mutates": true,
@@ -11658,7 +11658,7 @@
     },
     {
       "command": "attachment.add",
-      "tool": "table_table_attachments_put",
+      "tool": "table_attachment_add",
       "title": "Store an attachment",
       "description": "Stores a file's bytes (base64) in the document; answers the attachment value (url, name, type, size) to put in an attachment field's list.",
       "mutates": true,
@@ -11852,7 +11852,7 @@
     },
     {
       "command": "attachment.get",
-      "tool": "table_table_attachments_read",
+      "tool": "table_attachment_get",
       "title": "Read an attachment",
       "description": "Reads an attachment's bytes (base64), name and type by its blob hash.",
       "mutates": false,
@@ -12022,7 +12022,7 @@
     },
     {
       "command": "file.previewImport",
-      "tool": "table_table_import_preview",
+      "tool": "table_file_previewImport",
       "title": "Preview a file import",
       "description": "Parses a CSV, TSV or spreadsheet file given as base64 and answers its sheets, detected columns and types and sample rows, without changing anything.",
       "mutates": false,
@@ -12353,7 +12353,7 @@
     },
     {
       "command": "file.runImport",
-      "tool": "table_table_import_run",
+      "tool": "table_file_runImport",
       "title": "Import a file into a table",
       "description": "Imports a file given as base64 into a new or existing table, with write mode, schema mode, unique key and field overrides.",
       "mutates": true,
@@ -12675,7 +12675,7 @@
     },
     {
       "command": "ai.prepare",
-      "tool": "table_table_ai_prepare",
+      "tool": "table_ai_prepare",
       "title": "Prepare an AI field run",
       "description": "Builds the prompts an AI field's run needs for one record or several, for the host to send to a model; changes nothing.",
       "mutates": false,
@@ -12957,7 +12957,7 @@
     },
     {
       "command": "ai.apply",
-      "tool": "table_table_ai_apply",
+      "tool": "table_ai_apply",
       "title": "Write an AI field's results",
       "description": "Writes what the host's model generated (text, images or errors per record) into an AI field.",
       "mutates": true,
@@ -13501,7 +13501,7 @@
     },
     {
       "command": "change.list",
-      "tool": "table_table_changes_since",
+      "tool": "table_change_list",
       "title": "List the records changed since a version",
       "description": "Reads the records created, updated and deleted since a version, with who made each change.",
       "mutates": false,
@@ -13739,7 +13739,7 @@
     },
     {
       "command": "file.read",
-      "tool": "table_table_read",
+      "tool": "table_file_read",
       "title": "Read a table's or a view's records",
       "description": "Reads the records of one table, or of one view (only those its filter keeps, in its order), with their ids and values under the field names, a page at a time; changes nothing.",
       "mutates": false,
@@ -13979,7 +13979,7 @@
     },
     {
       "command": "preview.show",
-      "tool": "table_table_preview_show",
+      "tool": "table_preview_show",
       "title": "Show a table, view or dashboard in the picture",
       "description": "Picks what the document's picture (its renders and previews) shows: a table with its first view, a view, or a dashboard; without parameters, what the editor opens (the first table's first view).",
       "mutates": false,
@@ -14211,7 +14211,7 @@
     },
     {
       "command": "file.render",
-      "tool": "table_table_file_render",
+      "tool": "table_file_render",
       "title": "Render a preview image",
       "description": "Draws the table, a view, some of its rows, a field, one record's cell or a dashboard as the editor shows them, as a PNG at a scale up to 2, such as the target a diagnostic names; changes nothing.",
       "mutates": false,
@@ -14353,7 +14353,7 @@
     },
     {
       "command": "file.outline",
-      "tool": "table_table_file_outline",
+      "tool": "table_file_outline",
       "title": "List the file's tables and dashboards as its outline",
       "description": "Lists the file's tables and dashboards as its outline, each with its id, its title, what it is and the place the editor opens the file at; changes nothing.",
       "mutates": false,
@@ -14438,7 +14438,7 @@
     },
     {
       "command": "file.export",
-      "tool": "table_table_file_export",
+      "tool": "table_file_export",
       "title": "Export a table as a CSV or Markdown file",
       "description": "Answers one table as a CSV or Markdown file's bytes (base64, in data) for the host to write as a new file, without changing anything.",
       "mutates": false,

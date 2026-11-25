@@ -25,7 +25,7 @@ export type TableViewSettings = {
 
 /**
  * A view's sorts or groups as the editor lists them: each with an id, which the ones the engine
- * wrote (`views.putSorts`, `views.putGroups`) do not carry; theirs is made from its place.
+ * wrote (`tableView.setSorts`, `tableView.setGroups`) do not carry; theirs is made from its place.
  */
 function keyed<T extends { id?: string; field_name: string }>(items: T[] | undefined, kind: string): Array<T & { id: string }> {
   return Array.isArray(items) ? items.map((item, index) => ({ ...item, id: item.id || `${kind}:${index}:${item.field_name}` })) : []
@@ -155,7 +155,7 @@ export function useTableViewState({
     const timer = window.setTimeout(() => {
       const save = ++latestSaveRef.current
       // The sorts and groups are named even when there are none: a config without them keeps the
-      // stored ones (views.update), so an emptied list must be sent as one.
+      // stored ones (tableView.set), so an emptied list must be sent as one.
       const written = { ...config, sorts: config.sorts ?? [], groups: config.groups ?? [] }
       void dataSource.views.update({ documentId, tableId, viewId, config: written }).then((updated) => {
         // A later save was sent: its answer is the one to take.

@@ -79,18 +79,17 @@ fn what_each_command_reads_and_the_parameter_on_fills_follow_from_the_code() {
     let mut targets = 0;
     for command in doc.commands() {
         let id = command.id.as_str();
-        let method = id.strip_prefix("table.").unwrap_or(id);
         let text = match id {
             "file.render" => render.to_owned(),
             "file.export" => branch("export::EXPORT_COMMAND"),
             "file.outline" => branch("outline::OUTLINE_COMMAND"),
-            "edit.undo" | "edit.redo" => run.get(if id == "edit.undo" { "undo" } else { "redo" }).cloned().unwrap_or_default(),
-            _ => run.get(method).cloned().unwrap_or_default(),
+            "edit.undo" | "edit.redo" => run.get(if id == "edit.undo" { "history.undo" } else { "history.redo" }).cloned().unwrap_or_default(),
+            _ => run.get(id).cloned().unwrap_or_default(),
         };
         if reads_shown(&text) != !command.reads.is_empty() || command.reads != acts::reads(id) {
             problems.push(format!("{id}: lists reads {:?}; its code reads the picture's state: {}", command.reads, reads_shown(&text)));
         }
-        let derived = handle.get(method).map(|arm| {
+        let derived = handle.get(id).map(|arm| {
             let read = ids_read(arm);
             if read.iter().any(|id| id == "recordId") {
                 Some("recordId")

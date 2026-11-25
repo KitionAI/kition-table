@@ -164,7 +164,7 @@ fn the_shipped_commands_file_is_the_generated_one() {
     assert_eq!(manifest["agent"]["prefix"], crate::agent::TOOL_PREFIX);
     let file: Value = serde_json::from_str(COMMANDS_FILE).unwrap();
     assert_eq!(file["commands"].as_array().unwrap().len(), doc.commands().len());
-    assert_eq!(file["commands"][2]["tool"], "table_table_documents_get");
+    assert_eq!(file["commands"][2]["tool"], "table_file_get");
 }
 
 #[test]

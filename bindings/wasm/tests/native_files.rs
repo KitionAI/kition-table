@@ -20,7 +20,7 @@ fn scratch(name: &str) -> std::path::PathBuf {
 #[test]
 fn a_document_the_kit_saves_opens_natively_with_its_edits() {
     let mut doc = TableDocument::create("Tasks.ktable", 0, 0).unwrap();
-    let document = doc.call("documents.get", &Value::Null).unwrap()["result"].clone();
+    let document = doc.call("file.get", &Value::Null).unwrap()["result"].clone();
     let table_id = document["tables"][0]["id"].as_i64().unwrap();
     let rows = doc.execute("record.add", json!({ "tableId": table_id, "values": { "title": "From the kit" } })).unwrap();
     let field = rows["result"]["values"].as_object().unwrap().keys().next().unwrap().clone();
@@ -56,7 +56,7 @@ fn a_file_kition_writes_opens_in_the_kit() {
     drop(native);
 
     let mut doc = TableDocument::open("native.ktable", &std::fs::read(&path).unwrap()).unwrap();
-    let page = doc.call("records.list", &json!({ "tableId": table.id, "limit": 10, "offset": 40 })).unwrap();
+    let page = doc.call("record.list", &json!({ "tableId": table.id, "limit": 10, "offset": 40 })).unwrap();
     assert_eq!(page["result"]["total"], 50);
     assert_eq!(page["result"]["items"].as_array().unwrap().len(), 10);
     assert_eq!(page["result"]["items"][0]["values"]["name"], "Item 40");

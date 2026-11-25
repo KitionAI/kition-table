@@ -1,6 +1,6 @@
 //! A record's history survives closing the document (feature `table.records.history-kept`): the
 //! file holds no history (data model 7.3), and nothing holds the changes before the session: the
-//! host keeps a snapshot per checkpoint (Kit UI protocol 7m), and `records.history` tells what came
+//! host keeps a snapshot per checkpoint (Kit UI protocol 7m), and `record.history` tells what came
 //! before the session from the differences between consecutive checkpoints, at the later one's
 //! time and by its author. Nothing is stored for it.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
@@ -56,7 +56,7 @@ fn saved_file() -> (Vec<u8>, i64, Value) {
 }
 
 /// A checkpoint as the host lists it and reads it (`host/checkpointRead`), at `doc`'s version
-/// and with its snapshot: what the editor passes to `records.history`.
+/// and with its snapshot: what the editor passes to `record.history`.
 fn checkpoint(doc: &TableDocument, time: i64, author: Option<&str>) -> Value {
     let base64 = &base64::engine::general_purpose::STANDARD;
     let mut point = json!({ "version": base64.encode(doc.version()), "time": time, "snapshot": base64.encode(doc.snapshot().unwrap()) });

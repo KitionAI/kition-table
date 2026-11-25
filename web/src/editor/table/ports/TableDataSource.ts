@@ -99,7 +99,7 @@ export type GridFieldSummary = { field: string; count: number; sum: number }
  * Member names are the `kition-table-api` method names (`crates/kition-table-api`, `METHODS`),
  * and params are that method's params: the route's path ids (`tableId`, `fieldId`, `viewId`,
  * `recordId`, `dashboardId`), its query values, and its body's fields. An implementation over
- * the kit engine maps `records.list(params)` to `call('records.list', params)` one to one;
+ * the kit engine maps `records.list(params)` to `call('record.list', params)` one to one;
  * `documentId` names the document for implementations that hold several. Answers are what the
  * runtime routes answer (the `data` of their envelope).
  *

@@ -10,12 +10,12 @@
 //! them:
 //!
 //! - `call(method, params)` (an extra reached with `KitEngine.invoke('call', …)`) and the
-//!   commands `table.<method>` run one `kition-table-api` request and answer
+//!   commands of the same ids run one `kition-table-api` request and answer
 //!   `{ "result", "change" }`: the route's answer and the `TableChange` the request made (null
 //!   when it changed nothing), in the shape `table/changed` carries.
-//! - `documents.get` answers the one document, as the runtime's `GET /data-documents/{id}`
+//! - `file.get` answers the one document, as the runtime's `GET /data-documents/{id}`
 //!   does, with its tables and dashboard summaries.
-//! - `edit.undo` and `edit.redo` are `undo` and `redo`.
+//! - `edit.undo` and `edit.redo` are `history.undo` and `history.redo`.
 //! - The replica members (`version`, `exportChanges`, `importChanges`, `docId`, `hasReplica`) are
 //!   the file's own replica, so the document keeps its KDM identity across saves without the
 //!   host keeping a replica. Imported changes queue their `TableChange` for `takeImported`.
@@ -26,8 +26,8 @@
 //!   `kition_table_file`'s `content`): the file holds the replica's content (`content.json`,
 //!   compressed), the live rows of the projection and the blobs they name. The session keeps its
 //!   change log; the host stores the replica's snapshot and its checkpoints.
-//! - Attachments are blobs held in the file (`kition_table_file::blobs`): `attachments.put` stores a
-//!   file's bytes and answers the attachment value naming them, `attachments.read` answers a
+//! - Attachments are blobs held in the file (`kition_table_file::blobs`): `attachment.add` stores a
+//!   file's bytes and answers the attachment value naming them, `attachment.get` answers a
 //!   blob's bytes, so an embedding application shows and adds pictures with nothing but the file.
 //!   The replica's blob members (`blobs`, `blobsSince`, `addBlobs`) carry them to co-editors
 //!   beside the changes that name them.
@@ -77,27 +77,27 @@ pub const MODEL_SCHEMA: &str = include_str!("../../../model/schema.json");
 pub const DOCUMENT_ID: i64 = 1;
 
 /// The methods beyond `kition-table-api`'s [`METHODS`] that [`TableDocument::call`] answers.
-pub const DOCUMENT_METHODS: &[(&str, &str)] = &[("documents.get", "GET /data-documents/{documentId}")];
+pub const DOCUMENT_METHODS: &[(&str, &str)] = &[("file.get", "GET /data-documents/{documentId}")];
 
 /// The engine's own methods (`docs/features/engine-commands.md`): file import (`kition-table-import`), AI
 /// fields without the model call (`kition-table-ai`), and the records changed since a version.
 /// Each names the runtime route it replaces, or `-` when it replaces none.
 pub const ENGINE_METHODS: &[(&str, &str)] = &[
-    ("import.preview", "POST /data-imports/preview"),
-    ("import.run", "POST /data-imports"),
+    ("file.previewImport", "POST /data-imports/preview"),
+    ("file.runImport", "POST /data-imports"),
     ("ai.prepare", "POST /tables/{tableId}/fields/{fieldId}/ai/run"),
     ("ai.apply", "POST /tables/{tableId}/fields/{fieldId}/ai/run"),
-    ("changes.since", "-"),
-    ("read", "-"),
+    ("change.list", "-"),
+    ("file.read", "-"),
     ("preview.show", "-"),
 ];
 
 /// What the commands of [`ENGINE_METHODS`] take, for `commands()`. No word that names a file or
 /// folder (see [`command`]).
 const ENGINE_PARAMS: &[(&str, &str)] = &[
-    ("import.preview", "{fileName, content (base64 of the bytes), source?, sheet?}: the data-import preview request"),
+    ("file.previewImport", "{fileName, content (base64 of the bytes), source?, sheet?}: the data-import preview request"),
     (
-        "import.run",
+        "file.runImport",
         "the data-import execute request (its destination table, write_mode, schema_mode, unique_by?, field_overrides?, import_token?) with fileName, content (base64 of the bytes), and sheet?",
     ),
     ("ai.prepare", "{tableId, fieldId, recordId? | record_ids?, limit?, action?, config?}: the prompts of an AI field run, for the host to generate"),
@@ -106,11 +106,11 @@ const ENGINE_PARAMS: &[(&str, &str)] = &[
         "{tableId, fieldId, recordId?, action?, config?, results: [{recordId, text? | image? | images? | error?}]}: what the host generated",
     ),
     (
-        "changes.since",
+        "change.list",
         "{version (base64 of a version; empty for every change)}: the records created, updated, and deleted since it, with their origins",
     ),
     (
-        "read",
+        "file.read",
         "{tableId | viewId, limit?, cursor?}: the records of one table, or of one view (filtered and in its order), under their field names, a page at a time; an answer's next is the step for the rest",
     ),
     ("preview.show", "{tableId?, viewId?, dashboardId?}: the table, view or dashboard the document's picture shows; {} shows what the editor opens"),
@@ -122,32 +122,29 @@ pub const AS_ORIGIN_PARAM: &str = "asOrigin";
 
 /// The methods that only read: their commands do not mutate, so a read-only session runs them.
 pub const READ_METHODS: &[&str] = &[
-    "documents.get",
-    "tables.list",
-    "fields.list",
-    "fields.linkCandidates",
-    "views.list",
-    "views.getFilterTree",
-    "views.getSorts",
-    "views.getGroups",
-    "views.listFields",
-    "records.list",
-    "records.history",
-    "links.list",
-    "csv.export",
-    "markdown.export",
-    "historyState",
-    "dashboards.list",
-    "attachments.read",
-    "import.preview",
+    "file.get",
+    "table.list",
+    "field.list",
+    "field.linkCandidates",
+    "tableView.list",
+    "tableView.getFilterTree",
+    "tableView.getSorts",
+    "tableView.getGroups",
+    "tableView.listFields",
+    "record.list",
+    "record.history",
+    "recordLink.list",
+    "file.exportCsv",
+    "file.exportMarkdown",
+    "history.state",
+    "dashboard.list",
+    "attachment.get",
+    "file.previewImport",
     "ai.prepare",
-    "changes.since",
-    "read",
+    "change.list",
+    "file.read",
     "preview.show",
 ];
-
-/// The command prefix of the data-document methods.
-pub const COMMAND_PREFIX: &str = "table.";
 
 /// `save` vacuums the database first when more than this share (in percent) of its pages are
 /// free. Compacting the replica's change log rewrites its snapshot and frees the old one, so a
@@ -320,7 +317,7 @@ fn take_as_origin(params: &mut Value) -> Result<Option<Origin>, String> {
 /// writes', as Kition's runtime wrote them.
 fn method_origin(method: &str) -> Option<Origin> {
     match method {
-        "import.run" => Some(kition_table_import::import_origin()),
+        "file.runImport" => Some(kition_table_import::import_origin()),
         "ai.apply" => Some(kition_table_ai::apply_origin()),
         _ => None,
     }
@@ -425,26 +422,26 @@ impl TableDocument {
         &self.file
     }
 
-    /// Runs one request by method name (`kition-table-api`'s [`METHODS`], `documents.get`, and
+    /// Runs one request by method name (`kition-table-api`'s [`METHODS`], `file.get`, and
     /// [`ENGINE_METHODS`]) and answers `{ "result", "change" }`. A request that changed the
     /// document moves the revision and makes the document unsaved; undo back to the saved state
     /// makes it saved. A request is one undo step, however many writes it takes, unless it writes
-    /// as an origin undo does not revert: `import.run` writes as `import:import` and `ai.apply` as
+    /// as an origin undo does not revert: `file.runImport` writes as `import:import` and `ai.apply` as
     /// `system:aifield` (as Kition's runtime did), and a request with
     /// `asOrigin: "system:<name>"` as that `system` origin (a host feature's write).
     ///
-    /// An `import.run` that fails leaves the document as it was, as Kition's import restored its
+    /// An `file.runImport` that fails leaves the document as it was, as Kition's import restored its
     /// backup.
     pub fn call(&mut self, method: &str, params: &Value) -> Result<Value, String> {
         let mut params = params.clone();
         let as_origin = take_as_origin(&mut params)?;
-        if as_origin.is_some() && matches!(method, "undo" | "redo") {
+        if as_origin.is_some() && matches!(method, "history.undo" | "history.redo") {
             return Err(format!("{AS_ORIGIN_PARAM} cannot undo or redo"));
         }
         let Some(origin) = as_origin.or_else(|| method_origin(method)) else {
             return self.run(method, &params);
         };
-        let backup = if method == "import.run" { Some((self.file.to_bytes().map_err(error)?, self.file.replica_version())) } else { None };
+        let backup = if method == "file.runImport" { Some((self.file.to_bytes().map_err(error)?, self.file.replica_version())) } else { None };
         let history = backup.as_ref().map(|_| self.history.clone());
         let previous = self.file.origin().clone();
         self.file.set_origin(origin);
@@ -466,16 +463,16 @@ impl TableDocument {
     fn run(&mut self, method: &str, params: &Value) -> Result<Value, String> {
         let before = self.file.replica_version();
         self.file.take_last_change();
-        let undo_or_redo = matches!(method, "undo" | "redo");
+        let undo_or_redo = matches!(method, "history.undo" | "history.redo");
         let grouped = !undo_or_redo && !READ_METHODS.contains(&method) && self.file.begin_undo_group().is_ok();
         let result = match method {
-            "documents.get" => Ok(self.document()),
-            "import.preview" => kition_table_import::preview(params).map_err(error),
-            "import.run" => kition_table_import::run(&mut self.file, self.doc.document_id, &self.name, params).map_err(error),
+            "file.get" => Ok(self.document()),
+            "file.previewImport" => kition_table_import::preview(params).map_err(error),
+            "file.runImport" => kition_table_import::run(&mut self.file, self.doc.document_id, &self.name, params).map_err(error),
             "ai.prepare" => kition_table_ai::prepare(&self.file, params).map_err(error),
             "ai.apply" => kition_table_ai::apply(&mut self.file, &self.doc, params).map_err(error),
-            "changes.since" => self.changes_since(params),
-            "read" => inspect::read(&self.file, params),
+            "change.list" => self.changes_since(params),
+            "file.read" => inspect::read(&self.file, params),
             "preview.show" => preview::show(&self.file, params).map(|(shown, answer)| {
                 self.shown = shown;
                 self.revision += 1;
@@ -500,11 +497,11 @@ impl TableDocument {
             if undo_or_redo { undo_scope(params, self.file.undo_scope()) == UndoScope::Person } else { self.file.undo_scope() == UndoScope::Person };
         let passed = self.file.take_passed_steps();
         if undo_or_redo && persons {
-            self.history.pass(method == "undo", passed);
+            self.history.pass(method == "history.undo", passed);
         }
         match method {
-            "undo" if done && persons => self.history.undone(),
-            "redo" if done && persons => self.history.redone(),
+            "history.undo" if done && persons => self.history.undone(),
+            "history.redo" if done && persons => self.history.redone(),
             _ if !moved => {}
             _ if !undo_or_redo && persons && undoable(self.file.origin()) => self.history.edited(),
             _ => self.history.left(),
@@ -518,7 +515,7 @@ impl TableDocument {
         Ok(json!({ "result": result, "change": change }))
     }
 
-    /// `changes.since`: the records created, updated, and deleted since `params.version` (base64 of
+    /// `change.list`: the records created, updated, and deleted since `params.version` (base64 of
     /// a version [`TableDocument::version`] answered; empty for every change), each with the origin
     /// of the write that made it, and the current version.
     pub fn changes_since(&self, params: &Value) -> Result<Value, String> {
@@ -836,164 +833,166 @@ impl TableDocument {
 }
 
 /// A command's title, words a person reads and command search matches (KHP A5c); `method` is the
-/// command id without [`COMMAND_PREFIX`].
+/// command id.
 fn title(method: &str) -> &'static str {
     match method {
-        "documents.get" => "Read the document",
-        "tables.list" => "List tables",
-        "tables.create" => "Create a table",
-        "tables.update" => "Update a table",
-        "tables.delete" => "Delete a table",
-        "fields.list" => "List fields",
-        "fields.create" => "Create a field",
-        "fields.update" => "Update a field",
-        "fields.delete" => "Delete a field",
-        "fields.duplicate" => "Duplicate a field",
-        "fields.linkCandidates" => "Find records to link",
-        "views.list" => "List views",
-        "views.create" => "Create a view",
-        "views.update" => "Update a view",
-        "views.delete" => "Delete a view",
-        "views.getFilterTree" => "Read a view's filter",
-        "views.putFilterTree" => "Set a view's filter",
-        "views.getSorts" => "Read a view's sorts",
-        "views.putSorts" => "Set a view's sorts",
-        "views.getGroups" => "Read a view's groups",
-        "views.putGroups" => "Set a view's groups",
-        "views.patchConfig" => "Change a view's row height or frozen columns",
-        "views.listFields" => "List a view's field settings",
-        "views.patchField" => "Show, hide, resize or move a field in a view",
-        "records.list" => "List records",
-        "records.create" => "Create a record",
-        "records.update" => "Update a record",
-        "records.delete" => "Delete a record",
-        "records.history" => "Read a record's history",
-        "records.bulkDelete" => "Delete many records",
-        "records.bulkCopy" => "Copy records",
-        "links.list" => "List a record's links",
-        "links.replace" => "Set a record's links",
-        "links.delete" => "Remove a record's links",
-        "csv.import" => "Import CSV text into a table",
-        "csv.export" => "Export a table as CSV text",
-        "markdown.export" => "Export a table as a Markdown table",
-        "transact" => "Run record and field operations as one step",
-        "undo" => "Undo a step",
-        "redo" => "Redo a step",
-        "historyState" => "Read whether undo and redo are possible",
-        "dashboards.list" => "List dashboards",
-        "dashboards.upsert" => "Create or replace a dashboard",
-        "dashboards.delete" => "Delete a dashboard",
-        "attachments.put" => "Store an attachment",
-        "attachments.read" => "Read an attachment",
-        "import.preview" => "Preview a file import",
-        "import.run" => "Import a file into a table",
+        "file.get" => "Read the document",
+        "table.list" => "List tables",
+        "table.add" => "Create a table",
+        "table.set" => "Update a table",
+        "table.delete" => "Delete a table",
+        "field.list" => "List fields",
+        "field.add" => "Create a field",
+        "field.set" => "Update a field",
+        "field.delete" => "Delete a field",
+        "field.duplicate" => "Duplicate a field",
+        "field.linkCandidates" => "Find records to link",
+        "tableView.list" => "List views",
+        "tableView.add" => "Create a view",
+        "tableView.set" => "Update a view",
+        "tableView.delete" => "Delete a view",
+        "tableView.getFilterTree" => "Read a view's filter",
+        "tableView.setFilterTree" => "Set a view's filter",
+        "tableView.getSorts" => "Read a view's sorts",
+        "tableView.setSorts" => "Set a view's sorts",
+        "tableView.getGroups" => "Read a view's groups",
+        "tableView.setGroups" => "Set a view's groups",
+        "tableView.setConfig" => "Change a view's row height or frozen columns",
+        "tableView.listFields" => "List a view's field settings",
+        "tableView.setField" => "Show, hide, resize or move a field in a view",
+        "record.list" => "List records",
+        "record.add" => "Create a record",
+        "record.set" => "Update a record",
+        "record.delete" => "Delete a record",
+        "record.history" => "Read a record's history",
+        "record.bulkDelete" => "Delete many records",
+        "record.bulkCopy" => "Copy records",
+        "recordLink.list" => "List a record's links",
+        "recordLink.replace" => "Set a record's links",
+        "recordLink.delete" => "Remove a record's links",
+        "file.importCsv" => "Import CSV text into a table",
+        "file.exportCsv" => "Export a table as CSV text",
+        "file.exportMarkdown" => "Export a table as a Markdown table",
+        "edit.transact" => "Run record and field operations as one step",
+        "history.undo" => "Undo a step",
+        "history.redo" => "Redo a step",
+        "history.state" => "Read whether undo and redo are possible",
+        "dashboard.list" => "List dashboards",
+        "dashboard.set" => "Create or replace a dashboard",
+        "dashboard.delete" => "Delete a dashboard",
+        "attachment.add" => "Store an attachment",
+        "attachment.get" => "Read an attachment",
+        "file.previewImport" => "Preview a file import",
+        "file.runImport" => "Import a file into a table",
         "ai.prepare" => "Prepare an AI field run",
         "ai.apply" => "Write an AI field's results",
-        "changes.since" => "List the records changed since a version",
-        "read" => "Read a table's or a view's records",
+        "change.list" => "List the records changed since a version",
+        "file.read" => "Read a table's or a view's records",
         "preview.show" => "Show a table, view or dashboard in the picture",
         _ => "",
     }
 }
 
 /// What a command does, for people and models choosing one (kition-sdk `check_commands`); `method`
-/// is the command id without [`COMMAND_PREFIX`].
+/// is the command id.
 fn describe(method: &str) -> &'static str {
     match method {
         "edit.undo" => {
             "Takes back the last step of one scope, the person's or the agent's (by default the caller's own); the other scope's later steps stay."
         }
         "edit.redo" => "Puts back the last undone step of one scope (by default the caller's own).",
-        "documents.get" => {
+        "file.get" => {
             "Reads the document's title, every table with its fields and views, and its dashboards' ids and titles, without changing anything."
         }
-        "tables.list" => {
+        "table.list" => {
             "Lists every table with its id, name, title, fields (ids, names, types, options) and views; start here to learn the ids and field names other calls need."
         }
-        "tables.create" => {
+        "table.add" => {
             "Creates a table from a title and optionally its fields (each with a type and options) and views; without fields it gets a primary text field Title, without views a grid view All. Answers the table with its ids."
         }
-        "tables.update" => "Changes a table's title, description, metadata or primary field; its fields and records stay as they are.",
-        "tables.delete" => "Deletes a table with its fields, records and views, and every link to or from its records.",
-        "fields.list" => "Lists a table's fields (columns) in order, with their ids, names, types and options.",
-        "fields.create" => {
+        "table.set" => "Changes a table's title, description, metadata or primary field; its fields and records stay as they are.",
+        "table.delete" => "Deletes a table with its fields, records and views, and every link to or from its records.",
+        "field.list" => "Lists a table's fields (columns) in order, with their ids, names, types and options.",
+        "field.add" => {
             "Adds a field (column) to a table: its title, its type (text, number, single_select, date, link_to_record, formula, ai, ...) and the options that type reads; answers the field with its id and name."
         }
-        "fields.update" => {
+        "field.set" => {
             "Changes a field's title, type, options, formula, AI prompt, flags or primary status; values already stored stay as they are when the type changes."
         }
-        "fields.delete" => "Deletes a field and its values from every record.",
-        "fields.duplicate" => {
+        "field.delete" => "Deletes a field and its values from every record.",
+        "field.duplicate" => {
             "Adds a copy of a field's definition (type, options, formula) next to it, titled with \"copy\"; the copy starts with no values."
         }
-        "fields.linkCandidates" => {
+        "field.linkCandidates" => {
             "Searches the records a link_to_record field can link to (in its target table) by their display text, for choosing link values; changes nothing."
         }
-        "views.list" => "Lists a table's views (grid, kanban, calendar, gallery) with their ids, types and configuration.",
-        "views.create" => {
+        "tableView.list" => "Lists a table's views (grid, kanban, calendar, gallery) with their ids, types and configuration.",
+        "tableView.add" => {
             "Creates a view of a table with a title, a type (grid, kanban, calendar or gallery) and a configuration; answers the view with its id."
         }
-        "views.update" => "Renames a view, changes its type, or replaces its configuration.",
-        "views.delete" => "Deletes a view; the table's data is not affected.",
-        "views.getFilterTree" => "Reads a view's filter as a tree of and/or groups of field conditions (null when it has none).",
-        "views.putFilterTree" => "Replaces a view's filter conditions with a tree of and/or groups of field conditions.",
-        "views.getSorts" => "Reads a view's sort order: the fields and directions, first to last.",
-        "views.putSorts" => "Replaces a view's sort order with a list of fields and directions.",
-        "views.getGroups" => "Reads how a view groups its records: the fields and directions.",
-        "views.putGroups" => "Replaces how a view groups its records with a list of fields and directions.",
-        "views.patchConfig" => {
+        "tableView.set" => "Renames a view, changes its type, or replaces its configuration.",
+        "tableView.delete" => "Deletes a view; the table's data is not affected.",
+        "tableView.getFilterTree" => "Reads a view's filter as a tree of and/or groups of field conditions (null when it has none).",
+        "tableView.setFilterTree" => "Replaces a view's filter conditions with a tree of and/or groups of field conditions.",
+        "tableView.getSorts" => "Reads a view's sort order: the fields and directions, first to last.",
+        "tableView.setSorts" => "Replaces a view's sort order with a list of fields and directions.",
+        "tableView.getGroups" => "Reads how a view groups its records: the fields and directions.",
+        "tableView.setGroups" => "Replaces how a view groups its records with a list of fields and directions.",
+        "tableView.setConfig" => {
             "Changes a view's row height or frozen column count, keeping the rest of its configuration; answers the whole configuration."
         }
-        "views.listFields" => {
+        "tableView.listFields" => {
             "Lists the per-field settings a view stores (visibility, width, position, frozen); fields without settings show with the defaults."
         }
-        "views.patchField" => "Shows, hides, resizes, moves or freezes one field in one view.",
-        "records.list" => "Reads a table's records (rows) with their values keyed by field name, a page at a time (limit, offset), with the total.",
-        "records.create" => {
+        "tableView.setField" => "Shows, hides, resizes, moves or freezes one field in one view.",
+        "record.list" => "Reads a table's records (rows) with their values keyed by field name, a page at a time (limit, offset), with the total.",
+        "record.add" => {
             "Adds one record to a table with values keyed by field name (not title); a key that names no field is refused and nothing is written. Answers the record with its id and row_key."
         }
-        "records.update" => {
+        "record.set" => {
             "Changes values of one record, keyed by field name (null clears one); fields not named keep their values, and a key that names no field is refused, changing nothing."
         }
-        "records.delete" => "Deletes one record and its links.",
-        "records.history" => {
+        "record.delete" => "Deletes one record and its links.",
+        "record.history" => {
             "Reads one record's change history, newest first: its creation and each field update, with the values before and after, who made it and when."
         }
-        "records.bulkDelete" => "Deletes many records at once by row_key, as one step; answers how many went and which keys named no record.",
-        "records.bulkCopy" => "Copies records by row_key into the same table at a position, as one step; answers the copies' row keys.",
-        "links.list" => "Reads the records one record links to through a link_to_record field, as row keys and display text.",
-        "links.replace" => "Sets the records one record links to through a link_to_record field, replacing its current links.",
-        "links.delete" => "Removes some of one record's links in a link_to_record field, by the linked records' row keys.",
-        "csv.import" => {
+        "record.bulkDelete" => "Deletes many records at once by row_key, as one step; answers how many went and which keys named no record.",
+        "record.bulkCopy" => "Copies records by row_key into the same table at a position, as one step; answers the copies' row keys.",
+        "recordLink.list" => "Reads the records one record links to through a link_to_record field, as row keys and display text.",
+        "recordLink.replace" => "Sets the records one record links to through a link_to_record field, replacing its current links.",
+        "recordLink.delete" => "Removes some of one record's links in a link_to_record field, by the linked records' row keys.",
+        "file.importCsv" => {
             "Adds one record per row of CSV text to an existing table; the header row names fields by title or name, and other columns are left out."
         }
-        "csv.export" => "Answers a table as CSV text with a file name, without changing anything.",
-        "markdown.export" => "Answers a table as a Markdown table, without changing anything.",
-        "transact" => {
+        "file.exportCsv" => "Answers a table as CSV text with a file name, without changing anything.",
+        "file.exportMarkdown" => "Answers a table as a Markdown table, without changing anything.",
+        "edit.transact" => {
             "Runs several record and field operations (set cells, create, delete or move records, move fields) as one atomic step that undoes together; a values key that names no field refuses the whole call."
         }
-        "undo" => {
+        "history.undo" => {
             "Takes back the last step of one scope (person or agent; by default the caller's own) and answers what it changed, as edit.undo does."
         }
-        "redo" => "Puts back the last undone step of one scope (by default the caller's own) and answers what it changed, as edit.redo does.",
-        "historyState" => "Reads whether there is a step to undo and a step to redo.",
-        "dashboards.list" => "Lists the dashboards with their ids, titles, layout and widgets.",
-        "dashboards.upsert" => {
+        "history.redo" => "Puts back the last undone step of one scope (by default the caller's own) and answers what it changed, as edit.redo does.",
+        "history.state" => "Reads whether there is a step to undo and a step to redo.",
+        "dashboard.list" => "Lists the dashboards with their ids, titles, layout and widgets.",
+        "dashboard.set" => {
             "Creates or replaces a dashboard by its id: its title, source table, layout and widgets (charts, numbers, lists over tables)."
         }
-        "dashboards.delete" => "Deletes a dashboard; tables are not affected.",
-        "attachments.put" => {
+        "dashboard.delete" => "Deletes a dashboard; tables are not affected.",
+        "attachment.add" => {
             "Stores a file's bytes (base64) in the document; answers the attachment value (url, name, type, size) to put in an attachment field's list."
         }
-        "attachments.read" => "Reads an attachment's bytes (base64), name and type by its blob hash.",
-        "import.preview" => {
+        "attachment.get" => "Reads an attachment's bytes (base64), name and type by its blob hash.",
+        "file.previewImport" => {
             "Parses a CSV, TSV or spreadsheet file given as base64 and answers its sheets, detected columns and types and sample rows, without changing anything."
         }
-        "import.run" => "Imports a file given as base64 into a new or existing table, with write mode, schema mode, unique key and field overrides.",
+        "file.runImport" => {
+            "Imports a file given as base64 into a new or existing table, with write mode, schema mode, unique key and field overrides."
+        }
         "ai.prepare" => "Builds the prompts an AI field's run needs for one record or several, for the host to send to a model; changes nothing.",
         "ai.apply" => "Writes what the host's model generated (text, images or errors per record) into an AI field.",
-        "changes.since" => "Reads the records created, updated and deleted since a version, with who made each change.",
-        "read" => {
+        "change.list" => "Reads the records created, updated and deleted since a version, with who made each change.",
+        "file.read" => {
             "Reads the records of one table, or of one view (only those its filter keeps, in its order), with their ids and values under the field names, a page at a time; changes nothing."
         }
         "file.export" => {
@@ -1022,7 +1021,7 @@ fn command(id: &str, title: &str, params: Option<String>, mutates: bool) -> KitC
         // The parameters as a `ParameterSchemaSpec` (KHP A5, A6), from the request types.
         schema: agent::input_schema(id),
         output_schema: agent::output_schema(id),
-        description: describe(id.strip_prefix(COMMAND_PREFIX).unwrap_or(id)).into(),
+        description: describe(id).into(),
         mutates,
         enabled: true,
         reads: acts::reads(id),
@@ -1070,9 +1069,10 @@ impl TableDocument {
             return outline::outline(&self.file);
         }
         let method = match command {
-            "edit.undo" => "undo",
-            "edit.redo" => "redo",
-            other => other.strip_prefix(COMMAND_PREFIX).filter(|method| known_method(method)).ok_or_else(|| format!("unknown command: {command}"))?,
+            "edit.undo" => "history.undo",
+            "edit.redo" => "history.redo",
+            other if known_method(other) => other,
+            _ => return Err(format!("unknown command: {command}")),
         };
         self.call(method, &params)
     }
@@ -1217,14 +1217,14 @@ impl KitDocument for TableDocument {
             if !READ_METHODS.contains(method) {
                 params.push_str("; asOrigin? (system:<name>) writes as a host feature, outside the undo history");
             }
-            commands.push(command(&format!("{COMMAND_PREFIX}{method}"), title(method), Some(params), !READ_METHODS.contains(method)));
+            commands.push(command(method, title(method), Some(params), !READ_METHODS.contains(method)));
         }
         for (method, params) in ENGINE_PARAMS {
             let mut params = (*params).to_owned();
             if !READ_METHODS.contains(method) {
                 params.push_str("; asOrigin? (system:<name>) writes as a host feature");
             }
-            commands.push(command(&format!("{COMMAND_PREFIX}{method}"), title(method), Some(params), !READ_METHODS.contains(method)));
+            commands.push(command(method, title(method), Some(params), !READ_METHODS.contains(method)));
         }
         // Its parameters are in its schema alone: kition-headless once read a `target` named in a
         // command's notes as a file.

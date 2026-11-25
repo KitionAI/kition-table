@@ -21,15 +21,15 @@ fn field_name(made: &Value) -> String {
 #[test]
 fn grid_clear_empties_the_cells_of_the_ids_in_one_undo_step() {
     let mut doc = TableDocument::create("Clear.ktable", 0, 0).unwrap();
-    let table = call(&mut doc, "documents.get", json!({}))["tables"][0].clone();
+    let table = call(&mut doc, "file.get", json!({}))["tables"][0].clone();
     let table_id = table["id"].as_i64().unwrap();
     let title = table["fields"].as_array().unwrap().iter().find(|field| field["is_primary"] == true).unwrap()["name"].as_str().unwrap().to_owned();
-    let amount = field_name(&call(&mut doc, "fields.create", json!({ "tableId": table_id, "title": "Amount", "type": "number" })));
-    let notes = field_name(&call(&mut doc, "fields.create", json!({ "tableId": table_id, "title": "Notes", "type": "text" })));
+    let amount = field_name(&call(&mut doc, "field.add", json!({ "tableId": table_id, "title": "Amount", "type": "number" })));
+    let notes = field_name(&call(&mut doc, "field.add", json!({ "tableId": table_id, "title": "Notes", "type": "text" })));
     let records: Vec<Value> =
         (1..=5).map(|i| json!({ title.clone(): format!("Record {i}"), amount.clone(): i * 10, notes.clone(): format!("Note {i}") })).collect();
-    call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }));
-    let listed = |doc: &mut TableDocument| call(doc, "records.list", json!({ "tableId": table_id }))["items"].as_array().unwrap().clone();
+    call(&mut doc, "edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }));
+    let listed = |doc: &mut TableDocument| call(doc, "record.list", json!({ "tableId": table_id }))["items"].as_array().unwrap().clone();
     let before = listed(&mut doc);
     let ids: Vec<i64> = before.iter().map(|item| item["id"].as_i64().unwrap()).collect();
 
@@ -51,7 +51,7 @@ fn grid_clear_empties_the_cells_of_the_ids_in_one_undo_step() {
     }
 
     // One undo step brings every cleared cell back.
-    let undone = call(&mut doc, "undo", json!({}));
+    let undone = call(&mut doc, "history.undo", json!({}));
     assert_eq!(undone["done"], json!(true));
     let restored = listed(&mut doc);
     for (old, now) in before.iter().zip(&restored) {

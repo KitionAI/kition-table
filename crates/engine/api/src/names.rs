@@ -6,8 +6,8 @@
 //! way and suffixed `_2`, `_3`, ... when taken. A host that names a field writes its values under
 //! that name, so an explicit name the engine would derive differently (one that is not in that
 //! form, or one already taken, also by an earlier field of the same request) is refused before
-//! anything is written, one [`ParamIssue`] each: `tables.create` (`/name`, `/fields/<i>/name`)
-//! and `fields.create` (`/name`).
+//! anything is written, one [`ParamIssue`] each: `table.add` (`/name`, `/fields/<i>/name`)
+//! and `field.add` (`/name`).
 
 use std::collections::HashSet;
 
@@ -25,7 +25,7 @@ pub const NAME_RULE: &str =
 pub(crate) fn refuse_rewritten_names(file: &TableFile, method: &str, params: &Map<String, Value>) -> ApiResult<()> {
     let mut issues = Vec::new();
     match method {
-        "tables.create" => {
+        "table.add" => {
             let taken: HashSet<String> = file.list_tables().map(|tables| tables.into_iter().map(|table| table.name).collect()).unwrap_or_default();
             let title = text(params, "title");
             name_kept(params, &title, "Table", &taken, "/name", "name", "a table of this document", &mut issues);
@@ -47,7 +47,7 @@ pub(crate) fn refuse_rewritten_names(file: &TableFile, method: &str, params: &Ma
                 taken.insert(kept);
             }
         }
-        "fields.create" => {
+        "field.add" => {
             let table = params.get("tableId").and_then(|id| id.as_i64().or_else(|| id.as_str()?.parse().ok()));
             if let Some(Ok(fields)) = table.map(|table| file.list_fields(table)) {
                 let taken: HashSet<String> = fields.into_iter().map(|field| field.name).collect();

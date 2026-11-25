@@ -11,7 +11,7 @@
 //!   lists of `Sort` and `Group` objects (`{key, field, direction}`), so sorts added and
 //!   reordered at once merge.
 //! - `hidden_fields` is the map `View.hiddenFields` (field id to its place in the list), the one
-//!   place a hidden column is kept (`views.patchField`'s `visible` writes it too), and
+//!   place a hidden column is kept (`tableView.setField`'s `visible` writes it too), and
 //!   `field_layout` the map `View.layout` (field id to `{position, frozen}`): one entry per field.
 //!
 //! What stays in the `config` register changes as a unit: `row_height`, `frozen_column_count`,

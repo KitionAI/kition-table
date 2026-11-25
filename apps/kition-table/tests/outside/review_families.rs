@@ -43,7 +43,7 @@ async fn bulk_operations_hold_selected_sources_only() {
             let (table, record, _) = ids(&f);
             let basis = f.basis().await;
             f.colleague("record.set", json!({"tableId":1,"recordId":if related {1} else {2},"values":{"notes":"Theirs"}}));
-            let answer = f.write(basis, &format!("table.records.{method}"), json!({"tableId":table,"row_keys":[record]})).await;
+            let answer = f.write(basis, &format!("record.{method}"), json!({"tableId":table,"row_keys":[record]})).await;
             if related {
                 conflict(answer, "changed");
             } else {
@@ -118,7 +118,7 @@ async fn outside_rereads_do_not_undo_or_redo_the_colleague() {
 #[tokio::test]
 async fn destructive_commands_hold_removed_links_and_child_values() {
     let mut mismatches = Vec::new();
-    for method in ["transact", "import.run", "tables.delete", "records.bulkCopy"] {
+    for method in ["edit.transact", "file.runImport", "table.delete", "record.bulkCopy"] {
         for related in [true, false] {
             let f = Fixture::new(Guard::Premise);
             f.colleague("field.add", json!({"tableId":1,"name":"friends","type":"link_to_record","options":{"target_table_id":1}}));
@@ -132,23 +132,23 @@ async fn destructive_commands_hold_removed_links_and_child_values() {
                 f.colleague("table.set", json!({"tableId":2,"title":"Theirs"}));
             }
             let params = match method {
-                "transact" => json!({"ops":[{"op":"records.delete","tableId":table,"rowKeys":[record]}]}),
-                "import.run" => {
+                "edit.transact" => json!({"ops":[{"op":"records.delete","tableId":table,"rowKeys":[record]}]}),
+                "file.runImport" => {
                     json!({"fileName":"in.csv","content":base64::engine::general_purpose::STANDARD.encode("Title,Notes\nOne,Mine\n"),"target":{"kind":"existing_table","table_id":table},"write_mode":"replace","schema_mode":"preserve"})
                 }
-                "tables.delete" => json!({"tableId":table}),
+                "table.delete" => json!({"tableId":table}),
                 _ => json!({"tableId":table,"row_keys":[record]}),
             };
             let before = f.bytes();
-            let answer = f.write(basis, &format!("table.{method}"), params).await;
+            let answer = f.write(basis, method, params).await;
             // Bulk copy copies stored cells; link display values and Link objects are omitted.
-            let must_refuse = related && method != "records.bulkCopy";
+            let must_refuse = related && method != "record.bulkCopy";
             if answer.is_err() != must_refuse {
                 mismatches.push(format!("{method}, related={related}: {answer:?}"));
             } else if must_refuse {
                 assert_eq!(answer.unwrap_err()["error"]["code"], "conflict");
                 assert_eq!(before, f.bytes());
-            } else if method == "records.bulkCopy" {
+            } else if method == "record.bulkCopy" {
                 assert_eq!(f.disk().file().list_records(1).unwrap().last().unwrap().values["friends"], json!([]));
             }
             f.kits.shutdown().await;

@@ -24,15 +24,15 @@ function fixture(name, count) {
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
     return answer.result
   }
-  const table = call('documents.get').tables[0]
-  call('tables.update', { tableId: table.id, title: 'Tasks' })
-  call('views.update', { tableId: table.id, viewId: table.views[0].id, title: 'All tasks' })
-  for (const field of table.fields.filter((field) => !field.is_primary)) call('fields.delete', { tableId: table.id, fieldId: field.id })
-  call('fields.create', { tableId: table.id, title: 'Score', type: 'rating', options: { max: 5, icon: 'star' } })
-  call('fields.create', { tableId: table.id, title: 'Received At', type: 'datetime' })
-  call('records.create', { tableId: table.id, values: { title: 'Phase 2 wrap', score: 4, received_at: '2026-07-23T04:14:47Z' } })
-  call('records.create', { tableId: table.id, values: { title: 'Phase 3 deferred', score: 0, received_at: '2026-07-24T05:15:48Z' } })
-  for (let index = 2; index < count; index += 1) call('records.create', { tableId: table.id, values: { title: `Message ${String(index + 1).padStart(4, '0')}`, score: index % 6 } })
+  const table = call('file.get').tables[0]
+  call('table.set', { tableId: table.id, title: 'Tasks' })
+  call('tableView.set', { tableId: table.id, viewId: table.views[0].id, title: 'All tasks' })
+  for (const field of table.fields.filter((field) => !field.is_primary)) call('field.delete', { tableId: table.id, fieldId: field.id })
+  call('field.add', { tableId: table.id, title: 'Score', type: 'rating', options: { max: 5, icon: 'star' } })
+  call('field.add', { tableId: table.id, title: 'Received At', type: 'datetime' })
+  call('record.add', { tableId: table.id, values: { title: 'Phase 2 wrap', score: 4, received_at: '2026-07-23T04:14:47Z' } })
+  call('record.add', { tableId: table.id, values: { title: 'Phase 3 deferred', score: 0, received_at: '2026-07-24T05:15:48Z' } })
+  for (let index = 2; index < count; index += 1) call('record.add', { tableId: table.id, values: { title: `Message ${String(index + 1).padStart(4, '0')}`, score: index % 6 } })
   doc.markSaved()
   const bytes = Buffer.from(doc.save()).toString('base64')
   doc.free()
@@ -47,11 +47,11 @@ function viewsFixture() {
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
     return answer.result
   }
-  const first = call('documents.get').tables[0]
-  call('tables.update', { tableId: first.id, title: 'Tasks' })
-  call('records.create', { tableId: first.id, values: { title: 'Phase 2 wrap' } })
-  const second = call('tables.create', { title: 'People' })
-  call('dashboards.upsert', { dashboardId: 'overview', title: 'Overview', source_table_id: first.id, layout: [], widgets: [] })
+  const first = call('file.get').tables[0]
+  call('table.set', { tableId: first.id, title: 'Tasks' })
+  call('record.add', { tableId: first.id, values: { title: 'Phase 2 wrap' } })
+  const second = call('table.add', { title: 'People' })
+  call('dashboard.set', { dashboardId: 'overview', title: 'Overview', source_table_id: first.id, layout: [], widgets: [] })
   doc.markSaved()
   const bytes = Buffer.from(doc.save()).toString('base64')
   doc.free()
@@ -67,11 +67,11 @@ function coversFixture() {
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
     return answer.result
   }
-  const table = call('documents.get').tables[0]
-  call('views.update', { tableId: table.id, viewId: table.views[0].id, title: 'Covers', type: 'gallery' })
-  const files = call('fields.create', { tableId: table.id, title: 'Files', type: 'attachment' })
+  const table = call('file.get').tables[0]
+  call('tableView.set', { tableId: table.id, viewId: table.views[0].id, title: 'Covers', type: 'gallery' })
+  const files = call('field.add', { tableId: table.id, title: 'Files', type: 'attachment' })
   const name = (files.field ?? files).name
-  const held = (fileName, mimeType, bytes) => call('attachments.put', { tableId: table.id, name: fileName, mimeType, data: Buffer.from(bytes).toString('base64') })
+  const held = (fileName, mimeType, bytes) => call('attachment.add', { tableId: table.id, name: fileName, mimeType, data: Buffer.from(bytes).toString('base64') })
   const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><rect width='40' height='20' fill='rgb(40,170,60)'/></svg>"
   // An 8 x 4 GIF of two frames over a 4-color table; its LZW data sends a clear code (4) before
   // every pixel, so the codes stay 3 bits wide.
@@ -91,7 +91,7 @@ function coversFixture() {
   const gif = [...Buffer.from('GIF89a'), 8, 0, 4, 0, 0xf1, 0, 0, 40, 170, 60, 200, 20, 200, 0, 0, 0, 0, 0, 0, ...frame(0), ...frame(1), 0x3b]
   const heic = fs.readFileSync(new URL('../../crates/view/display/testdata/split.heic', import.meta.url))
   const covers = [held('drawn.svg', 'image/svg+xml', Buffer.from(svg)), held('moving.gif', 'image/gif', gif), held('photo.heic', 'image/heic', heic)]
-  for (const [index, cover] of covers.entries()) call('records.create', { tableId: table.id, values: { title: `Cover ${index + 1}`, [name]: [cover] } })
+  for (const [index, cover] of covers.entries()) call('record.add', { tableId: table.id, values: { title: `Cover ${index + 1}`, [name]: [cover] } })
   doc.markSaved()
   const bytes = Buffer.from(doc.save()).toString('base64')
   doc.free()
@@ -229,16 +229,16 @@ const editorHolds = (text) => until(async () => (await cellEditor().inputValue()
 /** The engine commands the editor's worker was sent since `from` (a count from `mark()`), with their answers. */
 const mark = async () => frame().evaluate(() => window.__engineCalls.length)
 const sent = async (from, command) => (await frame().evaluate((from) => window.__engineCalls.slice(from), from)).filter((call) => call.ok !== undefined && (!command || call.command === command))
-const writes = async (from) => (await sent(from)).filter((call) => /^table\.(transact|undo|redo|records\.(create|update|delete|move|bulk\w*)|cells\.\w+|fields\.\w+|views\.(update|patchField|create)|tables\.\w+)$/.test(call.command) && !/linkCandidates|listFields/.test(call.command))
+const writes = async (from) => (await sent(from)).filter((call) => /^(edit\.transact|history\.(undo|redo)|record\.(add|set|delete|bulk\w*)|field\.\w+|tableView\.(set|setField|add)|table\.\w+)$/.test(call.command) && !/linkCandidates|listFields/.test(call.command))
 /** Runs engine commands from the host (the agent's `ai/run`), as `origin` when given. */
 const run = (steps) => page.evaluate(async (steps) => window.devHost.connection().ai.run(steps, false), steps)
 const engine = async (method, params = {}) => {
-  const answer = await run([{ command: `table.${method}`, params }])
+  const answer = await run([{ command: method, params }])
   const result = answer.completed[0].result
   return (typeof result === 'string' ? JSON.parse(result) : result).result
 }
-const tables = async () => (await engine('documents.get')).tables
-const records = async (tableId) => (await engine('records.list', { tableId })).items
+const tables = async () => (await engine('file.get')).tables
+const records = async (tableId) => (await engine('record.list', { tableId })).items
 const drew = (predicate) => frame().evaluate((source) => window.__textDraws.some(new Function('draw', `return (${source})(draw)`)), predicate.toString())
 /**
  * The platform's command key, as the kit editor reads the platform (`isMac()`: navigator.platform).
@@ -503,7 +503,7 @@ try {
     const made = await writes(from)
     const stored = (await records(table.id)).find((record) => record.id === first.id).values.received_at
     const one = made.length === 1 && made[0].command === 'record.set' && made[0].params.values?.received_at === next.stored && made[0].ok
-    step('picking a day writes one records.update', one && stored === next.stored, JSON.stringify({ made: made.map((call) => [call.command, call.params.values]), stored }))
+    step('picking a day writes one record.set', one && stored === next.stored, JSON.stringify({ made: made.map((call) => [call.command, call.params.values]), stored }))
     await stage().click({ position: { x: 545, y: 48 } })
     await calendar.waitFor({ timeout: 5000 })
     await dateEditor.getByTestId('table-date-time-trigger').click()
@@ -604,7 +604,7 @@ try {
     const made = await writes(from)
     // The width is saved once, on release.
     const saved = made.length >= 1 && made.every((call) => call.command === 'tableView.setField' && call.params.fieldId === title.id && call.ok) && made.at(-1).params.width === 280
-    step('saves the width with views.patchField', saved, JSON.stringify(made.map((call) => [call.command, call.params])))
+    step('saves the width with tableView.setField', saved, JSON.stringify(made.map((call) => [call.command, call.params])))
     await page.mouse.move(boundary + 80, y)
     step('the new boundary resizes', await until(async () => (await cursor()) === 'ew-resize'))
   })
@@ -669,7 +669,7 @@ try {
     page.on('framenavigated', (navigated) => {
       if (navigated === editorFrame) reloaded = true
     })
-    await engine('records.update', { tableId: table.id, recordId: (await records(table.id))[0].id, values: { title: 'Changed remotely' } })
+    await engine('record.set', { tableId: table.id, recordId: (await records(table.id))[0].id, values: { title: 'Changed remotely' } })
     const agent = await until(async () => (await drew((draw) => draw.text === 'Changed remotely')) && (await kit.locator('.data-inline-footer').textContent()).includes('2 records'))
     step('an agent edit appears in the open grid', agent && !reloaded)
     // The person's own edit, then a workflow's record (a system origin).
@@ -682,10 +682,10 @@ try {
     await input.fill('Mine')
     await page.keyboard.press('Enter')
     await until(async () => (await records(table.id)).some((record) => record.values.title === 'Mine'))
-    const answer = await engine('records.create', { tableId: table.id, values: { title: 'From a workflow' }, asOrigin: 'system:workflow' })
+    const answer = await engine('record.add', { tableId: table.id, values: { title: 'From a workflow' }, asOrigin: 'system:workflow' })
     const workflow = await until(async () => (await drew((draw) => draw.text === 'From a workflow')) && (await kit.locator('.data-inline-footer').textContent()).includes('3 records'))
     step('a workflow-created record appears live in the open table', workflow && !reloaded && answer?.id != null)
-    const since = await engine('changes.since', { version: '' })
+    const since = await engine('change.list', { version: '' })
     step('the engine reports the workflow write as system:workflow', since.created.some((change) => change.recordId === answer.id && change.origin === 'system:workflow'), JSON.stringify(since.created))
     // The person's Undo reverts their own edit, never the workflow's record.
     await stage().click({ position: { x: 145, y: 48 } })
@@ -727,7 +727,7 @@ try {
     await until(async () => (await tables()).length > before.length, 100)
     const added = (await tables()).find((table) => !before.some((old) => old.id === table.id))
     const rows = added ? (await records(added.id)).map((record) => Object.values(record.values).join(':')) : []
-    const commands = (await sent(from)).map((call) => call.command).filter((command) => command.startsWith('table.import.'))
+    const commands = (await sent(from)).map((call) => call.command).filter((command) => /^file\.(previewImport|runImport)$/.test(command))
     step('imports a CSV file as a new table', added?.title === 'People' && rows.length === 2 && rows.join().includes('Ada') && commands.join() === 'file.previewImport,file.runImport', JSON.stringify({ title: added?.title, rows, commands }))
     const current = added ? await kit.getByTestId(`table-tab-${added.id}`).getAttribute('aria-current') : null
     step('shows the imported table', current === 'page')
@@ -866,7 +866,7 @@ try {
     await open('Tasks.ktable', SMALL)
     const app = kit.locator('.kui-app')
     step('draws no frame status bar under the footer', (await kit.locator('.kui-status-bar').count()) === 0)
-    await engine('records.create', { tableId: (await tables())[0].id, values: { title: 'Unsaved row' } })
+    await engine('record.add', { tableId: (await tables())[0].id, values: { title: 'Unsaved row' } })
     const shown = await until(async () => (await kit.locator('.data-inline-footer [data-testid="table-unsaved"], .data-inline-footer [data-testid="table-agent-edited"]').count()) > 0)
     step('the footer shows the document state the status bar showed', shown)
     await app.focus()
@@ -949,7 +949,7 @@ try {
         }
         return points
       }, 'Tasks.ktable')
-    const history = async () => (await engine('records.history', { tableId: table.id, recordId: first.id, checkpoints: await checkpoints() })).items
+    const history = async () => (await engine('record.history', { tableId: table.id, recordId: first.id, checkpoints: await checkpoints() })).items
     const edits = (items) =>
       items.filter((entry) => entry.action === 'update' && entry.field_id === title.id).map((entry) => [entry.before, entry.after, entry.actor])
     // The host's checkpoint of the file as it opened.

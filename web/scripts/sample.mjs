@@ -12,14 +12,14 @@ await sdk.default({ module_or_path: fs.readFileSync(path.join(engine, 'kition_ta
 
 const doc = sdk.TableDocument.create('Sample.ktable', 0, 0)
 const call = (method, params = {}) => JSON.parse(doc.call(method, JSON.stringify(params))).result
-const table = call('documents.get').tables[0]
+const table = call('file.get').tables[0]
 const fields = Object.fromEntries(table.fields.map((field) => [field.title, field.name]))
 for (const [title, status, notes] of [
   ['Write the brief', 'Done', 'Shared with the team'],
   ['Collect feedback', 'In progress', ''],
   ['Plan the launch', 'To do', 'After feedback'],
 ]) {
-  call('records.create', { tableId: table.id, values: { [fields.Title]: title, [fields.Status]: status, [fields.Notes]: notes } })
+  call('record.add', { tableId: table.id, values: { [fields.Title]: title, [fields.Status]: status, [fields.Notes]: notes } })
 }
 fs.mkdirSync(path.join(web, 'public', 'sample'), { recursive: true })
 fs.writeFileSync(path.join(web, 'public', 'sample', 'Sample.ktable'), doc.save())

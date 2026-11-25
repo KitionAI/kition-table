@@ -1,6 +1,6 @@
 # Engine commands beyond the request layer
 
-`TableDocument` answers every `kition-table-api` method as the command `table.<method>` (and the
+`TableDocument` answers every `kition-table-api` method as the command of the same id (and the
 extra `call(method, params)`), each answering `{ "result", "change" }`. This page describes the
 engine's own methods: file import, AI fields without the model call, the records changed since a
 version, and writes as a host feature (`asOrigin`). `result` is what is described below; `change`
@@ -8,12 +8,12 @@ is the `TableChange` the request made (`null` for reads), with its `origin`.
 
 | Method | Reads only | Writes as |
 | --- | --- | --- |
-| `import.preview` | yes | - |
-| `import.run` | no | `import:import` (Kition's import origin): never an undo step |
+| `file.previewImport` | yes | - |
+| `file.runImport` | no | `import:import` (Kition's import origin): never an undo step |
 | `ai.prepare` | yes | - |
 | `ai.apply` | no | `system:aifield` (Kition's AI field origin): never an undo step |
-| `changes.since` | yes | - |
-| `read` | yes | - |
+| `change.list` | yes | - |
+| `file.read` | yes | - |
 | `preview.show` | yes | - |
 
 Ids are numbers or decimal strings. Errors are the engine's error messages (as the runtime's `400`
@@ -30,9 +30,9 @@ are generated in `bindings/wasm/src/agent.rs`:
 - Parameters come from the Rust types the requests deserialize into (`schemars`): the ids from
   the route template in `METHODS` (`tableId`, `viewId`, ...; integers, required), the query
   values the route reads, and the body from `kition-table-api`'s and `kition-table-import`'s
-  request types. The bodies a handler reads key by key (`tables.update`, `fields.update`,
-  `views.update`, `dashboards.upsert`) are described by types in `agent.rs` that list exactly
-  the keys the handler reads. The AI field methods and `changes.since` read loose JSON and are
+  request types. The bodies a handler reads key by key (`table.set`, `field.set`,
+  `tableView.set`, `dashboard.set`) are described by types in `agent.rs` that list exactly
+  the keys the handler reads. The AI field methods and `change.list` read loose JSON and are
   written out there. Mutating commands also list `asOrigin`, which agents leave out.
 - Answers are `{ result, change }` or, when the command fails, the A18 error
   `{ error: { code, message, index?, retryable? } }`. The output schema requires none of the
@@ -44,7 +44,7 @@ are generated in `bindings/wasm/src/agent.rs`:
 `bindings/wasm/src/agent_tests.rs` run every command on a real document and validate its params,
 its answer, and its error results against the schemas.
 
-## `import.preview`
+## `file.previewImport`
 
 Params: the preview request of `data-import.schema.json` (`source?`, `sheet?`) with the file in
 the params instead of a multipart upload or a workspace read:
@@ -73,7 +73,7 @@ Answer: `DataImportPreviewResponse`:
 `selected_sheet` and `sheets` describe a workbook. `expires_at` is left out: the kit keeps no
 previews.
 
-## `import.run`
+## `file.runImport`
 
 Params: `DataImportExecuteRequest` with the file again:
 
@@ -103,7 +103,7 @@ Answer: `DataImportResult`, synchronously (no job):
 { "document_id": 1, "table_id": 3, "path": "Tasks.ktable", "rows_total": 2, "rows_created": 2, "rows_updated": 0, "rows_skipped": 0, "fields_created": 0, "fields_updated": 0, "warnings": [] }
 ```
 
-One `import.run` is one engine request. New records are written 500 per write. An import that
+One `file.runImport` is one engine request. New records are written 500 per write. An import that
 fails leaves the document as it was.
 
 ## `ai.prepare`
@@ -142,7 +142,7 @@ Answer:
 
 `output` is `image` for `image_generation` and `image_customization` fields; `options` comes
 with image requests only. The source cell's images (at most four) are blobs held in the file
-(read them with `attachments.read`) or `data:`/`http(s):` URLs. A batch skips the records that
+(read them with `attachment.get`) or `data:`/`http(s):` URLs. A batch skips the records that
 cannot run; one cell that cannot run is an error.
 
 ## `ai.apply`
@@ -168,7 +168,7 @@ failed result is an error. Without it: `RunDataAIFieldBatchResponse`:
 
 `state` is `{ status: "done", source_hash, config_hash, model_id: 0, updated_at, error: "" }`.
 
-## `read`
+## `file.read`
 
 The records of one table, or of one view, a page at a time (KHP A24a, A25): what `inspect()` lists
 of each table's first records, for the rest. Params: `{ "tableId" | "viewId", "limit"?: 50,
@@ -177,14 +177,14 @@ of each table's first records, for the rest. Params: `{ "tableId" | "viewId", "l
 of a previous answer (the number of records before the page, as a string).
 
 Answer: `{ "tableId", "viewId"?, "columns", "rows", "from", "to", "total", "next"? }`. `columns` are
-the field names (the keys of `values` in `records.create` and `records.update`); each row is `{ id,
+the field names (the keys of `values` in `record.add` and `record.set`); each row is `{ id,
 cells }`, the record id and one value per column (`null` when empty), a link's records as `{ id,
 display }` by record id, text over 200 characters cut and ending in `…`. `from` and `to` count the
 listed records from 1 among `total`; `next` is the step that lists the records after them
 (`{ "command": "file.read", "params": { …, "cursor" } }`), absent after the last.
 
 `inspect()` answers each table as `{ id, name, title, label, primaryFieldId, recordCount, fields,
-views, records }` (`records` as `read` answers it, at most 20 a table and 100 in all), and the
+views, records }` (`records` as `file.read` answers it, at most 20 a table and 100 in all), and the
 dashboards as `{ id, title, label, widgets, sourceTableId? }`. Hosts that relay `inspect()` over the
 Kit Protocol leave out every `title` key, so `label` carries each title to agents.
 
@@ -244,7 +244,7 @@ Answer: `{ "tableId", "table", "viewId", "view", "viewType", "dashboardId", "rec
 dashboard, `dashboardId` and `dashboard`). An unknown table, view or dashboard is a `not found`
 error.
 
-## `changes.since`
+## `change.list`
 
 Params: `{ "version": "<base64 of a version the engine answered>" }`; `""` means from the start.
 
@@ -269,7 +269,7 @@ record in the link field. Writes older than the last 1,000 the file remembers ar
 
 ## `asOrigin`
 
-Any mutating `table.*` command takes `"asOrigin": "system:<name>"` (`<name>`: letters, digits,
+Any mutating command takes `"asOrigin": "system:<name>"` (`<name>`: letters, digits,
 `-`, `_`, `.`, at most 64): the request writes as that `system` origin, never an undo step, so
-the person's undo does not revert it and `changes.since` reports it. Any other origin is refused,
-and so is `asOrigin` on `undo` and `redo`. Host features (workflows) write this way.
+the person's undo does not revert it and `change.list` reports it. Any other origin is refused,
+and so is `asOrigin` on `history.undo` and `history.redo`. Host features (workflows) write this way.

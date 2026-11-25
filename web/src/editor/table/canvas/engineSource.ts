@@ -2,7 +2,7 @@
  * The grid's `GridSource` over the kit's engine (`KitEngine.invoke`, a Worker): the arrangement
  * (`gridOpen`, `kition-table-arrange`), handed back to the engine to lay out its rows and columns
  * (`gridAxes`, with the overlay's style and the group headers' ids), what each linear row is (`gridRows`), the bands
- * (`gridBands`), and the pictures the bands show (`attachments.read` for a blob the document holds, or a `data:` url;
+ * (`gridBands`), and the pictures the bands show (`attachment.get` for a blob the document holds, or a `data:` url;
  * the kit loads nothing from the network), decoded by the browser, or by the engine (`gridPicture`) when the browser
  * cannot. Typed arrays come back transferred, without a copy.
  *
@@ -128,7 +128,7 @@ export function engineSource(engine: KitEngine, initial: GridTarget): EngineSour
       const hash = blobHash(url)
       let blob: Blob | null = null
       if (hash) {
-        const answer = JSON.parse(await engine.invoke<string>('call', 'attachments.read', JSON.stringify({ hash }))) as { result?: { data: string; mimeType: string } }
+        const answer = JSON.parse(await engine.invoke<string>('call', 'attachment.get', JSON.stringify({ hash }))) as { result?: { data: string; mimeType: string } }
         if (answer.result) blob = new Blob([Uint8Array.from(atob(answer.result.data), (c) => c.charCodeAt(0))], { type: answer.result.mimeType })
       } else if (url.startsWith('data:')) blob = await (await fetch(url)).blob()
       return blob ? thumbnail(blob, width, height, (bytes, maxSide) => engine.invoke<Uint8Array>('gridPicture', bytes, maxSide)) : null

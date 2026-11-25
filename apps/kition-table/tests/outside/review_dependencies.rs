@@ -356,19 +356,19 @@ async fn whole_record_rollup_ai_sources_hold_linked_values() {
 
 #[tokio::test]
 async fn view_filter_sort_and_group_ids_hold_field_definitions() {
-    for method in ["putFilterTree", "putSorts", "putGroups"] {
+    for method in ["setFilterTree", "setSorts", "setGroups"] {
         for related in [true, false] {
             let f = Fixture::new(Guard::Premise);
             let (table, view, source) = (table(&f), f.disk().inspect().unwrap()["tables"][0]["views"][0]["tool_id"].clone(), field(&f, "notes"));
             let basis = f.basis().await;
             f.colleague("field.set", json!({"tableId":1,"fieldId":if related {3} else {2},"type":"text"}));
             let mut params = json!({"tableId":table,"viewId":view});
-            if method == "putFilterTree" {
+            if method == "setFilterTree" {
                 params["tree"] = json!({"conjunction":"and","children":[{"group":{"conjunction":"or","children":[{"condition":{"field_id":source,"operator":"is","value":"N"}}]}}]});
             } else {
                 params["items"] = json!([{"field_id":source,"direction":"asc"}]);
             }
-            let answer = f.write(basis, &format!("table.views.{method}"), params).await;
+            let answer = f.write(basis, &format!("tableView.{method}"), params).await;
             // A filter, sort or group writes its field's name beside its id, not its type; the
             // source's type change is unrelated.
             answer.unwrap();

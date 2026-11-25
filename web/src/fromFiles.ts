@@ -18,7 +18,7 @@ import enUS from '../locales/en-US/table.json'
  * The model's answer is untrusted (the files' names are in its prompt): the design is checked and
  * only what the kit allows is taken from it (see `planFromAnswer`, `fieldSeeds`, `viewSeeds`).
  *
- * History: making the table is one undo step, `tables.create` as the person; the records go in as
+ * History: making the table is one undo step, `table.add` as the person; the records go in as
  * the host feature `system:fromfiles` (outside the undo history), so Undo takes back the table and
  * the engine's repair removes its records with it. AI cells are written by `ai.apply` as
  * `system:aifield`, outside the undo history, as every AI field run is. Every file is read before
@@ -102,7 +102,7 @@ const OPTION_KEYS: Record<string, Record<string, (value: unknown) => unknown>> =
 
 /**
  * Every option key the engine or the editor reads for some field type (`agent/commands.json`'s
- * `fields.create`, `web/src/editor/types/dataDocument.ts`): a design sets them only where
+ * `field.add`, `web/src/editor/types/dataDocument.ts`): a design sets them only where
  * `OPTION_KEYS` allows. Other keys are inert data the engine keeps as they are; a design keeps them
  * only as short scalars (`inertOption`).
  * TODO(owner): the gating test "seeds the engine" (fromFiles.spec.ts) expects an inert key
@@ -398,7 +398,7 @@ function engineNames(plan: TablePlan) {
 }
 
 /**
- * The fields of `tables.create`: an AI field is long text that reads its source field (`extract`).
+ * The fields of `table.add`: an AI field is long text that reads its source field (`extract`).
  * Its `ai_config` is the kit's own, built from the checked plan; a design's options never carry one.
  */
 export function fieldSeeds(plan: TablePlan) {
@@ -424,7 +424,7 @@ export function fieldSeeds(plan: TablePlan) {
 }
 
 /**
- * The views of `tables.create`: a calendar only when the table has a date field; a kind the engine
+ * The views of `table.add`: a calendar only when the table has a date field; a kind the engine
  * has no view for is a grid. A view's config takes `groupField` (kanban: a single_select or checkbox
  * field) and `coverField` (gallery: an attachment or url field) by the field's title, as the
  * engine's first `groups` entry and `cover_field_name`; a title that names no such field is left out.
@@ -621,7 +621,7 @@ export async function tableFromFiles(options: FromFilesOptions): Promise<FromFil
   canceled(signal)
   let table: CreatedTable
   try {
-    table = await source.command<CreatedTable>('tables.create', { title: plan.tableName, fields: fieldSeeds(plan), views: viewSeeds(plan) })
+    table = await source.command<CreatedTable>('table.add', { title: plan.tableName, fields: fieldSeeds(plan), views: viewSeeds(plan) })
   } catch (error) {
     throw new FromFilesError('engineRefused', `The table could not be made: ${messageOf(error)}`, {}, { cause: error })
   }
@@ -633,7 +633,7 @@ export async function tableFromFiles(options: FromFilesOptions): Promise<FromFil
     for (const [index, file] of files.entries()) {
       canceled(signal)
       // Held in the file as a blob, like an attachment put in a cell.
-      const attachment = await source.command<unknown>('attachments.put', {
+      const attachment = await source.command<unknown>('attachment.add', {
         tableId: table.id,
         name: file.name,
         mimeType: file.type || 'application/octet-stream',
@@ -642,7 +642,7 @@ export async function tableFromFiles(options: FromFilesOptions): Promise<FromFil
       const values: Record<string, unknown> = {}
       if (primary) values[primary] = file.name
       if (attachmentField) values[attachmentField] = [attachment]
-      const record = await source.command<{ id: number }>('records.create', { tableId: table.id, values, asOrigin: ORIGIN })
+      const record = await source.command<{ id: number }>('record.add', { tableId: table.id, values, asOrigin: ORIGIN })
       recordIds.push(record.id)
       onProgress?.({ stage: 'records', done: index + 1, total: files.length })
     }
@@ -671,7 +671,7 @@ export async function tableFromFiles(options: FromFilesOptions): Promise<FromFil
   } catch (error) {
     // No half-made table is left behind, and no undo step of it: the delete is outside the history.
     try {
-      await source.command('tables.delete', { tableId: table.id, asOrigin: ORIGIN })
+      await source.command('table.delete', { tableId: table.id, asOrigin: ORIGIN })
     } catch (cleanup) {
       throw new FromFilesError('leftBehind', `The table ${table.title} could not be deleted again: ${messageOf(cleanup)}`, { title: table.title }, { cause: error })
     }

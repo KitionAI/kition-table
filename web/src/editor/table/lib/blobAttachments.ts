@@ -1,7 +1,7 @@
 /**
  * Attachments held in the table document as blobs: an attachment value whose `url` is
  * `kition-blob:<sha256>` names a blob of the document's own file (the lowercase hex SHA-256 of
- * its bytes), which the data source reads (`attachments.read`) and the app may serve
+ * its bytes), which the data source reads (`attachment.get`) and the app may serve
  * (`TableHost.resolveBlobURL`).
  */
 const BLOB_URL_SCHEME = 'kition-blob:'

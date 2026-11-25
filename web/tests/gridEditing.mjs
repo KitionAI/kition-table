@@ -3,16 +3,16 @@
 //
 // The intents of the old grid's tests in the plan's section 6, on the new grid: a typed key opens
 // a text cell's editor, which is the focused textarea on the cell, with one brand border and the
-// text centred (TextEditor.spec), and Enter writes one records.update and moves down (flow.mjs:290,
+// text centred (TextEditor.spec), and Enter writes one record.set and moves down (flow.mjs:290,
 // case regressions/issue-grid-typing-and-drag); an input method's composition opens it and stays
 // in it (platform UI-K6); a date cell opens the compact calendar and time menu, and a picked day is
-// one records.update (flow.mjs:321, TextEditor.spec); a choice cell opens its list; a checkbox and a
+// one record.set (flow.mjs:321, TextEditor.spec); a choice cell opens its list; a checkbox and a
 // rating's symbol write on a click; copy puts the selection's cells on the clipboard as TSV
 // (flow.mjs:270, tableClipboard.spec); a paste past the last record is one transact of cells.set
 // and records.create (flow.mjs:360); Delete clears the selection in one transact; the fill handle
 // fills down in one transact; a row dragged by its handle is one records.move (flow.mjs:381); a
 // selected column dragged is one fields.move (flow.mjs:401, tableColumnOrdering.spec); a column's
-// edge resizes it with views.patchField (flow.mjs:421); the frozen edge dragged saves the frozen
+// edge resizes it with tableView.setField (flow.mjs:421); the frozen edge dragged saves the frozen
 // count (flow.mjs:599, useColumnFreeze.spec); an attachment's picture is drawn from the document's
 // blob and a click previews it (imageCellRenderer.spec, AttachmentCell.spec); an AI cell shows a
 // regenerate button on hover and a spinner while it generates (aiActionLayer.spec).
@@ -20,7 +20,7 @@
 // Card tg4c, the old grid's features the new one lacked: an edit that leaves the arrangement as it
 // was redraws only its record's bands (gridSync, no new arrangement); a column header that is not
 // selected drags its column (flow.mjs:401); the active attachment cell's add button picks files
-// and adds them in one records.update, and files pasted on an attachment cell are added the same
+// and adds them in one record.set, and files pasted on an attachment cell are added the same
 // way (TableEditorGridView's picker, useTableClipboard's file paste, imageCellRenderer.spec); a
 // picture at a web address is drawn (the old grid's ImageManager loaded such urls).
 //
@@ -121,13 +121,13 @@ async function fixture() {
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
     return answer.result
   }
-  const table = call('documents.get').tables[0]
+  const table = call('file.get').tables[0]
   const tableId = table.id
   const grid = table.views[0].id
   const primary = table.fields.find((field) => field.is_primary)
-  for (const field of table.fields.filter((field) => !field.is_primary)) call('fields.delete', { tableId, fieldId: field.id })
+  for (const field of table.fields.filter((field) => !field.is_primary)) call('field.delete', { tableId, fieldId: field.id })
   const field = (title, type, options) => {
-    const made = call('fields.create', { tableId, title, type, ...(options ? { options } : {}) })
+    const made = call('field.add', { tableId, title, type, ...(options ? { options } : {}) })
     return made.field ?? made
   }
   const amount = field('Amount', 'number')
@@ -139,8 +139,8 @@ async function fixture() {
   const due = field('Due', 'datetime')
   const files = field('Files', 'attachment')
   const summary = field('Summary', 'ai', { ai_config: { type: 'summarize', source_field_id: notes.id, enabled: true } })
-  const picture = call('attachments.put', { tableId, name: 'red.png', mimeType: 'image/png', data: png(8, 4, [220, 20, 30]).toString('base64') })
-  const held = (name, mimeType, bytes) => call('attachments.put', { tableId, name, mimeType, data: bytes.toString('base64') })
+  const picture = call('attachment.add', { tableId, name: 'red.png', mimeType: 'image/png', data: png(8, 4, [220, 20, 30]).toString('base64') })
+  const held = (name, mimeType, bytes) => call('attachment.add', { tableId, name, mimeType, data: bytes.toString('base64') })
   const drawn = held('drawn.svg', 'image/svg+xml', svg(GREEN))
   const moving = held('moving.gif', 'image/gif', gif(8, 4, [GREEN, MAGENTA]))
   const photo = held('photo.heic', 'image/heic', HEIC)
@@ -156,8 +156,8 @@ async function fixture() {
     [files.name]: i === 0 ? [picture] : i === 3 ? [{ name: 'blue.png', url: WEB_PICTURE, mime_type: 'image/png' }] : i === 9 ? [drawn] : i === 10 ? [moving] : i === 11 ? [photo] : [],
     [summary.name]: `Summary ${i + 1}`,
   }))
-  call('transact', { ops: [{ op: 'records.create', tableId, at: null, records }] })
-  call('views.patchConfig', { tableId, viewId: grid, frozen_column_count: 1 })
+  call('edit.transact', { ops: [{ op: 'records.create', tableId, at: null, records }] })
+  call('tableView.setConfig', { tableId, viewId: grid, frozen_column_count: 1 })
   doc.markSaved()
   const bytes = doc.save()
   doc.free()
@@ -283,7 +283,7 @@ try {
   if (which === 'chromium') await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin })
   const N = made.names
 
-  await test('a typed key opens the text editor on the cell; Enter writes one records.update and moves down', async () => {
+  await test('a typed key opens the text editor on the cell; Enter writes one record.set and moves down', async () => {
     const at = await cell(page, 0, col('title'))
     await page.mouse.click(at.x, at.y)
     const from = await writes(page)
@@ -306,8 +306,8 @@ try {
     )
     await page.keyboard.press('Enter')
     const made = await waitWrites(page, from)
-    const one = made.length === 1 && made[0].command === 'records.update' && made[0].params.values[N.title] === 'Hello'
-    step('Enter writes one records.update and moves down', one && (await valueAt(page, 0, N.title)) === 'Hello' && JSON.stringify(await active(page)) === '{"row":1,"col":0}', JSON.stringify(made))
+    const one = made.length === 1 && made[0].command === 'record.set' && made[0].params.values[N.title] === 'Hello'
+    step('Enter writes one record.set and moves down', one && (await valueAt(page, 0, N.title)) === 'Hello' && JSON.stringify(await active(page)) === '{"row":1,"col":0}', JSON.stringify(made))
   })
 
   await test('an edit that keeps the arrangement redraws only its record\'s bands', async () => {
@@ -397,7 +397,7 @@ try {
     }
   })
 
-  await test('a date cell opens the compact calendar; a picked day is one records.update', async () => {
+  await test('a date cell opens the compact calendar; a picked day is one record.set', async () => {
     const at = await cell(page, 0, col('due'))
     await page.mouse.click(at.x, at.y)
     await page.mouse.dblclick(at.x, at.y)
@@ -418,7 +418,7 @@ try {
     const from = await writes(page)
     await calendar.locator(`[data-date="${expected.next}"]`).click()
     const made = await waitWrites(page, from)
-    step('a picked day is one records.update', made.length === 1 && made[0].command === 'records.update' && made[0].params.values[N.due] === expected.stored && (await valueAt(page, 0, N.due)) === expected.stored, JSON.stringify(made))
+    step('a picked day is one record.set', made.length === 1 && made[0].command === 'record.set' && made[0].params.values[N.due] === expected.stored && (await valueAt(page, 0, N.due)) === expected.stored, JSON.stringify(made))
     await page.keyboard.press('Enter')
     await calendar.waitFor({ timeout: 5000 })
     await page.getByTestId('table-date-time-trigger').click()
@@ -564,7 +564,7 @@ try {
     const tail = after.slice(-3).map((record) => [record.values[N.title], record.values[N.amount], record.values[N.notes]])
     step(
       'a paste past the last record is one transact of cells.set and records.create',
-      made.length === 1 && made[0].command === 'transact' && ops.join() === 'cells.set,records.create' && after.length === before + 1 && JSON.stringify(tail) === JSON.stringify([['a1', 11, 'n1'], ['a2', 12, 'n2'], ['a3', 13, 'n3']]),
+      made.length === 1 && made[0].command === 'edit.transact' && ops.join() === 'cells.set,records.create' && after.length === before + 1 && JSON.stringify(tail) === JSON.stringify([['a1', 11, 'n1'], ['a2', 12, 'n2'], ['a3', 13, 'n3']]),
       JSON.stringify({ ops, tail, before, after: after.length }),
     )
   })
@@ -692,7 +692,7 @@ try {
     )
   })
 
-  await test("a column's edge resizes it with views.patchField", async () => {
+  await test("a column's edge resizes it with tableView.setField", async () => {
     const box = await page.evaluate(() => window.__ktableGrid.view.scroller.getBoundingClientRect().toJSON())
     const column = await page.evaluate(() => window.__ktableGrid.view.currentAxes.columns[1])
     const edge = box.left + column.x + column.width - 1
@@ -704,7 +704,7 @@ try {
     await page.mouse.up()
     const made = await waitWrites(page, from)
     const width = await page.evaluate(() => window.__ktableGrid.view.currentAxes.columns[1].width)
-    step("a column's edge resizes it with views.patchField", cursor === 'ew-resize' && made.length === 1 && made[0].command === 'views.patchField' && made[0].params.fieldId === column.fieldId && made[0].params.width === column.width + 80 && width === column.width + 80, JSON.stringify({ cursor, made, width }))
+    step("a column's edge resizes it with tableView.setField", cursor === 'ew-resize' && made.length === 1 && made[0].command === 'tableView.setField' && made[0].params.fieldId === column.fieldId && made[0].params.width === column.width + 80 && width === column.width + 80, JSON.stringify({ cursor, made, width }))
   })
 
   await test('the frozen edge dragged saves the frozen columns', async () => {
@@ -719,7 +719,7 @@ try {
     await page.mouse.up()
     const made = await waitWrites(page, from)
     const frozen = await page.evaluate(() => window.__ktableGrid.view.currentAxes.columns.filter((column) => column.frozen).length)
-    step('the frozen edge dragged saves the frozen columns', cursor === 'col-resize' && made.length === 1 && made[0].command === 'views.patchConfig' && made[0].params.frozen_column_count === 2 && frozen === 2, JSON.stringify({ cursor, made, frozen }))
+    step('the frozen edge dragged saves the frozen columns', cursor === 'col-resize' && made.length === 1 && made[0].command === 'tableView.setConfig' && made[0].params.frozen_column_count === 2 && frozen === 2, JSON.stringify({ cursor, made, frozen }))
   })
 
   // The old grid's useColumnFreeze.spec and layoutRenderer.spec: the handle shows after the pointer
@@ -831,7 +831,7 @@ try {
     step('a HEIC held in the document is drawn', near(heicShown.pixel ?? [], [220, 30, 30, 255], 24) && near(right, [30, 30, 220, 255], 24), JSON.stringify({ ...heicShown, right }))
   })
 
-  await test("the active attachment cell's add button picks files and adds them in one records.update", async () => {
+  await test("the active attachment cell's add button picks files and adds them in one record.set", async () => {
     const files = await filesCol()
     const row = await rowOf('Record 5')
     const at = await cell(page, row, files)
@@ -847,8 +847,8 @@ try {
     const made = await waitWrites(page, from, 2)
     const value = (await valueAt(page, row, N.files)) ?? []
     step(
-      "the active attachment cell's add button picks files and adds them in one records.update",
-      !early && made.length === 2 && made[0].command === 'attachments.put' && made[1].command === 'records.update' && value.length === 1 && value[0].name === 'green.png' && String(value[0].url).startsWith('kition-blob:'),
+      "the active attachment cell's add button picks files and adds them in one record.set",
+      !early && made.length === 2 && made[0].command === 'attachment.add' && made[1].command === 'record.set' && value.length === 1 && value[0].name === 'green.png' && String(value[0].url).startsWith('kition-blob:'),
       JSON.stringify({ early, made: made.map((write) => write.command), value }),
     )
   })
@@ -870,7 +870,7 @@ try {
     const value = (await valueAt(page, row, N.files)) ?? []
     step(
       'files pasted on an attachment cell are added to it',
-      made.length === 2 && made[1].command === 'records.update' && value.map((item) => item.name).join() === 'green.png,pasted.png',
+      made.length === 2 && made[1].command === 'record.set' && value.map((item) => item.name).join() === 'green.png,pasted.png',
       JSON.stringify({ made: made.map((write) => write.command), value: value.map((item) => item.name) }),
     )
   })
@@ -933,7 +933,7 @@ try {
     const rowHeight = (height) =>
       page.evaluate(async ([tableId, viewId, height]) => {
         const { engine, view } = window.__ktableGrid
-        await engine.invoke('call', 'views.patchConfig', JSON.stringify({ tableId, viewId, row_height: height }))
+        await engine.invoke('call', 'tableView.setConfig', JSON.stringify({ tableId, viewId, row_height: height }))
         await view.reopen()
       }, [made.tableId, made.view, height])
     const editorBox = () =>
@@ -980,7 +980,7 @@ try {
     const dueId = await page.evaluate((name) => window.__ktableGrid.data.fields().find((field) => field.name === name).id, N.due)
     await page.evaluate(async ([tableId, fieldId]) => {
       const { engine, data } = window.__ktableGrid
-      await engine.invoke('call', 'fields.update', JSON.stringify({ tableId, fieldId, readonly: true }))
+      await engine.invoke('call', 'field.set', JSON.stringify({ tableId, fieldId, readonly: true }))
       await data.reload()
     }, [made.tableId, dueId])
     const due = await page.evaluate((id) => window.__ktableGrid.view.currentAxes.columns.findIndex((column) => column.fieldId === id), dueId)

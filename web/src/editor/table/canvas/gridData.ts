@@ -2,11 +2,11 @@
  * What the new grid edits through (grid plan 3.8): the table's fields, the records it touches, and
  * the engine's commands. The grid holds no records: a write first reads just the records it acts
  * on (`gridRecords`), then sends the engine's own commands (`transact` with `cells.set`,
- * `records.create`, `records.move`, `fields.move`; `views.patchField`; `views.patchConfig`), so
+ * `records.create`, `records.move`, `fields.move`; `tableView.setField`; `tableView.setConfig`), so
  * undo, collaboration and the agent's receipts are what they always were. A clear of many records
  * (a whole column) hands the engine the records' ids (`gridClear`), which writes the same one
  * `cells.set` without the page reading the records. Uploads go through the host's or the kit's
- * path for attachments (`attachments.put`), as the old grid's did.
+ * path for attachments (`attachment.add`), as the old grid's did.
  *
  * `engineData` is the implementation over the kit's engine (`KitEngine.invoke`), for the
  * development page; the editor's is `editorData`, over its data source.
@@ -32,13 +32,13 @@ export type GridData = {
   records(ids: number[], fieldNames?: string[]): Promise<GridRecord[]>
   /** One engine transaction: one undo step. */
   transact(ops: TableOp[]): Promise<void>
-  /** One cell edit (`records.update`). */
+  /** One cell edit (`record.set`). */
   update(recordId: number, values: Record<string, DataRecordValue>): Promise<void>
-  /** Saves a column's width in the view (`views.patchField`). */
+  /** Saves a column's width in the view (`tableView.setField`). */
   patchFieldWidth(fieldId: number, width: number): Promise<void>
-  /** Saves how many columns the view freezes (`views.patchConfig`). */
+  /** Saves how many columns the view freezes (`tableView.setConfig`). */
   setFrozen(count: number): Promise<void>
-  /** A blob the document holds (`attachments.read`), or null. */
+  /** A blob the document holds (`attachment.get`), or null. */
   blob(hash: string): Promise<{ bytes: Uint8Array; mimeType: string } | null>
   /** Sets `values` (field name → empty value) on the records `ids` in one transaction, the records found by the engine (`gridClear`). */
   clear(ids: number[], values: Record<string, DataRecordValue>): Promise<void>
@@ -71,7 +71,7 @@ function fromBase64(text: string): Uint8Array {
 
 /**
  * A `GridData` over the kit's engine for table `tableId` and view `viewId`; `reload()` reads the
- * fields again. Uploads store the file in the document (`attachments.put`) unless the host's
+ * fields again. Uploads store the file in the document (`attachment.add`) unless the host's
  * `upload` is given (as the editor's `uploadAttachment` is).
  */
 export async function engineData(
@@ -87,7 +87,7 @@ export async function engineData(
   }
   let fields = new Map<number, DataField>()
   const reload = async () => {
-    const document = await call<{ tables: Array<{ id: number; fields: DataField[] }> }>('documents.get', {})
+    const document = await call<{ tables: Array<{ id: number; fields: DataField[] }> }>('file.get', {})
     const table = document.tables.find((item) => item.id === tableId)
     fields = new Map([...(table?.fields ?? [])].sort((a, b) => a.order - b.order).map((field) => [field.id, editorField(field)]))
   }
@@ -103,20 +103,20 @@ export async function engineData(
       return JSON.parse(await engine.invoke<string>('gridRecords', JSON.stringify({ tableId, ids, ...(fieldNames ? { fields: fieldNames } : {}) }))) as GridRecord[]
     },
     async transact(ops) {
-      if (ops.length) await call('transact', { ops })
+      if (ops.length) await call('edit.transact', { ops })
     },
     async update(recordId, values) {
-      await call('records.update', { tableId, recordId, values })
+      await call('record.set', { tableId, recordId, values })
     },
     async patchFieldWidth(fieldId, width) {
-      if (viewId != null) await call('views.patchField', { tableId, viewId, fieldId, width })
+      if (viewId != null) await call('tableView.setField', { tableId, viewId, fieldId, width })
     },
     async setFrozen(count) {
-      if (viewId != null) await call('views.patchConfig', { tableId, viewId, frozen_column_count: count })
+      if (viewId != null) await call('tableView.setConfig', { tableId, viewId, frozen_column_count: count })
     },
     async blob(hash) {
       try {
-        const blob = await call<{ data: string; mimeType: string }>('attachments.read', { hash })
+        const blob = await call<{ data: string; mimeType: string }>('attachment.get', { hash })
         return { bytes: fromBase64(blob.data), mimeType: blob.mimeType }
       } catch {
         return null
@@ -127,6 +127,6 @@ export async function engineData(
     },
     upload:
       options.upload ??
-      (async (file) => call<DataAttachment>('attachments.put', { tableId, name: file.name, mimeType: file.type, data: toBase64(new Uint8Array(await file.arrayBuffer())) })),
+      (async (file) => call<DataAttachment>('attachment.add', { tableId, name: file.name, mimeType: file.type, data: toBase64(new Uint8Array(await file.arrayBuffer())) })),
   }
 }

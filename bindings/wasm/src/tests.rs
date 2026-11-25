@@ -9,7 +9,7 @@ fn new_document() -> TableDocument {
 
 /// The first table's id and its primary field's name.
 fn first_table(doc: &mut TableDocument) -> (i64, String) {
-    let document = doc.call("documents.get", &Value::Null).unwrap()["result"].clone();
+    let document = doc.call("file.get", &Value::Null).unwrap()["result"].clone();
     let table = &document["tables"][0];
     let primary = table["primary_field_id"].as_i64().unwrap();
     let field = table["fields"].as_array().unwrap().iter().find(|field| field["id"].as_i64() == Some(primary)).unwrap();
@@ -23,7 +23,7 @@ fn add_record(doc: &mut TableDocument, title: &str) -> Value {
 
 fn titles(doc: &mut TableDocument) -> Vec<String> {
     let (table_id, field) = first_table(doc);
-    let page = doc.call("records.list", &json!({ "tableId": table_id })).unwrap();
+    let page = doc.call("record.list", &json!({ "tableId": table_id })).unwrap();
     page["result"]["items"].as_array().unwrap().iter().map(|record| record["values"][&field].as_str().unwrap_or_default().to_owned()).collect()
 }
 
@@ -40,7 +40,7 @@ fn keeps_the_kit_sdk_contract() {
 #[test]
 fn a_new_document_has_the_runtime_starter_table() {
     let mut doc = new_document();
-    let document = doc.call("documents.get", &Value::Null).unwrap()["result"].clone();
+    let document = doc.call("file.get", &Value::Null).unwrap()["result"].clone();
     assert_eq!(document["id"], 1);
     assert_eq!(document["title"], "Tasks");
     let table = &document["tables"][0];
@@ -54,7 +54,7 @@ fn writes_answer_their_change_and_reads_none() {
     let mut doc = new_document();
     let (table_id, _) = first_table(&mut doc);
     let revision = doc.revision();
-    let read = doc.call("records.list", &json!({ "tableId": table_id })).unwrap();
+    let read = doc.call("record.list", &json!({ "tableId": table_id })).unwrap();
     assert_eq!(read["change"], Value::Null);
     assert_eq!(doc.revision(), revision);
     assert!(!doc.dirty());
@@ -87,7 +87,7 @@ fn unknown_methods_and_commands_fail() {
     let mut doc = new_document();
     assert!(doc.call("records.nothing", &Value::Null).is_err());
     assert!(doc.execute("table.records.nothing", json!({})).is_err());
-    assert!(doc.execute("records.list", json!({})).is_err());
+    assert!(doc.execute("record.list", json!({})).is_err());
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn every_read_method_is_known_and_its_command_does_not_mutate() {
     let commands = doc.commands();
     for method in READ_METHODS {
         assert!(known_method(method), "{method}");
-        let command = commands.iter().find(|command| command.id == format!("table.{method}")).unwrap();
+        let command = commands.iter().find(|command| command.id == *method).unwrap();
         assert!(!command.mutates, "{method}");
     }
     let create = commands.iter().find(|command| command.id == "record.add").unwrap();
@@ -119,17 +119,17 @@ fn save_leaves_edits_after_it_unsaved() {
 /// The calls the table editor makes as it opens a table: every read, and the view config sent
 /// back as it was read.
 fn open_like_the_editor(doc: &mut TableDocument) {
-    let document = doc.call("documents.get", &Value::Null).unwrap()["result"].clone();
-    doc.call("historyState", &Value::Null).unwrap();
-    doc.call("dashboards.list", &Value::Null).unwrap();
+    let document = doc.call("file.get", &Value::Null).unwrap()["result"].clone();
+    doc.call("history.state", &Value::Null).unwrap();
+    doc.call("dashboard.list", &Value::Null).unwrap();
     for table in document["tables"].as_array().unwrap() {
         let table_id = &table["id"];
-        doc.call("records.list", &json!({ "tableId": table_id, "limit": 200, "offset": 0 })).unwrap();
+        doc.call("record.list", &json!({ "tableId": table_id, "limit": 200, "offset": 0 })).unwrap();
         for view in table["views"].as_array().unwrap() {
             let view_id = &view["id"];
-            doc.call("views.listFields", &json!({ "tableId": table_id, "viewId": view_id })).unwrap();
-            doc.call("records.list", &json!({ "tableId": table_id, "viewId": view_id })).unwrap();
-            doc.call("views.update", &json!({ "tableId": table_id, "viewId": view_id, "config": view["config"] })).unwrap();
+            doc.call("tableView.listFields", &json!({ "tableId": table_id, "viewId": view_id })).unwrap();
+            doc.call("record.list", &json!({ "tableId": table_id, "viewId": view_id })).unwrap();
+            doc.call("tableView.set", &json!({ "tableId": table_id, "viewId": view_id, "config": view["config"] })).unwrap();
         }
     }
 }
@@ -183,12 +183,12 @@ fn undo_back_to_the_saved_state_makes_the_document_saved() {
 #[test]
 fn a_request_is_one_undo_step() {
     let mut doc = new_document();
-    let before = doc.call("documents.get", &Value::Null).unwrap()["result"]["tables"].as_array().unwrap().len();
-    doc.call("tables.create", &json!({ "title": "Second" })).unwrap();
-    assert_eq!(doc.call("documents.get", &Value::Null).unwrap()["result"]["tables"].as_array().unwrap().len(), before + 1);
+    let before = doc.call("file.get", &Value::Null).unwrap()["result"]["tables"].as_array().unwrap().len();
+    doc.call("table.add", &json!({ "title": "Second" })).unwrap();
+    assert_eq!(doc.call("file.get", &Value::Null).unwrap()["result"]["tables"].as_array().unwrap().len(), before + 1);
     assert!(doc.dirty());
     doc.execute("edit.undo", json!({})).unwrap();
-    assert_eq!(doc.call("documents.get", &Value::Null).unwrap()["result"]["tables"].as_array().unwrap().len(), before);
+    assert_eq!(doc.call("file.get", &Value::Null).unwrap()["result"]["tables"].as_array().unwrap().len(), before);
     assert!(!doc.dirty());
     assert!(!doc.can_undo());
 }
@@ -274,7 +274,7 @@ fn csv_export_answers_its_content() {
     let mut doc = new_document();
     add_record(&mut doc, "Ada");
     let (table_id, _) = first_table(&mut doc);
-    let exported = doc.call("csv.export", &json!({ "tableId": table_id })).unwrap();
+    let exported = doc.call("file.exportCsv", &json!({ "tableId": table_id })).unwrap();
     assert!(exported["result"]["content"].as_str().unwrap().contains("Ada"));
 }
 
@@ -287,7 +287,7 @@ fn bytes_that_are_no_table_fail_to_open() {
 #[test]
 fn the_method_list_names_every_method_with_its_route() {
     let methods: Vec<(String, String)> = serde_json::from_str(&crate::methods_json()).unwrap();
-    assert!(methods.iter().any(|(method, route)| method == "records.list" && route == "GET /tables/{tableId}/records"));
+    assert!(methods.iter().any(|(method, route)| method == "record.list" && route == "GET /tables/{tableId}/records"));
     assert!(methods.iter().all(|(method, _)| known_method(method)));
 }
 
@@ -310,7 +310,7 @@ fn save_vacuums_a_sparse_database_and_keeps_every_edit() {
     for round in 0..2000 {
         last = format!("Edit {round}");
         let values = json!({ field.clone(): last.clone() });
-        doc.call("transact", &json!({ "ops": [{ "op": "cells.set", "tableId": table_id, "records": [{ "rowKey": key, "values": values }] }] }))
+        doc.call("edit.transact", &json!({ "ops": [{ "op": "cells.set", "tableId": table_id, "records": [{ "rowKey": key, "values": values }] }] }))
             .unwrap();
         let (pages, free) = free_pages(&doc);
         if free * 100 > pages * VACUUM_FREE_PERCENT {
@@ -399,19 +399,19 @@ fn unbase64(text: &Value) -> Vec<u8> {
 /// Adds an attachment field "Files" to the first table; answers the table id and its name.
 fn files_field(doc: &mut TableDocument) -> (i64, String) {
     let (table_id, _) = first_table(doc);
-    let field = doc.call("fields.create", &json!({ "tableId": table_id, "title": "Files", "type": "attachment" })).unwrap();
+    let field = doc.call("field.add", &json!({ "tableId": table_id, "title": "Files", "type": "attachment" })).unwrap();
     (table_id, field["result"]["name"].as_str().unwrap().to_owned())
 }
 
-/// Stores `bytes` with `attachments.put` and puts the answer into the first record's `field`.
+/// Stores `bytes` with `attachment.add` and puts the answer into the first record's `field`.
 fn attach(doc: &mut TableDocument, table_id: i64, field: &str, bytes: &[u8]) -> Value {
     let attachment = doc
-        .call("attachments.put", &json!({ "tableId": table_id, "name": "beach.png", "mimeType": "image/png", "data": base64(bytes) }))
+        .call("attachment.add", &json!({ "tableId": table_id, "name": "beach.png", "mimeType": "image/png", "data": base64(bytes) }))
         .unwrap()["result"]
         .clone();
-    let records = doc.call("records.list", &json!({ "tableId": table_id })).unwrap();
+    let records = doc.call("record.list", &json!({ "tableId": table_id })).unwrap();
     let record_id = records["result"]["items"][0]["id"].as_i64().unwrap();
-    doc.call("records.update", &json!({ "tableId": table_id, "recordId": record_id, "values": { field: [attachment.clone()] } })).unwrap();
+    doc.call("record.set", &json!({ "tableId": table_id, "recordId": record_id, "values": { field: [attachment.clone()] } })).unwrap();
     attachment
 }
 
@@ -430,22 +430,22 @@ fn attachments_are_put_into_the_file_and_read_back() {
 
     // Reading changes nothing, and works in a read-only session.
     let revision = doc.revision();
-    let read = doc.call("attachments.read", &json!({ "hash": hash })).unwrap();
+    let read = doc.call("attachment.get", &json!({ "hash": hash })).unwrap();
     assert_eq!(read["change"], Value::Null);
     assert_eq!(doc.revision(), revision);
     assert_eq!(unbase64(&read["result"]["data"]), bytes);
     assert_eq!(read["result"]["mimeType"], "image/png");
-    assert!(READ_METHODS.contains(&"attachments.read"));
-    assert!(!READ_METHODS.contains(&"attachments.put"));
-    assert!(doc.call("attachments.read", &json!({ "hash": kition_table_file::blobs::blob_hash(b"none") })).is_err());
-    assert!(doc.call("attachments.put", &json!({ "tableId": table_id, "name": "x", "data": "not base64!" })).is_err());
+    assert!(READ_METHODS.contains(&"attachment.get"));
+    assert!(!READ_METHODS.contains(&"attachment.add"));
+    assert!(doc.call("attachment.get", &json!({ "hash": kition_table_file::blobs::blob_hash(b"none") })).is_err());
+    assert!(doc.call("attachment.add", &json!({ "tableId": table_id, "name": "x", "data": "not base64!" })).is_err());
 
     // Saved and reopened (as another application would), the attachment and its bytes are there.
     let saved = doc.saved_bytes().unwrap();
     let mut reopened = TableDocument::open("Tasks.ktable", &saved).unwrap();
-    let records = reopened.call("records.list", &json!({ "tableId": table_id })).unwrap();
+    let records = reopened.call("record.list", &json!({ "tableId": table_id })).unwrap();
     assert_eq!(records["result"]["items"][0]["values"][&field], json!([attachment]));
-    let read = reopened.call("attachments.read", &json!({ "hash": hash })).unwrap();
+    let read = reopened.call("attachment.get", &json!({ "hash": hash })).unwrap();
     assert_eq!(unbase64(&read["result"]["data"]), bytes);
 }
 
@@ -473,9 +473,9 @@ fn two_copies_sync_a_blob_attachment() {
     assert_eq!(right.add_blobs(&blobs).unwrap(), 1);
     assert_eq!(right.revision(), revision, "blobs alone are no edit");
     assert_eq!(right.import_changes(&changes).unwrap()["kind"], "full");
-    let records = right.call("records.list", &json!({ "tableId": table_id })).unwrap();
+    let records = right.call("record.list", &json!({ "tableId": table_id })).unwrap();
     assert_eq!(records["result"]["items"][0]["values"][&field], json!([attachment]));
-    let read = right.call("attachments.read", &json!({ "hash": hash })).unwrap();
+    let read = right.call("attachment.get", &json!({ "hash": hash })).unwrap();
     assert_eq!(unbase64(&read["result"]["data"]), bytes);
     // Nothing new since: no blobs to send.
     assert!(left.blobs_since(&right.version()).unwrap().is_empty());
@@ -492,7 +492,7 @@ fn inspect_lists_the_tables_and_dashboards_a_view_can_name() {
     let dashboards = inspected["dashboards"].as_array().unwrap();
     assert_eq!(dashboards.len(), 1);
     assert_eq!(dashboards[0]["title"], "Overview");
-    let listed = doc.call("dashboards.list", &Value::Null).unwrap()["result"].clone();
+    let listed = doc.call("dashboard.list", &Value::Null).unwrap()["result"].clone();
     assert_eq!(dashboards[0]["id"], listed["items"][0]["id"], "the id the editor opens it by: {listed}");
 }
 

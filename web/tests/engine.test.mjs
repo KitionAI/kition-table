@@ -15,16 +15,16 @@ const { TableDocument } = sdk
 /** The file's bytes as a host saves them. */
 const saved = (doc) => doc.save()
 const call = (doc, method, params = {}) => JSON.parse(doc.call(method, JSON.stringify(params)))
-const firstTable = (doc) => call(doc, 'documents.get').result.tables[0]
+const firstTable = (doc) => call(doc, 'file.get').result.tables[0]
 const titles = (doc) => {
   const table = firstTable(doc)
   const primary = table.fields.find((field) => field.id === table.primary_field_id).name
-  return call(doc, 'records.list', { tableId: table.id }).result.items.map((record) => record.values[primary])
+  return call(doc, 'record.list', { tableId: table.id }).result.items.map((record) => record.values[primary])
 }
 const add = (doc, title) => {
   const table = firstTable(doc)
   const primary = table.fields.find((field) => field.id === table.primary_field_id).name
-  return call(doc, 'records.create', { tableId: table.id, values: { [primary]: title } })
+  return call(doc, 'record.add', { tableId: table.id, values: { [primary]: title } })
 }
 
 test('a new table has the starter table, and a write answers its change', () => {
@@ -35,7 +35,7 @@ test('a new table has the starter table, and a write answers its change', () => 
   assert.equal(answer.change.origin, 'person:kit')
   assert.equal(answer.change.recordsUpserted.length, 1)
   assert.equal(doc.dirty, true)
-  assert.equal(call(doc, 'historyState').result.canUndo, true)
+  assert.equal(call(doc, 'history.state').result.canUndo, true)
   doc.free()
 })
 
@@ -60,21 +60,21 @@ test('opening a file and the reads the editor makes on load leave it saved', () 
   const doc = TableDocument.open('Sample.ktable', fs.readFileSync(path.join(engine, '..', 'sample', 'Sample.ktable')))
   assert.equal(doc.dirty, false)
   const revision = doc.revision
-  const opened = call(doc, 'documents.get').result
-  call(doc, 'historyState')
-  call(doc, 'dashboards.list')
+  const opened = call(doc, 'file.get').result
+  call(doc, 'history.state')
+  call(doc, 'dashboard.list')
   for (const table of opened.tables) {
-    call(doc, 'records.list', { tableId: table.id, limit: 200, offset: 0 })
+    call(doc, 'record.list', { tableId: table.id, limit: 200, offset: 0 })
     for (const view of table.views) {
-      call(doc, 'views.listFields', { tableId: table.id, viewId: view.id })
-      call(doc, 'records.list', { tableId: table.id, viewId: view.id })
+      call(doc, 'tableView.listFields', { tableId: table.id, viewId: view.id })
+      call(doc, 'record.list', { tableId: table.id, viewId: view.id })
       // What the editor sends back for a view it only opened: the config as it read it.
-      call(doc, 'views.update', { tableId: table.id, viewId: view.id, config: view.config })
+      call(doc, 'tableView.set', { tableId: table.id, viewId: view.id, config: view.config })
     }
   }
   assert.equal(doc.revision, revision)
   assert.equal(doc.dirty, false)
-  assert.equal(call(doc, 'historyState').result.canUndo, false)
+  assert.equal(call(doc, 'history.state').result.canUndo, false)
   doc.free()
 })
 
@@ -82,15 +82,15 @@ test('an edit makes the document unsaved, and undo back to the saved state saved
   const doc = TableDocument.open('Tasks.ktable', saved(TableDocument.create('Tasks.ktable', 0, 0)))
   add(doc, 'Ada')
   assert.equal(doc.dirty, true)
-  call(doc, 'undo')
+  call(doc, 'history.undo')
   assert.equal(doc.dirty, false)
-  call(doc, 'redo')
+  call(doc, 'history.redo')
   assert.equal(doc.dirty, true)
   doc.save()
   doc.markSaved()
-  call(doc, 'undo')
+  call(doc, 'history.undo')
   assert.equal(doc.dirty, true)
-  call(doc, 'redo')
+  call(doc, 'history.redo')
   assert.equal(doc.dirty, false)
   doc.free()
 })
@@ -99,7 +99,7 @@ test('attachments are put into the file, read back, and synced to a copy beside 
   const doc = TableDocument.create('Photos.ktable', 0, 0)
   add(doc, 'Beach')
   const table = firstTable(doc)
-  const files = call(doc, 'fields.create', { tableId: table.id, title: 'Files', type: 'attachment' }).result.name
+  const files = call(doc, 'field.add', { tableId: table.id, title: 'Files', type: 'attachment' }).result.name
   const bytes = doc.save()
   const left = TableDocument.open('Photos.ktable', bytes)
   const right = TableDocument.open('Photos.ktable', bytes)
@@ -107,13 +107,13 @@ test('attachments are put into the file, read back, and synced to a copy beside 
 
   const picture = new Uint8Array(300).map((_, index) => (index * 7) % 256)
   picture.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  const attachment = call(left, 'attachments.put', { tableId: table.id, name: 'beach.png', mimeType: 'image/png', data: Buffer.from(picture).toString('base64') }).result
+  const attachment = call(left, 'attachment.add', { tableId: table.id, name: 'beach.png', mimeType: 'image/png', data: Buffer.from(picture).toString('base64') }).result
   assert.match(attachment.url, /^kition-blob:[0-9a-f]{64}$/)
   const hash = attachment.url.slice('kition-blob:'.length)
   assert.equal(attachment.sha256, hash)
-  const record = call(left, 'records.list', { tableId: table.id }).result.items[0]
-  call(left, 'records.update', { tableId: table.id, recordId: record.id, values: { [files]: [attachment] } })
-  const read = call(left, 'attachments.read', { hash }).result
+  const record = call(left, 'record.list', { tableId: table.id }).result.items[0]
+  call(left, 'record.set', { tableId: table.id, recordId: record.id, values: { [files]: [attachment] } })
+  const read = call(left, 'attachment.get', { hash }).result
   assert.deepEqual(new Uint8Array(Buffer.from(read.data, 'base64')), picture)
   assert.equal(read.mimeType, 'image/png')
 
@@ -124,11 +124,11 @@ test('attachments are put into the file, read back, and synced to a copy beside 
   assert.deepEqual(left.blobs(), blobs)
   right.addBlobs(blobs)
   assert.equal(JSON.parse(right.importChanges(left.exportChanges(since))).kind, 'full')
-  assert.deepEqual(call(right, 'records.list', { tableId: table.id }).result.items[0].values[files], [attachment])
-  assert.deepEqual(new Uint8Array(Buffer.from(call(right, 'attachments.read', { hash }).result.data, 'base64')), picture)
+  assert.deepEqual(call(right, 'record.list', { tableId: table.id }).result.items[0].values[files], [attachment])
+  assert.deepEqual(new Uint8Array(Buffer.from(call(right, 'attachment.get', { hash }).result.data, 'base64')), picture)
   // Saved, the copy keeps the bytes.
   const reopened = TableDocument.open('Photos.ktable', right.save())
-  assert.equal(call(reopened, 'attachments.read', { hash }).result.sizeBytes, picture.length)
+  assert.equal(call(reopened, 'attachment.get', { hash }).result.sizeBytes, picture.length)
   left.free()
   right.free()
   reopened.free()
@@ -140,7 +140,7 @@ test('a large table opens, pages, and edits within budget', () => {
   const primary = table.fields.find((field) => field.id === table.primary_field_id).name
   for (let chunk = 0; chunk < 10; chunk += 1) {
     const records = Array.from({ length: 1000 }, (_, index) => ({ [primary]: `Item ${chunk * 1000 + index}` }))
-    call(doc, 'transact', { ops: [{ op: 'records.create', tableId: table.id, at: null, records }] })
+    call(doc, 'edit.transact', { ops: [{ op: 'records.create', tableId: table.id, at: null, records }] })
   }
   const bytes = doc.save()
   doc.free()
@@ -148,19 +148,19 @@ test('a large table opens, pages, and edits within budget', () => {
   const opened = TableDocument.open('Large.ktable', bytes)
   const openMs = performance.now() - started
   started = performance.now()
-  const page = call(opened, 'records.list', { tableId: table.id, limit: 200, offset: 5000 }).result
+  const page = call(opened, 'record.list', { tableId: table.id, limit: 200, offset: 5000 }).result
   const pageMs = performance.now() - started
   assert.equal(page.total, 10000)
   assert.equal(page.items.length, 200)
   started = performance.now()
-  call(opened, 'transact', { ops: [{ op: 'cells.set', tableId: table.id, records: [{ rowKey: page.items[0].row_key, values: { [primary]: 'Edited' } }] }] })
+  call(opened, 'edit.transact', { ops: [{ op: 'cells.set', tableId: table.id, records: [{ rowKey: page.items[0].row_key, values: { [primary]: 'Edited' } }] }] })
   const editMs = performance.now() - started
   // Undo, redo, and a co-editor's change cost what they change, not the table's size.
   started = performance.now()
-  call(opened, 'undo')
+  call(opened, 'history.undo')
   const undoMs = performance.now() - started
   started = performance.now()
-  call(opened, 'redo')
+  call(opened, 'history.redo')
   const redoMs = performance.now() - started
   started = performance.now()
   const saved = opened.save()
@@ -168,11 +168,11 @@ test('a large table opens, pages, and edits within budget', () => {
   // Another replica on the same line of changes (the KDM takes changes in order).
   const peer = TableDocument.openWithReplica('Large.ktable', new Uint8Array(), opened.snapshot(), new Uint8Array())
   const since = opened.version()
-  call(peer, 'transact', { ops: [{ op: 'cells.set', tableId: table.id, records: [{ rowKey: page.items[1].row_key, values: { [primary]: 'From the peer' } }] }] })
+  call(peer, 'edit.transact', { ops: [{ op: 'cells.set', tableId: table.id, records: [{ rowKey: page.items[1].row_key, values: { [primary]: 'From the peer' } }] }] })
   started = performance.now()
   opened.importChanges(peer.exportChanges(since))
   const importMs = performance.now() - started
-  assert.equal(call(opened, 'records.list', { tableId: table.id, limit: 1, offset: 5001 }).result.items[0].values[primary], 'From the peer')
+  assert.equal(call(opened, 'record.list', { tableId: table.id, limit: 1, offset: 5001 }).result.items[0].values[primary], 'From the peer')
   console.log(
     `10,000 records: file ${(bytes.length / 1e6).toFixed(1)} MB, open ${openMs.toFixed(0)} ms, page of 200 ${pageMs.toFixed(0)} ms, edit ${editMs.toFixed(0)} ms, ` +
       `undo ${undoMs.toFixed(0)} ms, redo ${redoMs.toFixed(0)} ms, import ${importMs.toFixed(0)} ms, save ${saveMs.toFixed(0)} ms (${(saved.length / 1e6).toFixed(1)} MB)`,
@@ -211,7 +211,7 @@ test('file.export answers the table as CSV or Markdown bytes, for the host to wr
   const csv = JSON.parse(doc.execute('file.export', JSON.stringify({ format: 'csv', tableId: table.id })))
   assert.deepEqual([csv.extension, csv.mime], ['csv', 'text/csv'])
   const text = Buffer.from(csv.data, 'base64').toString('utf8')
-  assert.equal(text, call(doc, 'csv.export', { tableId: table.id }).result.content)
+  assert.equal(text, call(doc, 'file.exportCsv', { tableId: table.id }).result.content)
   assert.match(text, /"Ada, Countess"/)
   const md = JSON.parse(doc.execute('file.export', JSON.stringify({ format: 'md' })))
   assert.deepEqual([md.extension, md.mime, md.tableId], ['md', 'text/markdown', table.id])
@@ -232,12 +232,12 @@ test('gridOpen and gridSync answer the arrangement as axis bytes the editor read
     assert.equal(String.fromCharCode(...bytes.subarray(0, 4)), 'KTAX')
     return Array.from({ length: view.getUint32(16, true) }, (_, index) => view.getFloat64(32 + index * 8, true))
   }
-  const byTitle = Object.fromEntries(call(doc, 'records.list', { tableId: table.id }).result.items.map((record) => [record.values[primary], record.id]))
+  const byTitle = Object.fromEntries(call(doc, 'record.list', { tableId: table.id }).result.items.map((record) => [record.values[primary], record.id]))
   const sorted = doc.gridOpen(JSON.stringify({ tableId: table.id, viewId: table.views[0].id, config: { sorts: [{ id: 's', field_name: primary, direction: 'asc' }] } }))
   assert.ok(sorted instanceof Uint8Array)
   assert.deepEqual(ids(sorted), [byTitle.a, byTitle.b, byTitle.c])
   assert.equal(doc.gridSync().length, 0)
-  call(doc, 'records.update', { tableId: table.id, recordId: byTitle.a, values: { [primary]: 'd' } })
+  call(doc, 'record.set', { tableId: table.id, recordId: byTitle.a, values: { [primary]: 'd' } })
   assert.deepEqual(ids(doc.gridSync()), [byTitle.b, byTitle.c, byTitle.a])
   const stats = JSON.parse(doc.gridStats())
   assert.equal(stats.arrange.count, 1)
@@ -249,12 +249,12 @@ test('gridClear clears many records from their ids in one undo step', () => {
   const doc = TableDocument.create('Tasks.ktable', 0, 0)
   const table = firstTable(doc)
   const primary = table.fields.find((field) => field.id === table.primary_field_id).name
-  const amount = call(doc, 'fields.create', { tableId: table.id, title: 'Amount', type: 'number' }).result
+  const amount = call(doc, 'field.add', { tableId: table.id, title: 'Amount', type: 'number' }).result
   const name = (amount.field ?? amount).name
   const records = Array.from({ length: 1500 }, (_, index) => ({ [primary]: `Row ${index}`, [name]: index }))
-  call(doc, 'transact', { ops: [{ op: 'records.create', tableId: table.id, at: null, records }] })
+  call(doc, 'edit.transact', { ops: [{ op: 'records.create', tableId: table.id, at: null, records }] })
   // The made records, by their number (the table starts with records of its own).
-  const made = () => call(doc, 'records.list', { tableId: table.id }).result.items.filter((record) => String(record.values[primary]).startsWith('Row '))
+  const made = () => call(doc, 'record.list', { tableId: table.id }).result.items.filter((record) => String(record.values[primary]).startsWith('Row '))
   const ids = made().map((record) => record.id)
   assert.equal(ids.length, 1500)
   const answer = JSON.parse(doc.gridClear(JSON.stringify({ tableId: table.id, values: { [name]: null } }), Float64Array.from([...ids.slice(0, 1200), 999_999])))
@@ -264,7 +264,7 @@ test('gridClear clears many records from their ids in one undo step', () => {
   const cleared = values()
   assert.equal(cleared.slice(0, 1200).every((value) => value == null), true)
   assert.deepEqual(cleared.slice(1200, 1203), [1200, 1201, 1202])
-  assert.equal(call(doc, 'undo').result.done, true)
+  assert.equal(call(doc, 'history.undo').result.done, true)
   assert.deepEqual(values().slice(0, 3), [0, 1, 2])
   doc.free()
 })

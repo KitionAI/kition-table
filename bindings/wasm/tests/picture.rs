@@ -22,7 +22,7 @@ fn fonts() {
 }
 
 fn call(doc: &mut TableDocument, method: &str, params: Value) -> Value {
-    doc.execute(&format!("table.{method}"), params).unwrap_or_else(|error| panic!("{method}: {error}"))["result"].clone()
+    doc.execute(method, params).unwrap_or_else(|error| panic!("{method}: {error}"))["result"].clone()
 }
 
 const STAGES: [&str; 4] = ["Lead", "Proposal", "Won", "Lost"];
@@ -31,7 +31,7 @@ const STAGES: [&str; 4] = ["Lead", "Proposal", "Won", "Lost"];
 fn deals(first_title: &str) -> (TableDocument, i64, Vec<Value>) {
     fonts();
     let mut doc = TableDocument::create("Deals.ktable", 0, 0).unwrap();
-    call(&mut doc, "tables.delete", json!({ "tableId": 1 }));
+    call(&mut doc, "table.delete", json!({ "tableId": 1 }));
     let mut fields = vec![
         json!({ "name": "deal", "title": first_title, "type": "text", "primary": true }),
         json!({ "name": "stage", "title": "Stage", "type": "single_select", "options": { "choices": STAGES } }),
@@ -43,7 +43,7 @@ fn deals(first_title: &str) -> (TableDocument, i64, Vec<Value>) {
     for extra in 0..4 {
         fields.push(json!({ "name": format!("note_{extra}"), "title": format!("Note {extra}"), "type": "text" }));
     }
-    let table = call(&mut doc, "tables.create", json!({ "title": "Deals", "fields": fields }));
+    let table = call(&mut doc, "table.add", json!({ "title": "Deals", "fields": fields }));
     let table_id = table["id"].as_i64().unwrap();
     let records: Vec<Value> = (0..25)
         .map(|index| {
@@ -51,7 +51,7 @@ fn deals(first_title: &str) -> (TableDocument, i64, Vec<Value>) {
                     "done": index % 2 == 0, "stars": index % 6, "note_0": "Call back" })
         })
         .collect();
-    call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "records": records }] }));
+    call(&mut doc, "edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "records": records }] }));
     let fields = table["fields"].as_array().unwrap().clone();
     (doc, table_id, fields)
 }
@@ -65,7 +65,7 @@ fn pixels(doc: &TableDocument, area: [i32; 4]) -> Vec<u8> {
 fn the_picture_shows_the_first_view_with_every_field_and_record() {
     let (mut doc, table, fields) = deals("Deal");
     let shown = call(&mut doc, "preview.show", json!({}));
-    let view = call(&mut doc, "views.list", json!({ "tableId": table }))["items"][0].clone();
+    let view = call(&mut doc, "tableView.list", json!({ "tableId": table }))["items"][0].clone();
     assert_eq!(shown["tableId"], json!(table));
     assert_eq!(shown["viewId"], view["id"]);
     assert_eq!(shown["viewType"], json!("grid"));
@@ -76,7 +76,7 @@ fn the_picture_shows_the_first_view_with_every_field_and_record() {
     assert!(width >= 72 + 10 * 200, "{width}");
     assert!(height >= 44 + 52 + 32 + 25 * 40, "{height}");
     // A column's width in the view is the picture's.
-    call(&mut doc, "views.patchField", json!({ "tableId": table, "viewId": view["id"], "fieldId": fields[0]["id"], "width": 320 }));
+    call(&mut doc, "tableView.setField", json!({ "tableId": table, "viewId": view["id"], "fieldId": fields[0]["id"], "width": 320 }));
     assert_eq!(doc.width(), width + 120);
 }
 
@@ -92,24 +92,24 @@ fn titles_and_values_are_drawn_as_text() {
     // A cell's text: its value's letters, in the cell.
     let (mut doc, table, _) = deals("Deal");
     let before = pixels(&doc, [72, 128, 272, 168]);
-    let first = call(&mut doc, "records.list", json!({ "tableId": table, "limit": 1 }))["items"][0]["id"].clone();
-    call(&mut doc, "records.update", json!({ "tableId": table, "recordId": first, "values": { "deal": "Deal 9" } }));
+    let first = call(&mut doc, "record.list", json!({ "tableId": table, "limit": 1 }))["items"][0]["id"].clone();
+    call(&mut doc, "record.set", json!({ "tableId": table, "recordId": first, "values": { "deal": "Deal 9" } }));
     assert_ne!(pixels(&doc, [72, 128, 272, 168]), before);
 }
 
 #[test]
 fn a_view_shows_its_records_as_it_filters_sorts_and_lays_them_out() {
     let (mut doc, table, fields) = deals("Deal");
-    let open = call(&mut doc, "views.create", json!({ "tableId": table, "title": "Open", "type": "grid" }))["id"].clone();
+    let open = call(&mut doc, "tableView.add", json!({ "tableId": table, "title": "Open", "type": "grid" }))["id"].clone();
     let stage = fields[1]["id"].clone();
     call(
         &mut doc,
-        "views.putFilterTree",
+        "tableView.setFilterTree",
         json!({ "tableId": table, "viewId": open, "tree": { "conjunction": "and", "children": [{ "condition": { "field_id": stage, "operator": "neq", "value": "Won" } }] } }),
     );
     let shown = call(&mut doc, "preview.show", json!({ "viewId": open }));
     assert_eq!((shown["tableId"].clone(), shown["view"].clone(), shown["records"].clone()), (json!(table), json!("Open"), json!(19)));
-    let board = call(&mut doc, "views.create", json!({ "tableId": table, "title": "Board", "type": "kanban" }))["id"].clone();
+    let board = call(&mut doc, "tableView.add", json!({ "tableId": table, "title": "Board", "type": "kanban" }))["id"].clone();
     let shown = call(&mut doc, "preview.show", json!({ "viewId": board }));
     assert_eq!(shown["viewType"], json!("kanban"));
     // A column per choice of the stage field: 280 px wide, 16 px apart, after 16 px.
@@ -126,7 +126,7 @@ fn a_dashboard_is_drawn_with_its_widgets_data() {
     let (mut doc, table, _) = deals("Deal");
     call(
         &mut doc,
-        "dashboards.upsert",
+        "dashboard.set",
         json!({ "dashboardId": "pipeline", "title": "Pipeline", "order": 0, "source_table_id": table,
                 "layout": [{ "widget_id": "won", "x": 0, "y": 0, "w": 4, "h": 2 }],
                 "widgets": [{ "id": "won", "title": "Won", "type": "metric", "query": { "aggregation": "count", "filters": [{ "field_name": "stage", "operator": "equals", "value": "Won" }] } }] }),
@@ -136,7 +136,7 @@ fn a_dashboard_is_drawn_with_its_widgets_data() {
     assert_eq!(doc.width(), 1200);
     let metric = [20, 64, 400, 240];
     let before = pixels(&doc, metric);
-    call(&mut doc, "records.create", json!({ "tableId": table, "values": { "deal": "One more", "stage": "Won" } }));
+    call(&mut doc, "record.add", json!({ "tableId": table, "values": { "deal": "One more", "stage": "Won" } }));
     assert_ne!(pixels(&doc, metric), before, "the count is drawn from the records");
     // Back to what the editor opens.
     assert_eq!(call(&mut doc, "preview.show", json!({}))["tableId"], json!(table));
@@ -150,14 +150,14 @@ fn a_dashboard_is_drawn_with_its_widgets_data() {
 #[test]
 fn the_picture_leaves_out_a_filter_condition_the_editor_does_not_apply() {
     let (mut doc, table, fields) = deals("Deal");
-    let view = call(&mut doc, "views.create", json!({ "tableId": table, "title": "Half written", "type": "grid" }))["id"].clone();
+    let view = call(&mut doc, "tableView.add", json!({ "tableId": table, "title": "Half written", "type": "grid" }))["id"].clone();
     let (deal, value) = (fields[0]["id"].clone(), fields[2]["id"].clone());
     let tree = json!({ "conjunction": "and", "children": [
         { "condition": { "field_id": deal, "operator": "is", "value": null } },
         { "condition": { "field_id": value, "operator": "hasAnyOf", "value": ["1000"] } },
         { "condition": { "field_id": deal, "operator": "isNot", "value": "  " } },
     ] });
-    call(&mut doc, "views.putFilterTree", json!({ "tableId": table, "viewId": view, "tree": tree }));
+    call(&mut doc, "tableView.setFilterTree", json!({ "tableId": table, "viewId": view, "tree": tree }));
     let shown = call(&mut doc, "preview.show", json!({ "viewId": view }));
     let axis = doc.grid_open(&json!({ "tableId": table, "viewId": view })).unwrap();
     let editor = u32::from_le_bytes(axis[16..20].try_into().unwrap());

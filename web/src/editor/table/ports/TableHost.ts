@@ -98,7 +98,7 @@ export interface TableHost {
   resolveBlobURL?(params: { documentId: number; hash: string }): string
   /**
    * Stores a file as an attachment of `tableId`; answers the value an attachment cell holds for
-   * it. Without it, the data source's `attachments.put`, when it has one.
+   * it. Without it, the data source's `attachment.add`, when it has one.
    */
   uploadAttachment?(params: { documentId: number; tableId: number; file: File }): Promise<DataAttachment>
   copyImageToClipboard?(url: string): Promise<unknown>

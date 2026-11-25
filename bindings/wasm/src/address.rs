@@ -212,15 +212,15 @@ pub fn label(file: &TableFile, ty: &str, value: &mut Value) {
 }
 
 pub fn answer(file: &TableFile, method: &str, value: &mut Value) {
-    if method == "records.history" {
+    if method == "record.history" {
         return;
     }
     let ty = match method.split('.').next() {
-        Some("tables") => "Table",
-        Some("documents") => "Base",
-        Some("fields") => "Field",
-        Some("views") => "View",
-        Some("records") => "Record",
+        _ if method == "file.get" => "Base",
+        Some("table") => "Table",
+        Some("field") => "Field",
+        Some("tableView") => "View",
+        Some("record") => "Record",
         _ => return,
     };
     fn object(file: &TableFile, ty: &str, value: &mut Value) {

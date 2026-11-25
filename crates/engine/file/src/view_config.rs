@@ -17,7 +17,7 @@ use crate::{Result, TableFile, TableFileError, json};
 const FILTER_TREE_KEY: &str = "filter_tree";
 const SORTS_KEY: &str = "sorts";
 const GROUPS_KEY: &str = "groups";
-/// The hidden columns (`View.hiddenFields`, which `views.patchField`'s visibility writes too).
+/// The hidden columns (`View.hiddenFields`, which `tableView.setField`'s visibility writes too).
 const HIDDEN_KEY: &str = "hidden_field_names";
 
 fn ordering_key(table: &str) -> &'static str {
@@ -26,7 +26,7 @@ fn ordering_key(table: &str) -> &'static str {
 
 /// A new view config that keeps the sorts, groups and hidden columns of `current` unless it
 /// names its own:
-/// a config written without them (an agent's `views.update`) keeps them. The editor names
+/// a config written without them (an agent's `tableView.set`) keeps them. The editor names
 /// its own, an empty list included.
 pub(crate) fn keep_orderings(current: &Map<String, Value>, config: &Value) -> Result<Value> {
     let mut parsed = match config {

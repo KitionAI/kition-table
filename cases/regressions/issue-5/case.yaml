@@ -2,13 +2,13 @@ format: 1
 id: regressions/issue-5
 feature: table.links
 intent: >-
-  A link_to_record value written with the record links it: records.create, records.update and
+  A link_to_record value written with the record links it: record.add, record.set and
   transact (records.create, cells.set) take a list of row keys, record ids or {row_key} objects,
   and null or [] unlinks. A link field whose symmetric_field_id names the target table's link
   field back (or is named by it) shows links made from either side, and unlinking from one side
-  unlinks the other. records.create and records.update answer changed (false when nothing
+  unlinks the other. record.add and record.set answer changed (false when nothing
   changed), as writing-format.md says. Before, transact dropped link values silently, the reverse
-  field stayed empty, and records.update answered the record without changed.
+  field stayed empty, and record.set answered the record without changed.
 layer: gate
 source:
   kind: issue

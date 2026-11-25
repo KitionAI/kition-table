@@ -253,7 +253,7 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
     let local_windows = crate::address::windows(file, command, params);
     let normalized = crate::address::normalize(file, command, params)?;
     let params = &normalized;
-    let method = command.id.strip_prefix("table.").unwrap_or(&command.id);
+    let method = command.id.as_str();
     let mut needs = Needs::default();
     for (path, types) in command.object_types {
         if command.name_params.iter().any(|(p, _)| p == path) {
@@ -263,7 +263,7 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
             for ty in *types {
                 if let Some(id) = resolve(file, ty, value) {
                     needs.full(id.clone());
-                    if *ty == "Table" && method != "tables.delete" {
+                    if *ty == "Table" && method != "table.delete" {
                         needs.set(id, Vec::new(), Vec::new());
                     }
                 }
@@ -279,12 +279,12 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
     // Table ids in child commands are ownership/existence premises. Holding the parent whole
     // would turn a colleague's edit to any other record into a false refusal.
     if let Some(table) = &table
-        && !matches!(method, "tables.update" | "tables.delete" | "import.run" | "csv.import")
+        && !matches!(method, "table.set" | "table.delete" | "file.runImport" | "file.importCsv")
     {
         needs.set(table.clone(), Vec::new(), Vec::new());
     }
     match method {
-        "tables.update" => {
+        "table.set" => {
             if let Some(table) = table {
                 needs.set(
                     table,
@@ -297,7 +297,7 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                 needs.exists(field);
             }
         }
-        "fields.update" => {
+        "field.set" => {
             if let Some(field) = field {
                 needs.set(
                     field.clone(),
@@ -336,28 +336,28 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                 }
             }
         }
-        "views.update" => {
+        "tableView.set" => {
             if let Some(view) = view {
                 needs.set(view, patches(params, &[("title", "title"), ("type", "type"), ("config", "config")]), Vec::new());
             }
         }
-        "views.patchConfig" => {
+        "tableView.setConfig" => {
             if let Some(view) = view {
                 let fields = SETTINGS.iter().take(2).filter(|(key, _)| params.get(*key).is_some()).map(|(_, name)| format!("~{name}")).collect();
                 needs.set(view, fields, Vec::new());
             }
         }
-        "views.putFilterTree" | "views.putSorts" | "views.putGroups" => {
+        "tableView.setFilterTree" | "tableView.setSorts" | "tableView.setGroups" => {
             if let Some(view) = view {
                 let key = match method {
-                    "views.putFilterTree" => "filterTree",
-                    "views.putSorts" => "sorts",
+                    "tableView.setFilterTree" => "filterTree",
+                    "tableView.setSorts" => "sorts",
                     _ => "groups",
                 };
                 needs.set(view, vec![format!("~{key}")], Vec::new());
             }
         }
-        "views.patchField" => {
+        "tableView.setField" => {
             if let (Some(view), Some(field)) = (view, field) {
                 let mut held = Vec::new();
                 if params.get("width").is_some() {
@@ -374,14 +374,14 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                 needs.set(field, Vec::new(), Vec::new());
             }
         }
-        "records.update" | "records.create" => {
+        "record.set" | "record.add" => {
             if let Some(id) = &record {
                 needs.set(id.clone(), Vec::new(), Vec::new());
             }
             if let Some(t) = params["tableId"].as_i64() {
                 cells(file, &mut needs, t, record.clone(), &params["values"]);
             }
-            if method == "records.update"
+            if method == "record.set"
                 && let Some(order) = params["order"].as_i64().filter(|v| *v > 0)
                 && let Some(table) = table
             {
@@ -393,12 +393,12 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                 }
             }
         }
-        "fields.create" => {
+        "field.add" => {
             if let (Some(table), Some(order)) = (table, params["order"].as_i64()) {
                 within.push(gap(file, &table, "fields", usize::try_from(order.max(1) - 1).unwrap_or(usize::MAX)));
             }
         }
-        "records.bulkCopy" => {
+        "record.bulkCopy" => {
             for value in params::values(params, "row_keys") {
                 if let Some(id) = resolve(file, "Record", value) {
                     needs.set(id, strings(&["cells"]), Vec::new());
@@ -410,7 +410,7 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
                 within.push(gap(file, &table, "records", at));
             }
         }
-        "transact" => {
+        "edit.transact" => {
             needs = Needs::default();
             for op in params["ops"].as_array().into_iter().flatten() {
                 let Some(table) = op.get("tableId").and_then(|v| resolve(file, "Table", v)) else { continue };
@@ -470,15 +470,15 @@ pub fn under(file: &TableFile, command: &KitCommand, params: &Value) -> Result<O
     // A delete or a whole replacement rests on every field of what it removes, not on where it is.
     if matches!(
         method,
-        "tables.delete"
-            | "fields.delete"
-            | "views.delete"
-            | "records.delete"
-            | "records.bulkDelete"
-            | "dashboards.upsert"
-            | "dashboards.delete"
-            | "transact"
-            | "import.run"
+        "table.delete"
+            | "field.delete"
+            | "tableView.delete"
+            | "record.delete"
+            | "record.bulkDelete"
+            | "dashboard.set"
+            | "dashboard.delete"
+            | "edit.transact"
+            | "file.runImport"
     ) {
         needs.wherever();
     }
@@ -526,7 +526,7 @@ pub fn covered(
 ) -> Result<Option<kition_kit::CoveredAt>, String> {
     let windows = under(file, command, params)?.map(|under| under.within).unwrap_or_default();
     let params = crate::address::normalize(file, command, params)?;
-    let mut selected = crate::dependencies::refine(file, command.id.strip_prefix("table.").unwrap_or(&command.id), &params, &mut Needs::default());
+    let mut selected = crate::dependencies::refine(file, &command.id, &params, &mut Needs::default());
     selected.windows = windows;
     owners(file, command, &params, &mut selected);
     crate::dependencies::covered(file, &selected, objects).map(Some)
@@ -535,7 +535,7 @@ pub fn covered(
 /// What `covered` refuses for, as facts (`Selection::facts`), for the comparison with the handlers' reading.
 pub fn facts(file: &TableFile, command: &KitCommand, params: &Value) -> Result<Vec<(String, String)>, String> {
     let params = crate::address::normalize(file, command, params)?;
-    let selected = crate::dependencies::refine(file, command.id.strip_prefix("table.").unwrap_or(&command.id), &params, &mut Needs::default());
+    let selected = crate::dependencies::refine(file, &command.id, &params, &mut Needs::default());
     Ok(selected.facts(file))
 }
 

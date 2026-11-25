@@ -2,7 +2,7 @@ format: 1
 id: table.records.history-kept/between-checkpoints
 feature: table.records.history-kept
 intent: >-
-  Each way records.history tells a record's history before the session from the host's
+  Each way record.history tells a record's history before the session from the host's
   checkpoints: a creation and a deletion (a record deleted and brought back) at the checkpoints
   that end their stretches; several edits between two checkpoints as one entry, by the author and
   at the time of the checkpoint that ends that stretch and no other's; only the newest

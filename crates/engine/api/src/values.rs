@@ -2,7 +2,7 @@
 //!
 //! Record values are keyed by a field's `name`. A key that names no field of the table would be
 //! dropped on the way into the file, so a request that has one is refused before anything is
-//! written, with one [`ParamIssue`] per such key: `records.create` and `records.update`
+//! written, with one [`ParamIssue`] per such key: `record.add` and `record.set`
 //! (`/values/<key>`), and `transact`'s `cells.set` (`/ops/<i>/records/<j>/values/<key>`) and
 //! `records.create` (`/ops/<i>/records/<j>/<key>`) ops. A key that is a field's title, or its
 //! name or title in another case or with spaces for underscores, is told the field's name.
@@ -23,13 +23,13 @@ pub(crate) fn refuse_unknown_keys(file: &TableFile, method: &str, params: &Map<S
     let mut issues = Vec::new();
     let mut tables = Tables { file, read: HashMap::new() };
     match method {
-        "records.create" | "records.update" => {
+        "record.add" | "record.set" => {
             let table_id = params.get("tableId").and_then(id);
             if let (Some(table_id), Some(Value::Object(values))) = (table_id, params.get("values")) {
                 check(&mut tables, table_id, values, "/values", "values", &mut issues);
             }
         }
-        "transact" => {
+        "edit.transact" => {
             let ops = params.get("ops").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
             for (i, op) in ops.iter().enumerate() {
                 let (Some(kind), Some(table_id)) = (op.get("op").and_then(Value::as_str), op.get("tableId").and_then(id)) else { continue };

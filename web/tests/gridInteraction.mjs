@@ -25,13 +25,13 @@ async function fixture() {
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
     return answer.result
   }
-  const table = call('documents.get').tables[0]
+  const table = call('file.get').tables[0]
   const tableId = table.id
   const grid = table.views[0].id
   const primary = table.fields.find((field) => field.is_primary)
-  for (const field of table.fields.filter((field) => !field.is_primary)) call('fields.delete', { tableId, fieldId: field.id })
+  for (const field of table.fields.filter((field) => !field.is_primary)) call('field.delete', { tableId, fieldId: field.id })
   const field = (title, type, options) => {
-    const made = call('fields.create', { tableId, title, type, ...(options ? { options } : {}) })
+    const made = call('field.add', { tableId, title, type, ...(options ? { options } : {}) })
     return made.field ?? made
   }
   const notes = field('Notes', 'text')
@@ -45,11 +45,11 @@ async function fixture() {
     [status.name]: i < 4 ? 'Done' : 'To do',
     [done.name]: i % 2 === 0,
   }))
-  call('transact', { ops: [{ op: 'records.create', tableId, at: null, records }] })
-  call('views.patchConfig', { tableId, viewId: grid, frozen_column_count: 1 })
-  const grouped = call('views.create', { tableId, title: 'Grouped', type: 'grid' })
+  call('edit.transact', { ops: [{ op: 'records.create', tableId, at: null, records }] })
+  call('tableView.setConfig', { tableId, viewId: grid, frozen_column_count: 1 })
+  const grouped = call('tableView.add', { tableId, title: 'Grouped', type: 'grid' })
   const groupedId = grouped.id ?? grouped.view.id
-  call('views.putGroups', { tableId, viewId: groupedId, items: [{ field_id: status.id, direction: 'asc' }] })
+  call('tableView.setGroups', { tableId, viewId: groupedId, items: [{ field_id: status.id, direction: 'asc' }] })
   doc.markSaved()
   const bytes = doc.save()
   doc.free()
@@ -278,7 +278,7 @@ try {
         async ({ tableId, primary }) => {
           const { engine, interaction } = window.__ktableGrid
           const id = interaction.rows.recordId(0)
-          const answer = JSON.parse(await engine.invoke('call', 'records.list', JSON.stringify({ tableId })))
+          const answer = JSON.parse(await engine.invoke('call', 'record.list', JSON.stringify({ tableId })))
           const records = Array.isArray(answer.result) ? answer.result : (answer.result.records ?? answer.result.items)
           return records.find((record) => record.id === id).values[primary]
         },
@@ -288,7 +288,7 @@ try {
       async ({ tableId, primary }) => {
         const { engine, interaction } = window.__ktableGrid
         const id = interaction.rows.recordId(0)
-        await engine.invoke('call', 'records.update', JSON.stringify({ tableId, recordId: id, values: { [primary]: 'Renamed' } }))
+        await engine.invoke('call', 'record.set', JSON.stringify({ tableId, recordId: id, values: { [primary]: 'Renamed' } }))
       },
       { tableId: made.tableId, primary: made.primary },
     )

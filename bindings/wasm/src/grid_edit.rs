@@ -3,7 +3,7 @@
 //! clearing. The grid shows records from the arrangement's ids and the bands; it never holds the
 //! whole table on the page, so a write starts by reading just the records it touches. Writes go
 //! through the engine's commands (`transact` with `cells.set`, `records.create`, `records.move`,
-//! `fields.move`; `views.patchField`, `views.patchConfig`), so undo, collaboration and the agent's
+//! `fields.move`; `tableView.setField`, `tableView.setConfig`), so undo, collaboration and the agent's
 //! receipts stay as they are.
 //!
 //! A clear of many records (a whole column of a large table) is `gridClear`: the page hands over
@@ -84,7 +84,7 @@ impl crate::TableDocument {
         if cleared == 0 {
             return Ok(json!({ "result": { "cleared": 0 } }));
         }
-        let mut answer = self.call("transact", &json!({ "ops": [{ "op": "cells.set", "tableId": table_id, "records": records }] }))?;
+        let mut answer = self.call("edit.transact", &json!({ "ops": [{ "op": "cells.set", "tableId": table_id, "records": records }] }))?;
         answer["result"]["cleared"] = json!(cleared);
         Ok(answer)
     }

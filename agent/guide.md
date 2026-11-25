@@ -39,7 +39,7 @@ draft.
   numeric examples below assume a fresh read; prefer its `tool_id` in subsequent calls.
 - **Record values are keyed by the field's `name`**, not its `title`: a field titled `Status` is
   written as `{"status": "Done"}`. A key that names no field of the table is refused with
-  `invalid_params`, one `data.errors` entry per key at `/values/<key>` (in `transact`,
+  `invalid_params`, one `data.errors` entry per key at `/values/<key>` (in `edit.transact`,
   `/ops/<i>/records/<j>/…`), naming the field when the key is its title; the call changes nothing.
 - **Names.** A table's or field's `name` is lowercase ASCII letters, digits and `_`, starting with a
   letter and not ending with `_` (`^[a-z](?:[a-z0-9_]*[a-z0-9])?$`), unique among the document's
@@ -51,7 +51,7 @@ draft.
   (a title such as `电话`), then `_2`, `_3`, … when taken. Read derived names back from the answer.
 - **A `link_to_record` value** is a list of the linked records' row keys or record ids
   (`{"members": [3, 4]}`), in [`record.add`](/kits/table/commands/record.add/),
-  [`record.set`](/kits/table/commands/record.set/) and `transact`; records read
+  [`record.set`](/kits/table/commands/record.set/) and [`edit.transact`](/kits/table/commands/edit.transact/); records read
   it back as `{row_key, display}` objects, and `null` or `[]` unlinks. A link field whose
   `symmetric_field_id` names the target table's link field back shows the links made from either
   side.
@@ -84,7 +84,7 @@ views, records and fields by id every time, with the ids earlier answers gave yo
   Commands still take their own `tableId` (and `viewId`): give it, matching the part.
 - `on` names the **record** or the **field** a step acts on, by id (`[4]`). It goes into the
   command's `recordId` (a record of the command's `tableId`: `record.set`, `.delete`,
-  `.history`, `table.links.*`) or `fieldId` (`field.set`, `.delete`, `.duplicate`,
+  `.history`, `recordLink.*`) or `fieldId` (`field.set`, `.delete`, `.duplicate`,
   `.linkCandidates`, `tableView.setField`), which `table_commands` with `detail` marks as the
   command's `targets`; then do not give that parameter too. The command says whether `on` is a
   record or a field. A command without such a parameter takes no `on`, and an id `on` gives
@@ -136,20 +136,20 @@ dependency safe. Their direct tests are `places`, `outside`, and `saved`.
 
 | Commands | Premise |
 |---|---|
-| `tables.update`, `fields.update`, `views.update` | Supplied stored properties; replacing `options`, `meta`, or `config` holds that whole value. Changing the primary field also holds `Table.primaryField`; the new primary field only that it is one of the table's fields. |
-| `views.patchConfig`, `putFilterTree`, `putSorts`, `putGroups` | Effective setting, reported as derived `~rowHeight`, `~frozenColumnCount`, `~filterTree`, `~sorts`, or `~groups`. The search is the editor's own and is never stored. An absent config and an absent key have the same value. |
-| `views.patchField` | The addressed width, visibility, position or frozen value; field existence. Widths are integer pixels, rounded and clamped to 40 through 1200 on model-batch entry. Position and freezing are stored in `config.field_layout`, not SQL-only editor state. |
-| `records.create`, `records.update`, transaction `cells.set` | Each written cell, and its field's name membership and type (a link's options too, a select's choices: the names of the choices its values name, or every choice and the field's list of them when a value names none it lists; a computed field's value is dropped). Required flags and `readonly` are not held: the required check only refuses the call, and no write reads `readonly`. The table need only exist. Repeated transaction operations union their dependencies. |
+| `table.set`, `field.set`, `tableView.set` | Supplied stored properties; replacing `options`, `meta`, or `config` holds that whole value. Changing the primary field also holds `Table.primaryField`; the new primary field only that it is one of the table's fields. |
+| `tableView.setConfig`, `setFilterTree`, `setSorts`, `setGroups` | Effective setting, reported as derived `~rowHeight`, `~frozenColumnCount`, `~filterTree`, `~sorts`, or `~groups`. The search is the editor's own and is never stored. An absent config and an absent key have the same value. |
+| `tableView.setField` | The addressed width, visibility, position or frozen value; field existence. Widths are integer pixels, rounded and clamped to 40 through 1200 on model-batch entry. Position and freezing are stored in `config.field_layout`, not SQL-only editor state. |
+| `record.add`, `record.set`, transaction `cells.set` | Each written cell, and its field's name membership and type (a link's options too, a select's choices: the names of the choices its values name, or every choice and the field's list of them when a value names none it lists; a computed field's value is dropped). Required flags and `readonly` are not held: the required check only refuses the call, and no write reads `readonly`. The table need only exist. Repeated transaction operations union their dependencies. |
 | All named cell writes, including transaction values and combined values/order writes | Table-scoped name membership, including prior ownership after a cross-table move; a name swapped, renamed away or moved out changes the address. |
 | Record order changes, field insertion, transaction `fields.move`, positive-position bulk copy | The destination gap, in stored list coordinates. Moves additionally hold the moving object's position. Record anchors hold their position. |
-| Link writes, through cells or `links.replace`/`delete` | Existing membership, target record existence and ownership, the effective symmetric partner, its schema and the reverse membership the write may replace. Target display-cell changes alone are unrelated. |
+| Link writes, through cells or `recordLink.replace`/`delete` | Existing membership, target record existence and ownership, the effective symmetric partner, its schema and the reverse membership the write may replace. Target display-cell changes alone are unrelated. |
 | Formula/lookup/rollup schema and AI results | Fields a formula names, by name membership; fields and tables an option names, that they are there (the cycle check reads more, but only refuses). AI application holds the AI field's settings, the source's name, title and type, and transitive source values, linked membership and linked source cells. A whole-record concatenating rollup holds every linked field and value. Formula references are `{field_name}`; there is no separate UUID formula syntax. |
-| `fields.duplicate` | The source field's settings and position, and the names occupying generated-name candidates. It creates an empty column; it does not copy source cells. |
-| `tables.create`, `fields.create`, new-table `import.run` | Name membership through the first free generated suffix; unrelated names and display titles are independent, also for `tables.create {}` with no place parameter. |
+| `field.duplicate` | The source field's settings and position, and the names occupying generated-name candidates. It creates an empty column; it does not copy source cells. |
+| `table.add`, `field.add`, new-table `file.runImport` | Name membership through the first free generated suffix; unrelated names and display titles are independent, also for `table.add {}` with no place parameter. |
 | Field delete | Every stored property of the field, not where it is; all current cell values in that field, row membership and affected links. |
 | Field type update | The field's `type` only. A type update changes the schema and computed projection; it does not convert stored cell values, so a cell written meanwhile stays under the new type. |
-| `records.bulkCopy` | Stored source cells, every field's type (which are stored), and an explicit destination gap. It omits computed and link values. Bulk delete and transaction deletion hold selected records and affected links, not where the records are. |
-| `import.run`, `csv.import` | Every field's name, title and type (a link's options) and their order, and name membership; replacement holds rows and their membership; upsert also holds key values and cells it can replace. Append does not hold unrelated existing cell values. |
+| `record.bulkCopy` | Stored source cells, every field's type (which are stored), and an explicit destination gap. It omits computed and link values. Bulk delete and transaction deletion hold selected records and affected links, not where the records are. |
+| `file.runImport`, `file.importCsv` | Every field's name, title and type (a link's options) and their order, and name membership; replacement holds rows and their membership; upsert also holds key values and cells it can replace. Append does not hold unrelated existing cell values. |
 | Dashboards and view references | The replaced dashboard (not where it is), nested table/view existence and ownership, field definitions and table-scoped field names. View settings hold only the setting replaced; a filter, sort or group holds its field's name (written beside its id) and table; a view config holds only that the fields it names are there. |
 | Table/record/view deletion | Every stored property of the object being deleted (a record: its every cell), not where it is; table deletion also holds all its fields, views, records, object lists and link cleanup. Replacement imports hold removed records and their links. |
 | Undo/redo | An outside reread imports only what the file adds, outside both undo histories, so the session keeps its own: undo or redo takes back or puts again only its own step and preserves the other writer's values. A file of another document, or one that lacks a change of the session, is not reconciled. |
@@ -180,8 +180,8 @@ and `field`, and its `text`, which merges per character); a field's AI prompt is
 A view's filters are `Filter` objects in `View.filters` (groups and conditions, each naming its
 group by `parent` and, a condition, its field by object id); its sorts and groups are `Sort` and
 `Group` objects in `View.sorts` and `View.groups` (the config's `sorts` and `groups`, which the
-editor and `views.putSorts`/`views.putGroups` write alike); its hidden columns and column layout
-are the maps `View.hiddenFields` (the config's `hidden_field_names`, which `views.patchField`'s
+editor and `tableView.setSorts`/`tableView.setGroups` write alike); its hidden columns and column layout
+are the maps `View.hiddenFields` (the config's `hidden_field_names`, which `tableView.setField`'s
 visibility writes too) and `View.layout`; `View.config` keeps the rest, which changes as a unit
 (row height, frozen columns, `cover_field`). A dashboard's widgets are `Widget`
 objects in `Dashboard.widgets` (`key`, `title`, `type`, `query` naming fields by object id,

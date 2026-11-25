@@ -2,7 +2,7 @@
 //! 7.3 and 7.4).
 //!
 //! The handle a session edits keeps everything a session needs: the replica with its change log
-//! and undo, the change rows, the origin log and the record history the `records.history` command
+//! and undo, the change rows, the origin log and the record history the `record.history` command
 //! reads. The file it saves holds none of that ([`TableFile::content_bytes`]): its store is the
 //! replica's content (`Replica::content_snapshot`, `content.json`: the state and nothing else, no
 //! version, no origin, no deleted or overwritten value) DEFLATE-compressed at a fixed level in the

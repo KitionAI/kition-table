@@ -97,16 +97,16 @@ fn main() -> Result<(), String> {
     let rows: usize = std::env::args().nth(2).map_or(Ok(100_000), |n| n.parse().map_err(|_| format!("not a row count: {n}")))?;
     let mut rng = Rng(0x7a6b_0b5e_ed00_0001);
     let mut doc = Doc(TableDocument::create("Perf.ktable", 0, 0)?);
-    let table = doc.call("documents.get", json!({}))?["tables"][0].clone();
+    let table = doc.call("file.get", json!({}))?["tables"][0].clone();
     let table_id = table["id"].as_i64().ok_or("no table")?;
     let first_view = table["views"][0]["id"].as_i64().ok_or("no view")?;
-    doc.call("tables.update", json!({ "tableId": table_id, "title": "Perf" }))?;
-    doc.call("views.update", json!({ "tableId": table_id, "viewId": first_view, "title": "All rows" }))?;
+    doc.call("table.set", json!({ "tableId": table_id, "title": "Perf" }))?;
+    doc.call("tableView.set", json!({ "tableId": table_id, "viewId": first_view, "title": "All rows" }))?;
     let fields = table["fields"].as_array().cloned().unwrap_or_default();
     let primary =
         fields.iter().find(|field| field["is_primary"] == true).and_then(|field| field["name"].as_str()).ok_or("no primary field")?.to_owned();
     for field in fields.iter().filter(|field| field["is_primary"] != true) {
-        doc.call("fields.delete", json!({ "tableId": table_id, "fieldId": field["id"] }))?;
+        doc.call("field.delete", json!({ "tableId": table_id, "fieldId": field["id"] }))?;
     }
 
     // (name, type, id)
@@ -116,7 +116,7 @@ fn main() -> Result<(), String> {
         if !options.is_null() {
             params["options"] = options;
         }
-        let created = doc.call("fields.create", params)?;
+        let created = doc.call("field.add", params)?;
         let field = if created["field"].is_object() { created["field"].clone() } else { created };
         made.push((field["name"].as_str().ok_or("no field name")?.to_owned(), kind, field["id"].as_i64().unwrap_or(0)));
         Ok(())
@@ -158,8 +158,8 @@ fn main() -> Result<(), String> {
     let mut blobs = Vec::new();
     for (index, rgb) in [[86, 69, 212], [240, 120, 60], [60, 180, 120], [200, 200, 40]].into_iter().enumerate() {
         let data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, png(rgb)?);
-        let put = doc
-            .call("attachments.put", json!({ "tableId": table_id, "name": format!("swatch-{index}.png"), "mimeType": "image/png", "data": data }))?;
+        let put =
+            doc.call("attachment.add", json!({ "tableId": table_id, "name": format!("swatch-{index}.png"), "mimeType": "image/png", "data": data }))?;
         blobs.push(if put["attachment"].is_object() { put["attachment"].clone() } else { put });
     }
 
@@ -218,7 +218,7 @@ fn main() -> Result<(), String> {
                 Value::Object(values)
             })
             .collect();
-        doc.call("transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }))?;
+        doc.call("edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }))?;
         if (start / BATCH).is_multiple_of(10) {
             eprintln!("{}/{rows} records, {:.1} s", rows.min(start + BATCH), started.elapsed_ms() / 1000.0);
         }
@@ -226,15 +226,15 @@ fn main() -> Result<(), String> {
 
     let status = made.iter().find(|(_, kind, _)| *kind == "single_select").map(|field| field.2).ok_or("no status field")?;
     let number = made.iter().find(|(_, kind, _)| *kind == "number").map(|field| field.2).ok_or("no number field")?;
-    doc.call("views.patchConfig", json!({ "tableId": table_id, "viewId": first_view, "frozen_column_count": 1 }))?;
-    let grouped = doc.call("views.create", json!({ "tableId": table_id, "title": "Grouped", "type": "grid" }))?;
+    doc.call("tableView.setConfig", json!({ "tableId": table_id, "viewId": first_view, "frozen_column_count": 1 }))?;
+    let grouped = doc.call("tableView.add", json!({ "tableId": table_id, "title": "Grouped", "type": "grid" }))?;
     let grouped = grouped["id"].as_i64().or_else(|| grouped["view"]["id"].as_i64()).ok_or("no grouped view")?;
-    doc.call("views.putGroups", json!({ "tableId": table_id, "viewId": grouped, "items": [{ "field_id": status, "direction": "asc" }] }))?;
-    doc.call("views.putSorts", json!({ "tableId": table_id, "viewId": grouped, "items": [{ "field_id": number, "direction": "asc" }] }))?;
-    doc.call("views.patchConfig", json!({ "tableId": table_id, "viewId": grouped, "frozen_column_count": 1 }))?;
-    let tall = doc.call("views.create", json!({ "tableId": table_id, "title": "Tall", "type": "grid" }))?;
+    doc.call("tableView.setGroups", json!({ "tableId": table_id, "viewId": grouped, "items": [{ "field_id": status, "direction": "asc" }] }))?;
+    doc.call("tableView.setSorts", json!({ "tableId": table_id, "viewId": grouped, "items": [{ "field_id": number, "direction": "asc" }] }))?;
+    doc.call("tableView.setConfig", json!({ "tableId": table_id, "viewId": grouped, "frozen_column_count": 1 }))?;
+    let tall = doc.call("tableView.add", json!({ "tableId": table_id, "title": "Tall", "type": "grid" }))?;
     let tall = tall["id"].as_i64().or_else(|| tall["view"]["id"].as_i64()).ok_or("no tall view")?;
-    doc.call("views.patchConfig", json!({ "tableId": table_id, "viewId": tall, "row_height": "extra_tall", "frozen_column_count": 1 }))?;
+    doc.call("tableView.setConfig", json!({ "tableId": table_id, "viewId": tall, "row_height": "extra_tall", "frozen_column_count": 1 }))?;
 
     let bytes = doc.0.saved_bytes()?;
     let content = doc.0.file().replica().content_snapshot().map_err(|error| error.to_string())?.len();

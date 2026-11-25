@@ -13,7 +13,7 @@
  * engine (`engineData`); every write it sends is logged to `window.__ktableGridWrites`, after
  * each the view follows it as the editor does (`syncAfterWrite`), an attachment preview is a
  * marker (`[data-ktable-grid-preview]`) holding the picture, files are uploaded into the document
- * (`attachments.put`), and an AI cell's regenerate button turns the cell's spinner on.
+ * (`attachment.add`), and an AI cell's regenerate button turns the cell's spinner on.
  *
  * Query: `file` (a .ktable URL, default the development sample), `table` and `view` (ids, default
  * the first table's first view), `theme` (`light` or `dark`), `brand` (`#rrggbb`), `hud=1` (a
@@ -58,7 +58,7 @@ async function start(): Promise<{ view: GridView; engine: KitEngine; source: Eng
     decodeURIComponent(file.pathname.split('/').pop() ?? 'Table.ktable'),
     bytes,
   )
-  const answer = JSON.parse(await engine.invoke<string>('call', 'documents.get', '{}')) as { result: { tables: Array<{ id: number; views: Array<{ id: number }> }> } }
+  const answer = JSON.parse(await engine.invoke<string>('call', 'file.get', '{}')) as { result: { tables: Array<{ id: number; views: Array<{ id: number }> }> } }
   const tables = answer.result.tables
   const tableId = Number(params.get('table') ?? tables[0]?.id)
   const table = tables.find((item) => item.id === tableId)
@@ -115,11 +115,11 @@ function handlers(engine: KitEngine, tableId: number, view: () => GridView, sour
     },
     onUndo: () => {
       log('undo')
-      again('undo', () => call('undo', {}))
+      again('undo', () => call('history.undo', {}))
     },
     onRedo: () => {
       log('redo')
-      again('redo', () => call('redo', {}))
+      again('redo', () => call('history.redo', {}))
     },
     onContextMenu: (event) => {
       log('contextMenu', event)
@@ -132,7 +132,7 @@ function handlers(engine: KitEngine, tableId: number, view: () => GridView, sour
     onExpandRecord: (recordId) => log('expand', recordId),
     onAppendRecord: (event) => {
       log('appendRecord', event)
-      again('appendRecord', () => call('transact', { ops: [{ op: 'records.create', tableId, at: null, records: [{}] }] }))
+      again('appendRecord', () => call('edit.transact', { ops: [{ op: 'records.create', tableId, at: null, records: [{}] }] }))
     },
     onAppendField: (event) => {
       log('appendField', event)
@@ -167,7 +167,7 @@ async function loggedData(engine: KitEngine, tableId: number, viewId: number | n
     blob: data.blob,
     upload: upload
       ? async (file) => {
-          writes.push({ command: 'attachments.put', params: { name: file.name, mimeType: file.type, size: file.size } })
+          writes.push({ command: 'attachment.add', params: { name: file.name, mimeType: file.type, size: file.size } })
           return upload(file)
         }
       : undefined,
@@ -176,19 +176,19 @@ async function loggedData(engine: KitEngine, tableId: number, viewId: number | n
       await data.clear(ids, values)
     },
     async transact(ops) {
-      writes.push({ command: 'transact', params: { ops } })
+      writes.push({ command: 'edit.transact', params: { ops } })
       await data.transact(ops)
     },
     async update(recordId, values) {
-      writes.push({ command: 'records.update', params: { recordId, values } })
+      writes.push({ command: 'record.set', params: { recordId, values } })
       await data.update(recordId, values)
     },
     async patchFieldWidth(fieldId, width) {
-      writes.push({ command: 'views.patchField', params: { fieldId, width } })
+      writes.push({ command: 'tableView.setField', params: { fieldId, width } })
       await data.patchFieldWidth(fieldId, width)
     },
     async setFrozen(count) {
-      writes.push({ command: 'views.patchConfig', params: { frozen_column_count: count } })
+      writes.push({ command: 'tableView.setConfig', params: { frozen_column_count: count } })
       await data.setFrozen(count)
     },
   }

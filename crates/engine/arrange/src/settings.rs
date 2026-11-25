@@ -1,8 +1,8 @@
 //! What a view does to its table's records: its filter, its groups and its sorts.
 //!
 //! A view's settings are its config's `filter_tree`, `sorts` and `groups` (the view's `Filter`,
-//! `Sort` and `Group` objects), which the editor and the engine (`views.putFilterTree`,
-//! `views.putSorts`, `views.putGroups`) write alike.
+//! `Sort` and `Group` objects), which the editor and the engine (`tableView.setFilterTree`,
+//! `tableView.setSorts`, `tableView.setGroups`) write alike.
 
 use kition_table_file::{Field, FilterTree, Record, TableFile, View, ViewSort};
 use serde_json::{Map, Value};
@@ -66,7 +66,7 @@ impl Arrangement {
     /// The settings of `view` with the keys of `config` in place of the stored ones: what the
     /// editor shows while its settings are not saved yet (or cannot be, read-only). The sorts and
     /// groups stay the stored ones unless `config` names its own, as a config written without
-    /// them keeps them (`views.update`).
+    /// them keeps them (`tableView.set`).
     pub fn of_config(file: &TableFile, fields: &[Field], view: &View, config: &Map<String, Value>) -> Result<Self, String> {
         let stored = &view.config;
         let filter = match config.get("filter_tree") {

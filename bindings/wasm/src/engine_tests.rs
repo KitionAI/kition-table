@@ -1,4 +1,4 @@
-//! The engine's own commands: import, AI fields, `changes.since`, and `asOrigin` writes.
+//! The engine's own commands: import, AI fields, `change.list`, and `asOrigin` writes.
 
 use base64::Engine as _;
 use kition_kit::KitDocument;
@@ -16,7 +16,7 @@ fn new_document() -> TableDocument {
 
 /// The first table's id and its fields' names by title.
 fn first_table(doc: &mut TableDocument) -> (i64, Vec<(String, String, i64)>) {
-    let document = doc.call("documents.get", &Value::Null).unwrap()["result"].clone();
+    let document = doc.call("file.get", &Value::Null).unwrap()["result"].clone();
     let table = &document["tables"][0];
     let fields = table["fields"]
         .as_array()
@@ -45,14 +45,14 @@ fn engine_methods_are_commands_and_the_reads_do_not_mutate() {
     let commands = doc.commands();
     for (method, _) in ENGINE_METHODS {
         assert!(known_method(method), "{method}");
-        let command = commands.iter().find(|command| command.id == format!("table.{method}")).unwrap();
+        let command = commands.iter().find(|command| command.id == *method).unwrap();
         assert_eq!(command.mutates, !READ_METHODS.contains(method), "{method}");
     }
-    for read in ["import.preview", "ai.prepare", "changes.since"] {
+    for read in ["file.previewImport", "ai.prepare", "change.list"] {
         assert!(READ_METHODS.contains(&read));
     }
     let methods: Vec<(String, String)> = serde_json::from_str(&crate::methods_json()).unwrap();
-    assert!(methods.iter().any(|(method, _)| method == "changes.since"));
+    assert!(methods.iter().any(|(method, _)| method == "change.list"));
 }
 
 const PEOPLE: &[u8] = b"Name,Score\nAda,10\nGrace,7\n";
@@ -160,7 +160,7 @@ fn ai_fields_prepare_prompts_and_apply_results_as_the_ai_field_origin() {
 
     // The person's undo reverts the person's edit, not the AI cell.
     doc.execute("edit.undo", json!({})).unwrap();
-    let after = doc.call("records.list", &json!({ "tableId": table_id })).unwrap()["result"]["items"][0].clone();
+    let after = doc.call("record.list", &json!({ "tableId": table_id })).unwrap()["result"]["items"][0].clone();
     assert_eq!(after["values"][&title], "Plan");
     assert_eq!(after["values"][&summary_name], "Plan, then code.");
 }
@@ -200,7 +200,7 @@ fn as_origin_writes_as_a_system_feature_outside_the_persons_undo() {
     // Undo reverts the person's record, never the system writes.
     let before_undo = version(&doc);
     doc.execute("edit.undo", json!({})).unwrap();
-    let left: Vec<Value> = doc.call("records.list", &json!({ "tableId": table_id })).unwrap()["result"]["items"]
+    let left: Vec<Value> = doc.call("record.list", &json!({ "tableId": table_id })).unwrap()["result"]["items"]
         .as_array()
         .unwrap()
         .iter()
@@ -216,7 +216,7 @@ fn as_origin_writes_as_a_system_feature_outside_the_persons_undo() {
         let answer = doc.execute("record.add", json!({ "tableId": table_id, "values": { title.clone(): "No" }, "asOrigin": refused }));
         assert!(answer.is_err(), "{refused}");
     }
-    assert!(doc.call("undo", &json!({ "asOrigin": "system:workflow" })).is_err());
+    assert!(doc.call("history.undo", &json!({ "asOrigin": "system:workflow" })).is_err());
 }
 
 #[test]

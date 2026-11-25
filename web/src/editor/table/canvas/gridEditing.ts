@@ -27,7 +27,7 @@
  * - **Attachments.** When the data can upload (`GridData.upload`), the active attachment cell
  *   shows an add button at its left (as the old grid did): a click on it picks files, and files
  *   pasted on an attachment cell are added the same way; each file is uploaded and the cell's
- *   attachments get them in one `records.update`.
+ *   attachments get them in one `record.set`.
  * - **AI fields.** A hovered AI cell shows a regenerate button at its top right; cells being
  *   generated (`setGenerating`) show a spinner over them.
  *
@@ -1021,7 +1021,7 @@ export class GridEditing {
     picker.click()
   }
 
-  /** Uploads `files` and adds them to the record's attachments, after the ones it holds, in one `records.update`. */
+  /** Uploads `files` and adds them to the record's attachments, after the ones it holds, in one `record.set`. */
   private addFiles(recordId: number, field: DataField, files: File[]) {
     const data = this.data
     if (!data.upload || !files.length) return Promise.resolve()

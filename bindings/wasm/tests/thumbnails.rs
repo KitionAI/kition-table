@@ -21,7 +21,7 @@ fn fonts() {
 }
 
 fn call(doc: &mut TableDocument, method: &str, params: Value) -> Value {
-    doc.execute(&format!("table.{method}"), params).unwrap_or_else(|error| panic!("{method}: {error}"))["result"].clone()
+    doc.execute(method, params).unwrap_or_else(|error| panic!("{method}: {error}"))["result"].clone()
 }
 
 /// A `width` x `height` PNG of one color.
@@ -79,21 +79,21 @@ const HEIC: &[u8] = include_bytes!("../../../crates/view/display/testdata/split.
 fn the_picture_draws_attached_pictures_as_thumbnails() {
     fonts();
     let mut doc = TableDocument::create("Files.ktable", 0, 0).unwrap();
-    call(&mut doc, "tables.delete", json!({ "tableId": 1 }));
+    call(&mut doc, "table.delete", json!({ "tableId": 1 }));
     let fields = [
         json!({ "name": "title", "title": "Title", "type": "text", "primary": true }),
         json!({ "name": "files", "title": "Files", "type": "attachment" }),
     ];
-    let table = call(&mut doc, "tables.create", json!({ "title": "Files", "fields": fields }))["id"].as_i64().unwrap();
+    let table = call(&mut doc, "table.add", json!({ "title": "Files", "fields": fields }))["id"].as_i64().unwrap();
     let put = |doc: &mut TableDocument, bytes: &[u8], name: &str, mime: &str| {
         let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-        call(doc, "attachments.put", json!({ "tableId": table, "name": name, "mimeType": mime, "data": data }))
+        call(doc, "attachment.add", json!({ "tableId": table, "name": name, "mimeType": mime, "data": data }))
     };
     // A wide red picture (2:1), and a PDF.
     let red = put(&mut doc, &png(200, 100, [230, 20, 20]), "wide.png", "image/png");
     let brief = put(&mut doc, b"%PDF-1.4 brief", "brief.pdf", "application/pdf");
     let records = json!([{ "title": "Plan", "files": [red, brief] }]);
-    call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table, "records": records }] }));
+    call(&mut doc, "edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table, "records": records }] }));
     call(&mut doc, "preview.show", json!({ "tableId": table }));
 
     // A 40 px row: a thumbnail 34 px tall and 68 px wide, its corners rounded and its edge under
@@ -103,9 +103,9 @@ fn the_picture_draws_attached_pictures_as_thumbnails() {
 
     // A picture the file does not hold is a placeholder: no red.
     let url = json!({ "url": "https://example.com/wide.png", "name": "wide.png", "mimeType": "image/png" });
-    let records = call(&mut doc, "records.list", json!({ "tableId": table }));
+    let records = call(&mut doc, "record.list", json!({ "tableId": table }));
     let id = records["items"][0]["id"].clone();
-    call(&mut doc, "records.update", json!({ "tableId": table, "recordId": id, "values": { "files": [url] } }));
+    call(&mut doc, "record.set", json!({ "tableId": table, "recordId": id, "values": { "files": [url] } }));
     assert_eq!(count(&doc, [230, 20, 20]), 0);
 }
 
@@ -115,21 +115,21 @@ fn the_picture_draws_attached_pictures_as_thumbnails() {
 fn gif_svg_and_heic_pictures_draw_in_the_grid_and_as_gallery_covers() {
     fonts();
     let mut doc = TableDocument::create("Pictures.ktable", 0, 0).unwrap();
-    call(&mut doc, "tables.delete", json!({ "tableId": 1 }));
+    call(&mut doc, "table.delete", json!({ "tableId": 1 }));
     let fields = [
         json!({ "name": "title", "title": "Title", "type": "text", "primary": true }),
         json!({ "name": "files", "title": "Files", "type": "attachment" }),
     ];
-    let table = call(&mut doc, "tables.create", json!({ "title": "Pictures", "fields": fields }))["id"].as_i64().unwrap();
+    let table = call(&mut doc, "table.add", json!({ "title": "Pictures", "fields": fields }))["id"].as_i64().unwrap();
     let put = |doc: &mut TableDocument, bytes: &[u8], name: &str, mime: &str| {
         let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-        call(doc, "attachments.put", json!({ "tableId": table, "name": name, "mimeType": mime, "data": data }))
+        call(doc, "attachment.add", json!({ "tableId": table, "name": name, "mimeType": mime, "data": data }))
     };
     let moving = put(&mut doc, &gif(), "moving.gif", "image/gif");
     let drawn = put(&mut doc, SVG.as_bytes(), "drawn.svg", "image/svg+xml");
     let photo = put(&mut doc, HEIC, "photo.heic", "image/heic");
     let records = json!([{ "title": "GIF", "files": [moving] }, { "title": "SVG", "files": [drawn] }, { "title": "HEIC", "files": [photo] }]);
-    call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table, "records": records }] }));
+    call(&mut doc, "edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table, "records": records }] }));
 
     // The grid: 2:1 thumbnails 68 x 34 in 40 px rows, a little less for the corners and border.
     call(&mut doc, "preview.show", json!({ "tableId": table }));
@@ -144,7 +144,7 @@ fn gif_svg_and_heic_pictures_draw_in_the_grid_and_as_gallery_covers() {
 
     // The gallery: each card's cover is its first picture, cover-cropped into a 216 x 122 box
     // with 12 px corners.
-    let gallery = call(&mut doc, "views.create", json!({ "tableId": table, "title": "Covers", "type": "gallery" }))["id"].clone();
+    let gallery = call(&mut doc, "tableView.add", json!({ "tableId": table, "title": "Covers", "type": "gallery" }))["id"].clone();
     call(&mut doc, "preview.show", json!({ "tableId": table, "viewId": gallery }));
     let cover = 205 * 112..=216 * 122;
     let green = count(&doc, GREEN);
@@ -157,8 +157,8 @@ fn gif_svg_and_heic_pictures_draw_in_the_grid_and_as_gallery_covers() {
 
     // A cover the file does not hold keeps the placeholder.
     let url = json!({ "url": "https://example.com/wide.png", "name": "wide.png", "mimeType": "image/png" });
-    let id = call(&mut doc, "records.list", json!({ "tableId": table }))["items"][0]["id"].clone();
-    call(&mut doc, "records.update", json!({ "tableId": table, "recordId": id, "values": { "files": [url] } }));
+    let id = call(&mut doc, "record.list", json!({ "tableId": table }))["items"][0]["id"].clone();
+    call(&mut doc, "record.set", json!({ "tableId": table, "recordId": id, "values": { "files": [url] } }));
     assert_eq!(count(&doc, GREEN), 0);
 }
 

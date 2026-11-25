@@ -47,14 +47,14 @@ async function fixture() {
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
     return answer.result
   }
-  const table = call('documents.get').tables[0]
+  const table = call('file.get').tables[0]
   const tableId = table.id
   const grid = table.views[0].id
-  call('tables.update', { tableId, title: 'Parity' })
+  call('table.set', { tableId, title: 'Parity' })
   const primary = table.fields.find((field) => field.is_primary)
-  for (const field of table.fields.filter((field) => !field.is_primary)) call('fields.delete', { tableId, fieldId: field.id })
+  for (const field of table.fields.filter((field) => !field.is_primary)) call('field.delete', { tableId, fieldId: field.id })
   const field = (title, type, options) => {
-    const made = call('fields.create', { tableId, title, type, ...(options ? { options } : {}) })
+    const made = call('field.add', { tableId, title, type, ...(options ? { options } : {}) })
     return made.field ?? made
   }
   const notes = field('Notes', 'long_text')
@@ -81,7 +81,7 @@ async function fixture() {
   // A whole 4 x 4 PNG of one color: both sides decode it and draw it alike (a picture the engine
   // cannot decode stays a placeholder there, while a browser may still show part of it).
   const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR42mMIc70CRwzEcQBM0hbx9EnJcgAAAABJRU5ErkJggg==', 'base64')
-  const blob = call('attachments.put', { tableId, name: 'swatch.png', mimeType: 'image/png', data: pixel.toString('base64') })
+  const blob = call('attachment.add', { tableId, name: 'swatch.png', mimeType: 'image/png', data: pixel.toString('base64') })
   const attachment = blob.attachment ?? blob
   const records = []
   for (let i = 0; i < 80; i += 1) {
@@ -98,14 +98,14 @@ async function fixture() {
       ...(i % 5 === 0 ? { [files.name]: [attachment] } : {}),
     })
   }
-  call('transact', { ops: [{ op: 'records.create', tableId, at: null, records }] })
-  call('views.patchConfig', { tableId, viewId: grid, frozen_column_count: 1 })
-  const tall = call('views.create', { tableId, title: 'Tall', type: 'grid' })
+  call('edit.transact', { ops: [{ op: 'records.create', tableId, at: null, records }] })
+  call('tableView.setConfig', { tableId, viewId: grid, frozen_column_count: 1 })
+  const tall = call('tableView.add', { tableId, title: 'Tall', type: 'grid' })
   const tallId = tall.id ?? tall.view.id
-  call('views.patchConfig', { tableId, viewId: tallId, row_height: 'extra_tall' })
-  const grouped = call('views.create', { tableId, title: 'Grouped', type: 'grid' })
+  call('tableView.setConfig', { tableId, viewId: tallId, row_height: 'extra_tall' })
+  const grouped = call('tableView.add', { tableId, title: 'Grouped', type: 'grid' })
   const groupedId = grouped.id ?? grouped.view.id
-  call('views.putGroups', { tableId, viewId: groupedId, items: [{ field_id: status.id, direction: 'asc' }] })
+  call('tableView.setGroups', { tableId, viewId: groupedId, items: [{ field_id: status.id, direction: 'asc' }] })
   doc.markSaved()
   const bytes = doc.save()
   doc.free()

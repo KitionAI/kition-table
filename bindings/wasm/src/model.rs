@@ -88,7 +88,7 @@ mod tests {
     use crate::TableDocument;
 
     fn first_table(doc: &mut TableDocument) -> Value {
-        doc.call("documents.get", &Value::Null).unwrap()["result"]["tables"][0].clone()
+        doc.call("file.get", &Value::Null).unwrap()["result"]["tables"][0].clone()
     }
 
     /// `kition-table` serves the object model through `ReplicaPort`: a command and a model edit in
@@ -109,7 +109,7 @@ mod tests {
         let command = json!({ "ops": [{ "op": "command", "id": "record.add", "params": { "tableId": table_id, "values": values } }] });
         assert_eq!(exchange.batch(&mut doc, &command, true).unwrap_err().code, ModelErrorCode::ReadOnly);
         exchange.batch(&mut doc, &command, false).unwrap();
-        let page = doc.call("records.list", &json!({ "tableId": table_id })).unwrap();
+        let page = doc.call("record.list", &json!({ "tableId": table_id })).unwrap();
         assert_eq!(page["result"]["total"], 1, "the command ran in the engine");
 
         let loaded = exchange.batch(&mut doc, &json!({ "ops": [], "load": [{ "target": "root", "fields": ["tables"] }] }), false).unwrap();

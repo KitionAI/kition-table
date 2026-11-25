@@ -76,10 +76,10 @@ async fn new_table_import_holds_generated_name_dependencies() {
 async fn creation_names_hold_collisions_without_holding_unrelated_names() {
     let mut counts = [0; 4];
     let mut mismatches = Vec::new();
-    for kind in ["tables.create", "fields.create", "fields.duplicate"] {
+    for kind in ["table.add", "field.add", "field.duplicate"] {
         for related in [true, false] {
             let f = Fixture::new(Guard::Premise);
-            if kind == "fields.duplicate" {
+            if kind == "field.duplicate" {
                 f.colleague("field.add", json!({"tableId":1,"name":"notes_copy","title":"Collision"}));
             }
             let doc = f.disk();
@@ -87,23 +87,23 @@ async fn creation_names_hold_collisions_without_holding_unrelated_names() {
             let table = inspect["tables"][0]["tool_id"].clone();
             let fields = &inspect["tables"][0]["fields"];
             let basis = f.basis().await;
-            let (object, name) = if kind == "tables.create" {
+            let (object, name) = if kind == "table.add" {
                 (table.clone(), if related { "renamed" } else { "table" })
             } else {
-                (fields[if related { if kind == "fields.duplicate" { 3 } else { 2 } } else { 1 }]["tool_id"].clone(), "renamed")
+                (fields[if related { if kind == "field.duplicate" { 3 } else { 2 } } else { 1 }]["tool_id"].clone(), "renamed")
             };
-            if kind == "tables.create" && !related {
+            if kind == "table.add" && !related {
                 f.colleague("table.set", json!({"tableId":1,"title":"Unrelated title"}));
             } else {
                 f.colleague_model(json!([{"op":"set","target":object,"field":"name","value":name}]));
             }
             let (params, expected_name) = match kind {
-                "tables.create" => (json!({"title":"Table"}), "table_2"),
-                "fields.create" => (json!({"tableId":table,"title":"Notes"}), "notes_2"),
+                "table.add" => (json!({"title":"Table"}), "table_2"),
+                "field.add" => (json!({"tableId":table,"title":"Notes"}), "notes_2"),
                 _ => (json!({"tableId":table,"fieldId":fields[2]["tool_id"]}), "notes_copy_2"),
             };
             let before = f.bytes();
-            let answer = f.write(basis, &format!("table.{kind}"), params).await;
+            let answer = f.write(basis, kind, params).await;
             let got = super::card3_address::outcome(&answer);
             let expected = if related { 'R' } else { 'A' };
             counts[0] += 1;
@@ -121,7 +121,7 @@ async fn creation_names_hold_collisions_without_holding_unrelated_names() {
                 assert_eq!(before, f.bytes());
             } else if !related {
                 let doc = f.disk();
-                if kind == "tables.create" {
+                if kind == "table.add" {
                     assert_eq!(doc.file().list_tables().unwrap().last().unwrap().name, expected_name);
                 } else {
                     assert!(doc.file().list_fields(1).unwrap().iter().any(|field| field.name == expected_name));

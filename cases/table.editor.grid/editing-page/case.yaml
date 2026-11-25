@@ -4,23 +4,23 @@ feature: table.editor.grid
 intent: >-
   On the development page, in Chromium and WebKit: a typed key opens a text cell's editor, which is
   the focused textarea on the cell with one brand border and the text centred on the row; Enter
-  writes one records.update and moves down, Tab commits and moves right, Escape closes without
+  writes one record.set and moves down, Tab commits and moves right, Escape closes without
   writing, and a number cell writes a number; an input method's composition opens the editor and
   stays in it; a date cell opens the compact calendar (no native picker) and the compact time
-  menu, and a picked day is one records.update of the stored instant; a choice cell opens its
+  menu, and a picked day is one record.set of the stored instant; a choice cell opens its
   list, a single pick writes it and a multiple choice writes its picks when the list closes; a
   click on a checkbox toggles it and on a rating's fourth symbol rates 4; copy puts the selected
   cells on the clipboard as tab-separated text; a paste past the last record is one transact of
   cells.set and records.create; Delete clears the selected cells in one transact; the fill handle
   fills down in one transact and the range grows over it; a row dragged by its handle is one
   records.move; a selected column dragged is one fields.move; a column's edge resizes it with
-  views.patchField; the frozen edge dragged saves the frozen count; an attachment's picture is
+  tableView.setField; the frozen edge dragged saves the frozen count; an attachment's picture is
   drawn from the document's blob and a click previews it; an AI cell shows a regenerate button on
   hover, which asks for its cell, and a spinner turns over a cell while it generates; undo takes
   back one action. An edit that leaves the arrangement as it was keeps its epoch and fetches again
   only its record's band (the header strip keeps its list); a column header that is not selected
   drags its column in one fields.move; the active attachment cell's add button opens the file
-  picker and the picked file is uploaded and added in one records.update, files pasted on an
+  picker and the picked file is uploaded and added in one record.set, files pasted on an
   attachment cell are added the same way, and a picture at a web address is drawn. A GIF held in
   the document draws its first frame, and an SVG and a HEIC held in it are drawn.
 layer: gate

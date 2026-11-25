@@ -76,7 +76,7 @@ fn a_large_transact_costs_about_what_its_write_costs() {
             "records": keys.iter().enumerate().map(|(index, key)| json!({ "rowKey": key, "values": { "f1": value(index) } })).collect::<Vec<_>>(),
         }] });
         let started = Instant::now();
-        handle(&mut through, &doc, "transact", &params).unwrap();
+        handle(&mut through, &doc, "edit.transact", &params).unwrap();
         let request = started.elapsed().as_secs_f64();
 
         let values =
@@ -96,7 +96,7 @@ fn an_unknown_key_in_a_large_transact_is_refused_once_per_record() {
         "tableId": table_id,
         "records": keys.iter().take(3).map(|key| json!({ "rowKey": key, "values": { "f1": "x", "Field 2": "y" } })).collect::<Vec<_>>(),
     }] });
-    let error = handle(&mut file, &DocRef { document_id: 1, user_id: 1 }, "transact", &params).unwrap_err();
+    let error = handle(&mut file, &DocRef { document_id: 1, user_id: 1 }, "edit.transact", &params).unwrap_err();
     let kition_table_api::ApiError::InvalidParams(issues) = error else { panic!("{error:?}") };
     assert_eq!(
         issues.iter().map(|issue| issue.path.as_str()).collect::<Vec<_>>(),

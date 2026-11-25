@@ -20,10 +20,10 @@ const OUT: &str = "KITION_TABLE_DETERMINISM_OUT";
 /// A small table document with every kind of object a sample makes.
 fn build() -> Vec<u8> {
     let mut doc = TableDocument::create("Deals.ktable", 0, 0).unwrap();
-    doc.call("tables.delete", &json!({ "tableId": 1 })).unwrap();
+    doc.call("table.delete", &json!({ "tableId": 1 })).unwrap();
     let table = doc
         .call(
-            "tables.create",
+            "table.add",
             &json!({ "title": "Deals", "fields": [
                 { "name": "deal", "title": "Deal", "type": "text", "primary": true },
                 { "name": "stage", "title": "Stage", "type": "single_select", "options": { "choices": ["Lead", "Won"] } },
@@ -35,21 +35,21 @@ fn build() -> Vec<u8> {
     let table_id = table["id"].as_i64().unwrap();
     let stage = table["fields"][1]["id"].as_i64().unwrap();
     doc.call(
-        "transact",
+        "edit.transact",
         &json!({ "ops": [{ "op": "records.create", "tableId": table_id, "records": [
             { "deal": "Fleet tracking", "stage": "Lead", "value": 48000 },
             { "deal": "Parent portal", "stage": "Won", "value": 12400 },
         ] }] }),
     )
     .unwrap();
-    let view = doc.call("views.create", &json!({ "tableId": table_id, "title": "Open", "type": "grid" })).unwrap()["result"]["id"].as_i64().unwrap();
+    let view = doc.call("tableView.add", &json!({ "tableId": table_id, "title": "Open", "type": "grid" })).unwrap()["result"]["id"].as_i64().unwrap();
     doc.call(
-        "views.putFilterTree",
+        "tableView.setFilterTree",
         &json!({ "tableId": table_id, "viewId": view, "tree": { "conjunction": "and", "children": [{ "condition": { "field_id": stage, "operator": "neq", "value": "Won" } }] } }),
     )
     .unwrap();
     doc.call(
-        "dashboards.upsert",
+        "dashboard.set",
         &json!({ "dashboardId": "overview", "title": "Overview", "order": 0, "source_table_id": table_id, "layout": [], "widgets": [] }),
     )
     .unwrap();
@@ -90,9 +90,9 @@ fn the_same_commands_save_the_same_bytes() {
 
     // Every time the document holds is the epoch.
     let mut doc = TableDocument::open("Deals.ktable", &first).unwrap();
-    let tables = doc.call("tables.list", &Value::Null).unwrap();
+    let tables = doc.call("table.list", &Value::Null).unwrap();
     let table = tables["result"]["items"].as_array().unwrap().iter().find(|table| table["title"] == "Deals").unwrap();
-    let records = doc.call("records.list", &json!({ "tableId": table["id"] })).unwrap();
+    let records = doc.call("record.list", &json!({ "tableId": table["id"] })).unwrap();
     for record in records["result"]["items"].as_array().unwrap() {
         assert_eq!(record["created_at"], json!(EPOCH * 1000), "{record}");
         assert_eq!(record["updated_at"], json!(EPOCH * 1000), "{record}");

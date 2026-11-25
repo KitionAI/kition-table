@@ -130,7 +130,7 @@ describe('TableBlobScope', () => {
     expect(text('blob')).toBe('')
   })
 
-  it("uploads through the app, or else through the data source's attachments.put", async () => {
+  it("uploads through the app, or else through the data source's attachment.add", async () => {
     const stored: DataAttachment = { name: 'a.png', url: BLOB, mimeType: 'image/png' }
     const put = vi.fn(async () => stored)
     const file = new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })

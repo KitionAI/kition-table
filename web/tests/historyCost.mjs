@@ -3,7 +3,7 @@
 //
 // The built engine in Node (pnpm engine) opens the file, takes `checkpoints` (default 3) snapshots
 // of it with one record's title edited between them, as a host's checkpoints keep them, reopens it
-// with the last as its stored replica, and asks `records.history` for that record with the
+// with the last as its stored replica, and asks `record.history` for that record with the
 // checkpoints as the editor sends them (base64 in the request's JSON). It prints what each part
 // took and how large the snapshots are; it checks nothing. tests/perf.mjs runs it on the 100,000 x
 // 50 fixture and reports it.
@@ -26,12 +26,12 @@ const name = path.basename(file)
 let at = performance.now()
 const doc = TableDocument.open(name, fs.readFileSync(file))
 console.log(`open ${ms(at)} ms`)
-const table = call(doc, 'documents.get').tables[0]
+const table = call(doc, 'file.get').tables[0]
 const primary = table.fields.find((field) => field.id === table.primary_field_id).name
-const record = call(doc, 'records.list', { tableId: table.id, limit: 1 }).items[0]
+const record = call(doc, 'record.list', { tableId: table.id, limit: 1 }).items[0]
 const points = []
 for (let n = 0; n < count; n += 1) {
-  if (n > 0) call(doc, 'records.update', { tableId: table.id, recordId: record.id, values: { [primary]: `History cost ${n}` } })
+  if (n > 0) call(doc, 'record.set', { tableId: table.id, recordId: record.id, values: { [primary]: `History cost ${n}` } })
   at = performance.now()
   const snapshot = doc.snapshot()
   const taken = ms(at)
@@ -54,6 +54,6 @@ try {
   process.exit(0)
 }
 at = performance.now()
-const told = JSON.parse(reopened.call('records.history', params)).result
-console.log(`records.history over ${count} checkpoints ${ms(at)} ms: ${told.items.length} entries`)
+const told = JSON.parse(reopened.call('record.history', params)).result
+console.log(`record.history over ${count} checkpoints ${ms(at)} ms: ${told.items.length} entries`)
 console.log(`memory: rss ${(process.memoryUsage().rss / 1e6).toFixed(0)} MB`)

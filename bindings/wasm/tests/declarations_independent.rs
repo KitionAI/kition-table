@@ -1,5 +1,5 @@
 //! Every command that changes a table file, compared with a reading of its handler
-//! (`kition-table-api`'s `dispatch`, the engine methods `import.run` and `ai.apply`, undo and
+//! (`kition-table-api`'s `dispatch`, the engine methods `file.runImport` and `ai.apply`, undo and
 //! redo) and the file operations behind it (`kition-table-file`, its KDM model, commit and
 //! projection): which parameters each resolves and how, what it reads of the file and of the
 //! editor, and what it writes. Each row is one code path on [`fixture`], with what a write with
@@ -23,7 +23,7 @@
 //! membership for every field's `name`; the links of a record or field; the select label's
 //! membership; `~owner` of an object addressed by id; the column's rows added since; a written
 //! field's `type` (computed values are dropped); the AI source's `title` in the prompt;
-//! csv.import's first field in order whose name or title matches; and the integer windows of
+//! file.importCsv's first field in order whose name or title matches; and the integer windows of
 //! `tableId` inside `transact` ops and of `@` ids given in the rows.
 //!
 //! No parameter is resolved differently from its name; no editor state is read (the picture's
@@ -371,7 +371,7 @@ fn expanded(holds: &[(&str, &str, &str)]) -> BTreeMap<String, (String, String)> 
 /// The rows; a row marked `pinned` states its fact in the declaration's spelling (see the
 /// module comment).
 const ROWS: &[Row] = &[
-    // tables.create: the new table's name is the first free of `plan`, `plan_2`, … among the
+    // table.add: the new table's name is the first free of `plan`, `plan_2`, … among the
     // tables' names; appended to `Base.tables` (no index read). Inline fields' options name other
     // tables by id: existence (the cycle check only refuses).
     // pinned (spelling): name membership of the candidates, `~tableNames:plan`, for every table's `name`.
@@ -383,13 +383,13 @@ const ROWS: &[Row] = &[
         &[("$Base", "~tableNames:plan", "-"), ("$P", "-", "-")],
         &["$Base.tables[1..2]"],
     ),
-    // tables.update: each supplied property is replaced; a primary field must be one of the
+    // table.set: each supplied property is replaced; a primary field must be one of the
     // table's fields (its owner) and replaces `primaryField`.
     r("table.set", r#"{"tableId":"$T","title":"Tasks"}"#, &[("$T", "title", "-")]),
     r("table.set", r#"{"tableId":"$T","description":"D"}"#, &[("$T", "description", "-")]),
     r("table.set", r#"{"tableId":"$T","meta":{"k":1}}"#, &[("$T", "meta", "-")]),
     r("table.set", r#"{"tableId":"$T","primary_field_id":"$Notes"}"#, &[("$T", "primaryField", "-"), ("$Notes", "~owner", "-")]),
-    // tables.delete: the table and everything it holds go, wherever they are.
+    // table.delete: the table and everything it holds go, wherever they are.
     // pinned: what it holds (each field, view and record, every field) and the links into its
     // records and of its fields (`~linkCells`), which go with it.
     r(
@@ -405,7 +405,7 @@ const ROWS: &[Row] = &[
             ("$Base", "~linkCells:$P1,~linkCells:$P2,~linkCells:*.$Name,~linkCells:*.$PTasks", "-"),
         ],
     ),
-    // fields.create: the table exists; the generated name is the first free among the table's
+    // field.add: the table exists; the generated name is the first free among the table's
     // field names; `order` is a place in `Table.fields`; options name objects by id (existence;
     // the cycle check only refuses).
     // pinned (spelling): name membership `~names:score` for every field's `name`.
@@ -423,7 +423,7 @@ const ROWS: &[Row] = &[
         r#"{"tableId":"$T","title":"Who","type":"lookup","options":{"link_field_id":"$Owner","target_field_id":"$Name"}}"#,
         &[("$T", "~names:who", "-"), ("$Owner", "~owner", "-"), ("$Name", "~owner", "-")],
     ),
-    // fields.update: each supplied property is replaced (readonly is re-derived from the values at
+    // field.set: each supplied property is replaced (readonly is re-derived from the values at
     // write time). A type change writes `type` and stores the cells again in the new type's shape
     // from what they hold when it runs, so a cell written meanwhile is not lost. New options name
     // the choices: each choice is kept, renamed or left out by its name. A formula names fields
@@ -453,7 +453,7 @@ const ROWS: &[Row] = &[
     ),
     r("field.set", r#"{"tableId":"$T","fieldId":"$Summary","ai_prompt":"Shorter"}"#, &[("$T", "-", "-"), ("$Summary", "aiPrompt,~owner", "-")]),
     r("field.set", r#"{"tableId":"$T","fieldId":"$Notes","meta":{"k":1}}"#, &[("$T", "-", "-"), ("$Notes", "meta,~owner", "-")]),
-    // fields.delete: the field goes with its column, wherever it is: every record's cell of it,
+    // field.delete: the field goes with its column, wherever it is: every record's cell of it,
     // and its links. pinned: rows added since (`~rowIds`) and the field's links (`~linkCells`),
     // which go with the column; a link field's stored cells.
     r(
@@ -473,11 +473,11 @@ const ROWS: &[Row] = &[
         r#"{"tableId":"$T","fieldId":"$Owner"}"#,
         &[("$T", "-", "-"), ("$Owner", "*", "-"), ("records($T)", "cells.$Owner", "-"), ("$Base", "~linkCells:*.$Owner,~rowIds:$T", "-")],
     ),
-    // fields.duplicate: the source's settings, its index (the copy goes right after it), and
+    // field.duplicate: the source's settings, its index (the copy goes right after it), and
     // the generated name's candidates. pinned: the source whole (its `name` cannot change by a
     // command) and its place; `~names:est_copy`.
     r("field.duplicate", r#"{"tableId":"$T","fieldId":"$Est"}"#, &[("$T", "~names:est_copy", "-"), ("$Est", "*", "*")]),
-    // views.create: appended to the table's views; config stored as given (a field it names by
+    // tableView.add: appended to the table's views; config stored as given (a field it names by
     // id: existence and owner).
     r("tableView.add", r#"{"tableId":"$T","title":"Mine","type":"grid"}"#, &[("$T", "-", "-")]),
     r(
@@ -485,14 +485,14 @@ const ROWS: &[Row] = &[
         r#"{"tableId":"$T","title":"Mine","type":"grid","config":{"sorts":[{"field_id":"$Est","direction":"asc"}]}}"#,
         &[("$T", "-", "-"), ("$Est", "~owner", "-")],
     ),
-    // views.update: title and type replaced; a config replaces the whole config (sorts and groups
+    // tableView.set: title and type replaced; a config replaces the whole config (sorts and groups
     // are carried from the value at write time). pinned: `~owner`.
     r("tableView.set", r#"{"tableId":"$T","viewId":"$V","title":"Mine"}"#, &[("$T", "-", "-"), ("$V", "title,~owner", "-")]),
     r("tableView.set", r#"{"tableId":"$T","viewId":"$V","type":"gallery"}"#, &[("$T", "-", "-"), ("$V", "type,~owner", "-")]),
     r("tableView.set", r#"{"tableId":"$T","viewId":"$V","config":{"row_height":"tall"}}"#, &[("$T", "-", "-"), ("$V", "config,~owner", "-")]),
-    // views.delete: the view goes, wherever it is.
+    // tableView.delete: the view goes, wherever it is.
     r("tableView.delete", r#"{"tableId":"$T","viewId":"$K"}"#, &[("$T", "-", "-"), ("$K", "*", "-")]),
-    // putFilterTree / putSorts / putGroups: the view by id alone; the one setting replaced; each
+    // setFilterTree / setSorts / setGroups: the view by id alone; the one setting replaced; each
     // condition's or item's field, whose name is written beside it when it is the view table's.
     // pinned: the table's existence (the view goes with it: equivalent) and `~owner`.
     r(
@@ -511,14 +511,14 @@ const ROWS: &[Row] = &[
         r#"{"tableId":"$T","viewId":"$K","items":[{"field_id":"$Status","direction":"desc"}]}"#,
         &[("$T", "-", "-"), ("$K", "~groups,~owner", "-"), ("$Status", "name,~owner", "-")],
     ),
-    // patchConfig: the view of the table; each of the three settings given. pinned: `~owner`.
+    // setConfig: the view of the table; each of the three settings given. pinned: `~owner`.
     r("tableView.setConfig", r#"{"tableId":"$T","viewId":"$V","row_height":"tall"}"#, &[("$T", "-", "-"), ("$V", "~rowHeight,~owner", "-")]),
     r(
         "tableView.setConfig",
         r#"{"tableId":"$T","viewId":"$V","frozen_column_count":2}"#,
         &[("$T", "-", "-"), ("$V", "~frozenColumnCount,~owner", "-")],
     ),
-    // patchField: the view by id, the field by id; the one entry written. pinned: `~owner`, the
+    // setField: the view by id, the field by id; the one entry written. pinned: `~owner`, the
     // table, and the layout entry's key (`.position`).
     r(
         "tableView.setField",
@@ -535,7 +535,7 @@ const ROWS: &[Row] = &[
         r#"{"tableId":"$T","viewId":"$V","fieldId":"$Est","position":2}"#,
         &[("$T", "-", "-"), ("$V", "layout.$Est,~owner", "-"), ("$Est", "~owner", "-")],
     ),
-    // records.create: appended; values keyed by field name (membership), written by the field's
+    // record.add: appended; values keyed by field name (membership), written by the field's
     // type (a computed field's value is dropped); a select label must still be one of the
     // choices (its choice's name); a link value names target records and is written by the link
     // field's type and options, mirrored by its partner (its options and type, the target's
@@ -560,9 +560,9 @@ const ROWS: &[Row] = &[
             ("$Base", "~linkCells:$P1.$PTasks,~mirrors:$Owner", "-"),
         ],
     ),
-    // records.update: the cells given replace the record's cells; `order` is a place among the
+    // record.set: the cells given replace the record's cells; `order` is a place among the
     // table's records; link values as in create, replacing the record's links of that field
-    // (and the partner's links of the old and new targets). pinned as for records.create, and a
+    // (and the partner's links of the old and new targets). pinned as for record.add, and a
     // link field's stored cell.
     r(
         "record.set",
@@ -582,7 +582,7 @@ const ROWS: &[Row] = &[
             ("$Base", "~linkCells:$P1.$PTasks,~linkCells:$P2.$PTasks,~linkCells:$R1.$Owner,~mirrors:$Owner", "-"),
         ],
     ),
-    // records.delete / bulkDelete: the records go, wherever they are, with their links (pinned:
+    // record.delete / bulkDelete: the records go, wherever they are, with their links (pinned:
     // `~linkCells` of the record).
     r(
         "record.delete",
@@ -608,7 +608,7 @@ const ROWS: &[Row] = &[
         &[("$T", "-", "-"), ("$R1", "cells,~owner", "-"), ("$N1", "text", "-"), ("fields($T)", "type", "-")],
         &["$T.records[0..0]"],
     ),
-    // links.replace / links.delete: the record's links of the field replaced; the field's type
+    // recordLink.replace / recordLink.delete: the record's links of the field replaced; the field's type
     // and options; each target a record of the target table; the partner (its options and type,
     // the targets' links in it). pinned (spelling) `~linkCells`, `~mirrors`, `~owner`.
     r(
@@ -668,7 +668,7 @@ const ROWS: &[Row] = &[
         &[("$T", "-", "-"), ("$Est", "~owner", "fields")],
         &["$Base.tables[0..1]", "$T.fields[0..0]", "$T.fields[4..5]"],
     ),
-    // csv.import: each header finds the first field in order whose name or title it is; cells
+    // file.importCsv: each header finds the first field in order whose name or title it is; cells
     // converted by the field's type (a link column's text is a row key: the link options);
     // appended. Required flags only refuse.
     // pinned: every field's name and title and their order (`~lists`), `~names`.
@@ -682,11 +682,11 @@ const ROWS: &[Row] = &[
             ("$Base", "~lists:$T.fields", "-"),
         ],
     ),
-    // import.run: columns map to fields by title (every title decides which columns make new
+    // file.runImport: columns map to fields by title (every title decides which columns make new
     // fields, whose names are generated among the table's names; the last field of a title
     // wins), converted by the field's type; replace deletes every record and its links; upsert
     // reads the key cells and rewrites matching records' cells; a new table's name is generated
-    // among the table names. pinned as for csv.import, and the upsert's exact cells.
+    // among the table names. pinned as for file.importCsv, and the upsert's exact cells.
     r(
         "file.runImport",
         r#"{"fileName":"a.csv","content":"dGl0bGUsbm90ZXMKQSxCCg==","write_mode":"append","schema_mode":"auto","target":{"kind":"existing_table","table_id":"$T"}}"#,
@@ -744,15 +744,15 @@ const ROWS: &[Row] = &[
         ],
         &["$T.records[0..1]"],
     ),
-    // attachments.put: a blob only; the table must exist.
+    // attachment.add: a blob only; the table must exist.
     r("attachment.add", r#"{"tableId":"$T","name":"a.txt","mimeType":"text/plain","data":"aGk="}"#, &[("$T", "-", "-")]),
     // undo / redo: the session's own steps; they name no object.
     r("history.undo", r#"{}"#, &[]),
     r("history.redo", r#"{}"#, &[]),
     r("edit.undo", r#"{}"#, &[]),
     r("edit.redo", r#"{}"#, &[]),
-    // dashboards.upsert replaces name, config and widgets wherever the dashboard is; the source
-    // table exists. dashboards.delete: the dashboard goes.
+    // dashboard.set replaces name, config and widgets wherever the dashboard is; the source
+    // table exists. dashboard.delete: the dashboard goes.
     r(
         "dashboard.set",
         r#"{"dashboardId":"$D","title":"O2","order":1,"source_table_id":"$T","layout":[],"widgets":[]}"#,
@@ -954,8 +954,8 @@ fn the_raw_cell_contract_rests_on_its_cell_and_its_field() {
 
 /// Fixed: (`crates/engine/api/src/dispatch.rs`, `Params::view`;
 /// `crates/engine/file/src/view_config.rs`, `assert_field_exists`): the view settings
-/// (`putFilterTree`, `putSorts`, `putGroups`, `patchField`) parsed `tableId` and dropped it, so a
-/// call naming `$T` wrote the settings of `$P`'s view; `patchField` took a field of any table as
+/// (`setFilterTree`, `setSorts`, `setGroups`, `setField`) parsed `tableId` and dropped it, so a
+/// call naming `$T` wrote the settings of `$P`'s view; `setField` took a field of any table as
 /// a column of the view, stored its width and answered a default row.
 #[test]
 fn a_view_setting_lands_only_on_a_view_of_the_table_it_names() {

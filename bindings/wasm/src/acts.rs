@@ -17,9 +17,9 @@ pub fn reads(_id: &str) -> &'static [EditorState] {
 
 /// The parameter naming the record or field command `id` acts on, which a step's `on` fills.
 pub fn targets(id: &str) -> Option<&'static str> {
-    Some(match id.strip_prefix(crate::COMMAND_PREFIX)? {
-        "records.update" | "records.delete" | "records.history" | "links.list" | "links.replace" | "links.delete" => "recordId",
-        "fields.update" | "fields.delete" | "fields.duplicate" | "fields.linkCandidates" | "views.patchField" => "fieldId",
+    Some(match id {
+        "record.set" | "record.delete" | "record.history" | "recordLink.list" | "recordLink.replace" | "recordLink.delete" => "recordId",
+        "field.set" | "field.delete" | "field.duplicate" | "field.linkCandidates" | "tableView.setField" => "fieldId",
         _ => return None,
     })
 }

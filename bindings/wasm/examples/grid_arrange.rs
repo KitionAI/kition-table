@@ -14,7 +14,7 @@ fn main() -> Result<(), String> {
     let path = std::env::args().nth(1).ok_or("usage: grid_arrange <table.ktable>")?;
     let bytes = std::fs::read(&path).map_err(|error| format!("{path}: {error}"))?;
     let mut doc = TableDocument::open("Perf.ktable", &bytes)?;
-    let table = doc.call("documents.get", &json!({}))?["result"]["tables"][0].clone();
+    let table = doc.call("file.get", &json!({}))?["result"]["tables"][0].clone();
     let table_id = table["id"].as_i64().ok_or("no table")?;
     let views = table["views"].as_array().cloned().unwrap_or_default();
     let view = |title: &str| views.iter().find(|view| view["title"] == title).and_then(|view| view["id"].as_i64());
@@ -56,9 +56,9 @@ fn main() -> Result<(), String> {
             println!("  hits of 32 rows: {:.2} ms, {} bytes", stats["hits"]["lastMs"].as_f64().unwrap_or_default(), hits.len());
         }
     }
-    let first = doc.call("records.list", &json!({ "tableId": table_id, "limit": 1 }))?["result"]["items"][0]["id"].clone();
+    let first = doc.call("record.list", &json!({ "tableId": table_id, "limit": 1 }))?["result"]["items"][0]["id"].clone();
     for value in ["zzz moved last", "aaa moved first", "middle"] {
-        doc.call("records.update", &json!({ "tableId": table_id, "recordId": first, "values": { text.clone(): value } }))?;
+        doc.call("record.set", &json!({ "tableId": table_id, "recordId": first, "values": { text.clone(): value } }))?;
         let bytes = doc.grid_sync()?;
         let stats = doc.grid_stats();
         println!("edit to {value:?}, synced: {:.2} ms, axis {} bytes", stats["relocate"]["lastMs"].as_f64().unwrap_or_default(), bytes.len());

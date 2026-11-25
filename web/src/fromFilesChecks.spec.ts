@@ -59,22 +59,22 @@ function fakeEngine(refuse: (method: string, nth: number) => boolean = () => fal
     calls.push({ method, params })
     if (refuse(method, calls.filter((call) => call.method === method).length)) throw new Error(`The engine refused ${method}`)
     switch (method) {
-      case 'tables.create': {
+      case 'table.add': {
         const id = next++
         const seeds = params.fields as Array<{ name: string; title: string; type: string; primary: boolean; options: Record<string, unknown> }>
         const fields = seeds.map((seed, index) => ({ id: index + 1, name: seed.name, title: seed.title, type: seed.type, is_primary: seed.primary, options: seed.options }))
         tables.set(id, { title: params.title as string, fields, records: [] })
         return { id, title: params.title, fields }
       }
-      case 'attachments.put':
+      case 'attachment.add':
         blobs.push(params.name as string)
         return { url: `kition-blob:${params.name}`, name: params.name }
-      case 'records.create': {
+      case 'record.add': {
         const id = next++
         tables.get(params.tableId as number)!.records.push(id)
         return { id }
       }
-      case 'tables.delete':
+      case 'table.delete':
         tables.delete(params.tableId as number)
         return { deleted: true }
       default:
@@ -244,13 +244,13 @@ describe('D1: a failure leaves the document as it was', () => {
   })
 
   it('a record the engine refuses deletes the table it was making', async () => {
-    const engine = fakeEngine((method, nth) => method === 'records.create' && nth === 2)
+    const engine = fakeEngine((method, nth) => method === 'record.add' && nth === 2)
     const run = tableFromFiles({ source: engine.source, services: model(RECEIPTS), files: [file('a.png'), file('b.png'), file('c.png')], request: 'x' })
     const code = await rejection(run)
     expect([...engine.tables.keys()]).toEqual([])
     expect(code).toBe('engineRefused')
     // The records and the delete are no undo steps of the person's.
-    expect(engine.calls.filter((call) => call.method === 'records.create' || call.method === 'tables.delete').map((call) => call.params.asOrigin)).toEqual([
+    expect(engine.calls.filter((call) => call.method === 'record.add' || call.method === 'table.delete').map((call) => call.params.asOrigin)).toEqual([
       'system:fromfiles',
       'system:fromfiles',
       'system:fromfiles',
@@ -258,7 +258,7 @@ describe('D1: a failure leaves the document as it was', () => {
   })
 
   it('says so when the table cannot be deleted again', async () => {
-    const engine = fakeEngine((method, nth) => (method === 'records.create' && nth === 1) || method === 'tables.delete')
+    const engine = fakeEngine((method, nth) => (method === 'record.add' && nth === 1) || method === 'table.delete')
     const run = tableFromFiles({ source: engine.source, services: model(RECEIPTS), files: [file('a.png')], request: 'x' })
     expect(await rejection(run)).toBe('leftBehind')
   })
@@ -386,7 +386,7 @@ describe('R2: what the person reads is localized', () => {
       ['resumen', 'Resumen'],
       ['fecha_detectada', 'Fecha detectada'],
     ])
-    const create = engine.calls.find((call) => call.method === 'tables.create')!
+    const create = engine.calls.find((call) => call.method === 'table.add')!
     expect((create.params.views as Array<{ title: string }>).map((view) => view.title)).toEqual(['General'])
   })
 

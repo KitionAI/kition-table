@@ -53,7 +53,7 @@ fn refused(kit: &mut Headless<TableDocument>, id: &str, command: &str, call: Val
 
 fn table_count(kit: &mut Headless<TableDocument>, id: &str) -> usize {
     let answer = run(kit, id, "table.list", json!({}));
-    answer["result"]["items"].as_array().map(Vec::len).unwrap_or_else(|| panic!("tables.list: {answer}"))
+    answer["result"]["items"].as_array().map(Vec::len).unwrap_or_else(|| panic!("table.list: {answer}"))
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn fields_create_refuses_a_name_in_use_or_out_of_form() {
     let table_id = table["result"]["id"].clone();
     let fields = |kit: &mut Headless<TableDocument>| {
         let answer = run(kit, &id, "field.list", json!({ "tableId": table_id }));
-        answer["result"]["items"].as_array().or_else(|| answer["result"].as_array()).map(Vec::len).unwrap_or_else(|| panic!("fields.list: {answer}"))
+        answer["result"]["items"].as_array().or_else(|| answer["result"].as_array()).map(Vec::len).unwrap_or_else(|| panic!("field.list: {answer}"))
     };
     let before = fields(&mut kit);
     assert_eq!(

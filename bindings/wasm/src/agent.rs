@@ -5,9 +5,9 @@
 //! The schemas come from the Rust types the requests deserialize into (`schemars`), converted to
 //! the spec's dialect by [`from_json_schema`]: the route's ids from its template in
 //! [`METHODS`], its body from `kition-table-api`'s request types, and the import's from
-//! `kition-table-import`'s. The bodies the engine reads key by key (`tables.update`,
-//! `fields.update`, `views.update`, `dashboards.upsert`) are described by the types below, which
-//! list exactly the keys their handlers read. The AI field methods and `changes.since` read loose
+//! `kition-table-import`'s. The bodies the engine reads key by key (`table.set`,
+//! `field.set`, `tableView.set`, `dashboard.set`) are described by the types below, which
+//! list exactly the keys their handlers read. The AI field methods and `change.list` read loose
 //! JSON and are written out here.
 //!
 //! Every output schema accepts the error result (A18): `result`, `change`, and `error` are all
@@ -20,7 +20,7 @@ use schemars::{JsonSchema, Schema, schema_for};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use crate::{AS_ORIGIN_PARAM, COMMAND_PREFIX, DOCUMENT_METHODS, ENGINE_METHODS, READ_METHODS};
+use crate::{AS_ORIGIN_PARAM, DOCUMENT_METHODS, ENGINE_METHODS, READ_METHODS};
 
 /// The tool name prefix (`agent.prefix` in `kit.json`).
 pub const TOOL_PREFIX: &str = "table";
@@ -29,7 +29,7 @@ pub const TOOL_PREFIX: &str = "table";
 /// deeper values are `json`.
 const MAX_DEPTH: usize = 3;
 
-/// The keys `tables.update` reads (`kition_table_api::tables::update_table`).
+/// The keys `table.set` reads (`kition_table_api::tables::update_table`).
 #[allow(dead_code)]
 #[derive(Deserialize, JsonSchema)]
 struct TableUpdate {
@@ -43,7 +43,7 @@ struct TableUpdate {
     primary_field_id: Option<i64>,
 }
 
-/// The keys `fields.update` reads (`kition_table_api::tables::update_field`).
+/// The keys `field.set` reads (`kition_table_api::tables::update_field`).
 #[allow(dead_code)]
 #[derive(Deserialize, JsonSchema)]
 struct FieldUpdate {
@@ -61,7 +61,7 @@ struct FieldUpdate {
     meta: Option<Value>,
 }
 
-/// The keys `views.update` reads (`kition_table_api::tables::update_view`).
+/// The keys `tableView.set` reads (`kition_table_api::tables::update_view`).
 #[allow(dead_code)]
 #[derive(Deserialize, JsonSchema)]
 struct ViewUpdate {
@@ -73,7 +73,7 @@ struct ViewUpdate {
     config: Option<Value>,
 }
 
-/// The keys `dashboards.upsert` reads (`kition_table_api::dashboards::dashboard_from_request`).
+/// The keys `dashboard.set` reads (`kition_table_api::dashboards::dashboard_from_request`).
 #[allow(dead_code)]
 #[derive(Deserialize, JsonSchema)]
 struct DashboardBody {
@@ -86,11 +86,11 @@ struct DashboardBody {
     widgets: Option<Vec<Map<String, Value>>>,
 }
 
-/// The params of `attachments.put` (`kition_table_api::attachments::PutRequest`), renamed
+/// The params of `attachment.add` (`kition_table_api::attachments::PutRequest`), renamed
 /// camelCase as it is.
 type PutRequest = kition_table_api::attachments::PutRequest;
 
-/// The params of `import.run`: the data-import execute request and the file it reads
+/// The params of `file.runImport`: the data-import execute request and the file it reads
 /// (`kition_table_import::run`).
 #[allow(dead_code)]
 #[derive(Deserialize, JsonSchema)]
@@ -106,8 +106,8 @@ fn query_params(method: &str) -> Vec<(&'static str, Value)> {
     let limit = || json!({ "type": "integer", "description": "How many items to answer at most." });
     let offset = || json!({ "type": "integer", "description": "How many items to skip, from 0." });
     match method {
-        "records.list" => vec![("limit", limit()), ("offset", offset())],
-        "records.history" => vec![
+        "record.list" => vec![("limit", limit()), ("offset", offset())],
+        "record.history" => vec![
             ("limit", limit()),
             ("offset", offset()),
             (
@@ -128,10 +128,10 @@ fn query_params(method: &str) -> Vec<(&'static str, Value)> {
                 }),
             ),
         ],
-        "fields.linkCandidates" => {
+        "field.linkCandidates" => {
             vec![("q", json!({ "type": "string", "description": "Text to match in the candidates' display values." })), ("limit", limit())]
         }
-        "links.list" => vec![("field_id", json!({ "type": "integer", "required": true, "description": "The link field's id." }))],
+        "recordLink.list" => vec![("field_id", json!({ "type": "integer", "required": true, "description": "The link field's id." }))],
         _ => Vec::new(),
     }
 }
@@ -139,25 +139,25 @@ fn query_params(method: &str) -> Vec<(&'static str, Value)> {
 /// The JSON Schema of a method's body, from the Rust type it deserializes into.
 fn body_schema(method: &str) -> Option<Schema> {
     Some(match method {
-        "tables.create" => schema_for!(tables::TableSeed),
-        "tables.update" => schema_for!(TableUpdate),
-        "fields.create" => schema_for!(tables::CreateFieldRequest),
-        "fields.update" => schema_for!(FieldUpdate),
-        "views.create" => schema_for!(tables::ViewSeed),
-        "views.update" => schema_for!(ViewUpdate),
-        "views.putFilterTree" => schema_for!(view_config::TreeRequest),
-        "views.putSorts" | "views.putGroups" => schema_for!(view_config::ItemsRequest),
-        "views.patchConfig" => schema_for!(view_config::ConfigPatch),
-        "views.patchField" => schema_for!(view_config::ViewFieldRequest),
-        "records.create" | "records.update" => schema_for!(records::RecordRequest),
-        "records.bulkDelete" | "records.bulkCopy" => schema_for!(view_config::BulkRequest),
-        "links.replace" | "links.delete" => schema_for!(records::LinkRequest),
-        "csv.import" => schema_for!(records::CsvRequest),
-        "transact" => schema_for!(transact::TransactRequest),
-        "dashboards.upsert" => schema_for!(DashboardBody),
-        "attachments.put" => schema_for!(PutRequest),
-        "import.preview" => schema_for!(kition_table_import::SourceParams),
-        "import.run" => schema_for!(RunParams),
+        "table.add" => schema_for!(tables::TableSeed),
+        "table.set" => schema_for!(TableUpdate),
+        "field.add" => schema_for!(tables::CreateFieldRequest),
+        "field.set" => schema_for!(FieldUpdate),
+        "tableView.add" => schema_for!(tables::ViewSeed),
+        "tableView.set" => schema_for!(ViewUpdate),
+        "tableView.setFilterTree" => schema_for!(view_config::TreeRequest),
+        "tableView.setSorts" | "tableView.setGroups" => schema_for!(view_config::ItemsRequest),
+        "tableView.setConfig" => schema_for!(view_config::ConfigPatch),
+        "tableView.setField" => schema_for!(view_config::ViewFieldRequest),
+        "record.add" | "record.set" => schema_for!(records::RecordRequest),
+        "record.bulkDelete" | "record.bulkCopy" => schema_for!(view_config::BulkRequest),
+        "recordLink.replace" | "recordLink.delete" => schema_for!(records::LinkRequest),
+        "file.importCsv" => schema_for!(records::CsvRequest),
+        "edit.transact" => schema_for!(transact::TransactRequest),
+        "dashboard.set" => schema_for!(DashboardBody),
+        "attachment.add" => schema_for!(PutRequest),
+        "file.previewImport" => schema_for!(kition_table_import::SourceParams),
+        "file.runImport" => schema_for!(RunParams),
         _ => return None,
     })
 }
@@ -202,10 +202,10 @@ fn loose_params(method: &str) -> Option<Value> {
             });
             params
         }
-        "changes.since" => json!({
+        "change.list" => json!({
             "version": { "type": "string", "description": "Base64 of a version a previous answer gave; empty for every change." },
         }),
-        "read" => json!({
+        "file.read" => json!({
             "tableId": { "type": "integer", "description": "The table whose records to list, in order (a table's id, as inspect and table.list answer it)." },
             "viewId": { "type": "integer", "description": "Instead of tableId: the view whose records to list, only those its filter keeps, in its order (a view's id, as inspect and tableView.list answer it)." },
             "limit": { "type": "integer", "description": "How many records to list, 1 to 200; default 50." },
@@ -247,7 +247,7 @@ fn raw_input_schema(command: &str) -> Option<Value> {
     if command == crate::outline::OUTLINE_COMMAND {
         return Some(crate::outline::input_schema());
     }
-    let method = command.strip_prefix(COMMAND_PREFIX)?;
+    let method = command;
     let route = DOCUMENT_METHODS.iter().chain(METHODS).chain(ENGINE_METHODS).find(|(name, _)| *name == method).map(|(_, route)| *route)?;
     let mut params = Map::new();
     for id in route_ids(route) {
@@ -274,17 +274,17 @@ fn raw_input_schema(command: &str) -> Option<Value> {
     if let Some(Value::Object(loose)) = loose_params(method) {
         params.extend(loose);
     }
-    if matches!(method, "undo" | "redo") {
+    if matches!(method, "history.undo" | "history.redo") {
         params.insert("scope".to_owned(), undo_scope_schema());
     }
     with_types(method, &mut params);
-    if matches!(method, "records.create" | "records.update") {
+    if matches!(method, "record.add" | "record.set") {
         params["values"]["description"] = json!(
             "Values keyed by field name. Creation must supply every writable required field; inspect the table first. For the starter table, use {\"title\":\"New record\"}."
         );
         params["values"]["examples"] = json!([{"title":"New record"}]);
     }
-    if !READ_METHODS.contains(&method) && !matches!(method, "undo" | "redo") {
+    if !READ_METHODS.contains(&method) && !matches!(method, "history.undo" | "history.redo") {
         params.insert(
             AS_ORIGIN_PARAM.to_owned(),
             json!({ "type": "string", "description": "system:<name> writes as a host feature, outside the undo history. Agents leave it out." }),
@@ -431,7 +431,7 @@ fn with_types(method: &str, params: &mut Map<String, Value>) {
         params.get_mut(list)?.get_mut("items")?.get_mut("properties")?.as_object_mut().map(std::mem::take)
     };
     match method {
-        "tables.create" => {
+        "table.add" => {
             named(params, "table");
             for list in ["fields", "views"] {
                 if let Some(mut properties) = items(params, list) {
@@ -445,12 +445,12 @@ fn with_types(method: &str, params: &mut Map<String, Value>) {
                 }
             }
         }
-        "fields.create" => {
+        "field.add" => {
             field(params);
             named(params, "field");
         }
-        "fields.update" => field(params),
-        "views.create" | "views.update" => {
+        "field.set" => field(params),
+        "tableView.add" | "tableView.set" => {
             params.insert("type".to_owned(), view_type_spec());
         }
         _ => {}
@@ -925,7 +925,7 @@ fn change_spec() -> Value {
 /// The `result` of a method: the route's answer, every key named.
 fn result_spec(method: &str) -> Value {
     match method {
-        "documents.get" => shape(
+        "file.get" => shape(
             "The document with its tables and dashboards.",
             json!({
                 "id": int("Always 1."),
@@ -946,24 +946,24 @@ fn result_spec(method: &str) -> Value {
                 }))),
             }),
         ),
-        "tables.list" => page("Every table, with its fields and views.", table_shape()),
-        "tables.create" | "tables.update" => table_shape(),
-        "fields.list" => page("The table's fields, in order.", field_shape()),
-        "fields.create" | "fields.update" | "fields.duplicate" => field_shape(),
-        "views.list" => page("The table's views, in order.", view_shape()),
-        "views.create" | "views.update" => view_shape(),
-        "tables.delete" | "fields.delete" | "views.delete" | "records.delete" => message(),
-        "views.getFilterTree" | "views.putFilterTree" => shape("The view's filter.", json!({ "tree": or_null(filter_group(1)) })),
-        "views.getSorts" | "views.putSorts" | "views.getGroups" | "views.putGroups" => sort_items(),
-        "views.patchConfig" => shape(
+        "table.list" => page("Every table, with its fields and views.", table_shape()),
+        "table.add" | "table.set" => table_shape(),
+        "field.list" => page("The table's fields, in order.", field_shape()),
+        "field.add" | "field.set" | "field.duplicate" => field_shape(),
+        "tableView.list" => page("The table's views, in order.", view_shape()),
+        "tableView.add" | "tableView.set" => view_shape(),
+        "table.delete" | "field.delete" | "tableView.delete" | "record.delete" => message(),
+        "tableView.getFilterTree" | "tableView.setFilterTree" => shape("The view's filter.", json!({ "tree": or_null(filter_group(1)) })),
+        "tableView.getSorts" | "tableView.setSorts" | "tableView.getGroups" | "tableView.setGroups" => sort_items(),
+        "tableView.setConfig" => shape(
             "The view's whole configuration after the change.",
             json!({ "config": map("filter_tree, sorts, groups, row_height, frozen_column_count, and the editor's settings.") }),
         ),
-        "views.listFields" => {
+        "tableView.listFields" => {
             shape("The settings the view stores; fields without any show with the defaults.", json!({ "items": list(view_field_shape()) }))
         }
-        "views.patchField" => view_field_shape(),
-        "records.list" => shape(
+        "tableView.setField" => view_field_shape(),
+        "record.list" => shape(
             "A page of records.",
             json!({
                 "items": list(record_shape()),
@@ -972,7 +972,7 @@ fn result_spec(method: &str) -> Value {
                 "limit": int("The page size."),
             }),
         ),
-        "records.create" | "records.update" => {
+        "record.add" | "record.set" => {
             let mut record = record_shape();
             if let Some(properties) = record.get_mut("properties").and_then(Value::as_object_mut) {
                 properties.insert(
@@ -982,7 +982,7 @@ fn result_spec(method: &str) -> Value {
             }
             record
         }
-        "records.history" => shape(
+        "record.history" => shape(
             "A page of the record's history, newest first.",
             json!({
                 "items": list(shape("One change.", json!({
@@ -1002,41 +1002,41 @@ fn result_spec(method: &str) -> Value {
                 "offset": int("How many were skipped."),
             }),
         ),
-        "records.bulkDelete" => shape(
+        "record.bulkDelete" => shape(
             "What was deleted.",
             json!({ "deleted_count": int("How many records were deleted."), "missing_keys": list(text("A row key that names no record.")) }),
         ),
-        "records.bulkCopy" => shape(
+        "record.bulkCopy" => shape(
             "The copies.",
             json!({ "copied_count": int("How many records were copied."), "new_row_keys": list(text("A copy's row key, in order.")) }),
         ),
-        "links.list" | "links.replace" | "fields.linkCandidates" => link_items(),
-        "links.delete" => shape("Done.", json!({ "ok": flag("Always true.") })),
-        "csv.import" => shape("What was added.", json!({ "created": int("How many records were created.") })),
-        "csv.export" => shape("The table as CSV.", json!({ "name": text("A file name, the table's title."), "content": text("The CSV text.") })),
-        "markdown.export" => shape("The table as Markdown.", json!({ "content": text("The Markdown table.") })),
-        "transact" => shape(
+        "recordLink.list" | "recordLink.replace" | "field.linkCandidates" => link_items(),
+        "recordLink.delete" => shape("Done.", json!({ "ok": flag("Always true.") })),
+        "file.importCsv" => shape("What was added.", json!({ "created": int("How many records were created.") })),
+        "file.exportCsv" => shape("The table as CSV.", json!({ "name": text("A file name, the table's title."), "content": text("The CSV text.") })),
+        "file.exportMarkdown" => shape("The table as Markdown.", json!({ "content": text("The Markdown table.") })),
+        "edit.transact" => shape(
             "What the operations did.",
             json!({ "change": change_spec(), "created": list(text("The row key of a record the operations created.")) }),
         ),
-        "undo" | "redo" => {
+        "history.undo" | "history.redo" => {
             shape("Whether a step was taken back (or put back).", json!({ "done": flag("False when there was no step."), "change": change_spec() }))
         }
-        "historyState" => {
+        "history.state" => {
             shape("What Undo and Redo would do.", json!({ "canUndo": flag("There is a step to undo."), "canRedo": flag("There is a step to redo.") }))
         }
-        "dashboards.list" => shape("Every dashboard.", json!({ "items": list(dashboard_shape()), "total": int("How many there are.") })),
-        "dashboards.upsert" => dashboard_shape(),
-        "dashboards.delete" => shape("Done.", json!({ "deleted": flag("Always true.") })),
-        "attachments.put" => attachment_shape(
+        "dashboard.list" => shape("Every dashboard.", json!({ "items": list(dashboard_shape()), "total": int("How many there are.") })),
+        "dashboard.set" => dashboard_shape(),
+        "dashboard.delete" => shape("Done.", json!({ "deleted": flag("Always true.") })),
+        "attachment.add" => attachment_shape(
             "The attachment value: put it in the list an attachment field's value holds.",
             json!({ "url": text("kition-blob: and the bytes' SHA-256."), "sha256": text("The bytes' SHA-256.") }),
         ),
-        "attachments.read" => {
+        "attachment.get" => {
             attachment_shape("The attachment with its bytes.", json!({ "hash": text("The bytes' SHA-256."), "data": text("The bytes, base64.") }))
         }
-        "import.preview" => import_preview(),
-        "import.run" => import_result(),
+        "file.previewImport" => import_preview(),
+        "file.runImport" => import_result(),
         "ai.prepare" => shape(
             "The model requests of the run, for the host to generate and answer with ai.apply.",
             json!({
@@ -1068,7 +1068,7 @@ fn result_spec(method: &str) -> Value {
                 "limit": int("The most records one batch takes."),
             }),
         ),
-        "changes.since" => shape(
+        "change.list" => shape(
             "The records written since the version.",
             json!({
                 "version": text("The current version, base64: the next call's `version`."),
@@ -1077,7 +1077,7 @@ fn result_spec(method: &str) -> Value {
                 "deleted": list(record_change()),
             }),
         ),
-        "read" => shape(
+        "file.read" => shape(
             "A page of the records of a table or a view.",
             json!({
                 "tableId": int("The table's id."),
@@ -1130,9 +1130,10 @@ pub fn output_schema(command: &str) -> Option<Value> {
         return Some(crate::outline::output_schema(error_spec()));
     }
     let method = match command {
-        "edit.undo" => "undo",
-        "edit.redo" => "redo",
-        other => other.strip_prefix(COMMAND_PREFIX).filter(|method| crate::known_method(method))?,
+        "edit.undo" => "history.undo",
+        "edit.redo" => "history.redo",
+        other if crate::known_method(other) => other,
+        _ => return None,
     };
     Some(json!({
         "type": "object",

@@ -5,7 +5,7 @@
 //! The view's filter, sorts and groups are the kit's one arrangement (`kition-table-arrange`), the
 //! same the editor and the agent's `read` show; its layout comes from the editor's config keys
 //! (`hidden_field_names`, `row_height`, `frozen_column_count`) and the engine's
-//! (`views.patchField`).
+//! (`tableView.setField`).
 
 use std::cmp::Ordering;
 

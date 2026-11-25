@@ -84,7 +84,7 @@ pub fn history(file: &TableFile, table_id: i64, record_id: i64, limit: i64, offs
     Ok(json!({ "items": items, "total": total, "limit": limit, "offset": offset }))
 }
 
-/// The `checkpoints` of `records.history`: the host's checkpoints, oldest first, each
+/// The `checkpoints` of `record.history`: the host's checkpoints, oldest first, each
 /// `{version, time, author?, snapshot?}` (`version` base64, as `replica/version` answers it;
 /// `snapshot` base64, the checkpoint's snapshot as `host/checkpointRead` answers it).
 pub fn history_points(value: Option<&Value>) -> ApiResult<Vec<HistoryPoint>> {

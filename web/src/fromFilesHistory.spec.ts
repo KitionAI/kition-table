@@ -38,24 +38,24 @@ function sourceOf(doc: Doc, refuse: (method: string, nth: number) => boolean = (
   return createWorkerTableDataSource(access, 'Receipts.ktable')
 }
 
-const call = <T,>(doc: Doc, method: string, params: Record<string, unknown> = {}) => (JSON.parse(doc.execute(`table.${method}`, JSON.stringify(params))) as { result: T }).result
+const call = <T,>(doc: Doc, method: string, params: Record<string, unknown> = {}) => (JSON.parse(doc.execute(method, JSON.stringify(params))) as { result: T }).result
 
 /** What the document holds: every table with its title, its fields' titles and its records' values. */
 function contents(doc: Doc) {
-  const tables = call<{ tables: Array<{ id: number; title: string; fields: Array<{ title: string }> }> }>(doc, 'documents.get').tables
+  const tables = call<{ tables: Array<{ id: number; title: string; fields: Array<{ title: string }> }> }>(doc, 'file.get').tables
   return tables.map((table) => ({
     id: table.id,
     title: table.title,
     fields: table.fields.map((field) => field.title),
-    records: call<{ items: Array<{ values: Record<string, unknown> }> }>(doc, 'records.list', { tableId: table.id }).items.map((row) => row.values),
+    records: call<{ items: Array<{ values: Record<string, unknown> }> }>(doc, 'record.list', { tableId: table.id }).items.map((row) => row.values),
   }))
 }
 
 /** A document with one person's edit in it (a table "Earlier" with one record), the step Undo would take back. */
 function documentWithAnEdit() {
   const doc = TableDocument.create('Receipts.ktable', 0, 0)
-  const earlier = call<{ id: number; fields: Array<{ name: string }> }>(doc, 'tables.create', { title: 'Earlier' })
-  call(doc, 'records.create', { tableId: earlier.id, values: { [earlier.fields[0].name]: 'kept' } })
+  const earlier = call<{ id: number; fields: Array<{ name: string }> }>(doc, 'table.add', { title: 'Earlier' })
+  call(doc, 'record.add', { tableId: earlier.id, values: { [earlier.fields[0].name]: 'kept' } })
   return doc
 }
 
@@ -116,10 +116,10 @@ describe('making a table from files is one undo step', () => {
     const services = model()
     const made = await tableFromFiles({ source, services, runField: engineAIRun(source, services), files: RECEIPTS, request: 'Archive my receipts' })
     expect(contents(doc).find((table) => table.id === made.tableId)?.records).toHaveLength(3)
-    expect(call<{ done: boolean }>(doc, 'undo').done).toBe(true)
+    expect(call<{ done: boolean }>(doc, 'history.undo').done).toBe(true)
     expect(contents(doc)).toEqual(before)
     // The person's earlier edit (the record in "Earlier") is the next step.
-    expect(call<{ done: boolean }>(doc, 'undo').done).toBe(true)
+    expect(call<{ done: boolean }>(doc, 'history.undo').done).toBe(true)
     expect(contents(doc).find((table) => table.title === 'Earlier')?.records).toEqual([])
     doc.free()
   })
@@ -142,9 +142,9 @@ describe('making a table from files is one undo step', () => {
     })
     await expect(run).rejects.toMatchObject({ name: 'AbortError' })
     expect(contents(doc)).toEqual(before)
-    call(doc, 'undo')
+    call(doc, 'history.undo')
     expect(contents(doc).some((table) => table.title === 'Receipt Archive')).toBe(false)
-    call(doc, 'redo')
+    call(doc, 'history.redo')
     expect(contents(doc).some((table) => table.title === 'Receipt Archive')).toBe(false)
     expect(contents(doc)).toEqual(before)
     doc.free()
@@ -154,7 +154,7 @@ describe('making a table from files is one undo step', () => {
     const doc = documentWithAnEdit()
     const source = sourceOf(doc, (command, nth) => command === 'record.add' && nth === 2)
     await expect(tableFromFiles({ source, services: model(), files: RECEIPTS, request: 'Archive my receipts' })).rejects.toThrow()
-    call(doc, 'undo')
+    call(doc, 'history.undo')
     expect(contents(doc).some((table) => table.title === 'Receipt Archive')).toBe(false)
     doc.free()
   })

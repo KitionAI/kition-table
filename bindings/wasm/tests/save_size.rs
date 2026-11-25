@@ -36,7 +36,7 @@ fn report(label: &str, doc: &mut TableDocument) {
 
 fn build(count: usize) -> (TableDocument, i64, String) {
     let mut doc = TableDocument::create("Large.ktable", 0, 0).unwrap();
-    let document = doc.call("documents.get", &Value::Null).unwrap()["result"].clone();
+    let document = doc.call("file.get", &Value::Null).unwrap()["result"].clone();
     let table = &document["tables"][0];
     let table_id = table["id"].as_i64().unwrap();
     let primary = table["primary_field_id"].as_i64().unwrap();
@@ -44,7 +44,7 @@ fn build(count: usize) -> (TableDocument, i64, String) {
         table["fields"].as_array().unwrap().iter().find(|field| field["id"].as_i64() == Some(primary)).unwrap()["name"].as_str().unwrap().to_owned();
     for chunk in 0..count / 1000 {
         let records: Vec<Value> = (0..1000).map(|index| json!({ field.clone(): format!("Item {}", chunk * 1000 + index) })).collect();
-        doc.call("transact", &json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] })).unwrap();
+        doc.call("edit.transact", &json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] })).unwrap();
     }
     (doc, table_id, field)
 }
@@ -55,14 +55,14 @@ fn save_size() {
     for count in [10_000, 50_000] {
         let (mut doc, table_id, field) = build(count);
         report(&format!("{count} records, as built"), &mut doc);
-        let page = doc.call("records.list", &json!({ "tableId": table_id, "limit": 2000 })).unwrap();
+        let page = doc.call("record.list", &json!({ "tableId": table_id, "limit": 2000 })).unwrap();
         let keys: Vec<String> = page["result"]["items"].as_array().unwrap().iter().map(|r| r["row_key"].as_str().unwrap().to_owned()).collect();
         for (round, key) in keys.iter().enumerate().take(600) {
-            doc.call("transact", &json!({ "ops": [{ "op": "cells.set", "tableId": table_id, "records": [{ "rowKey": key, "values": { field.clone(): format!("Edit {round}") } }] }] })).unwrap();
+            doc.call("edit.transact", &json!({ "ops": [{ "op": "cells.set", "tableId": table_id, "records": [{ "rowKey": key, "values": { field.clone(): format!("Edit {round}") } }] }] })).unwrap();
         }
         report(&format!("{count} records, after 600 edits"), &mut doc);
         let doomed: Vec<String> = keys.iter().take(2000).cloned().collect();
-        doc.call("transact", &json!({ "ops": [{ "op": "records.delete", "tableId": table_id, "rowKeys": doomed }] })).unwrap();
+        doc.call("edit.transact", &json!({ "ops": [{ "op": "records.delete", "tableId": table_id, "rowKeys": doomed }] })).unwrap();
         report(&format!("{count} records, after deleting 2,000"), &mut doc);
     }
 }

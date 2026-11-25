@@ -20,14 +20,14 @@ function fixture(name, second) {
     if (answer.error) throw new Error(`${method}: ${JSON.stringify(answer.error)}`)
     return answer.result
   }
-  const table = call('documents.get').tables[0]
+  const table = call('file.get').tables[0]
   const primary = (of) => of.fields.find((field) => field.id === of.primary_field_id).name
-  call('tables.update', { tableId: table.id, title: 'People' })
-  for (const title of ['Ada, Countess', 'Grace']) call('records.create', { tableId: table.id, values: { [primary(table)]: title } })
+  call('table.set', { tableId: table.id, title: 'People' })
+  for (const title of ['Ada, Countess', 'Grace']) call('record.add', { tableId: table.id, values: { [primary(table)]: title } })
   let places = null
   if (second) {
-    places = call('tables.create', { title: 'Places' })
-    call('records.create', { tableId: places.id, values: { [primary(places)]: 'Paris' } })
+    places = call('table.add', { title: 'Places' })
+    call('record.add', { tableId: places.id, values: { [primary(places)]: 'Paris' } })
   }
   doc.markSaved()
   const bytes = Buffer.from(doc.save()).toString('base64')

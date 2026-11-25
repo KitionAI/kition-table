@@ -20,7 +20,7 @@ fn main() -> Result<(), String> {
     let path = std::env::args().nth(1).ok_or("usage: grid_bands <table.ktable>")?;
     let bytes = std::fs::read(&path).map_err(|error| format!("{path}: {error}"))?;
     let mut doc = TableDocument::open("Perf.ktable", &bytes)?;
-    let table = doc.call("documents.get", &json!({}))?["result"]["tables"][0].clone();
+    let table = doc.call("file.get", &json!({}))?["result"]["tables"][0].clone();
     let table_id = table["id"].as_i64().ok_or("no table")?;
     let view = table["views"][0]["id"].as_i64().ok_or("no view")?;
     let axis = doc.grid_open(&json!({ "tableId": table_id, "viewId": view }))?;

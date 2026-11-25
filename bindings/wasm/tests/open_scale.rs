@@ -2,7 +2,7 @@
 //! regressions/issue-table-open-100k).
 //!
 //! A host asks a document opened from its bytes for its overview (`inspect`), the document
-//! (`documents.get`) and its picture's size (`width`, `height`) before the editor shows anything.
+//! (`file.get`) and its picture's size (`width`, `height`) before the editor shows anything.
 //! Each of them used to read every record of the table: the dashboards and the base's label looked
 //! for the base among every object of the replica, which decodes every record of a replica loaded
 //! from its snapshot, and the picture's size was had by drawing the picture, which parsed every
@@ -34,18 +34,18 @@ fn call(doc: &mut TableDocument, method: &str, params: Value) -> Value {
 /// saved and opened again from its bytes, as a host opens a file; answers it and the table's id.
 fn large() -> (TableDocument, i64) {
     let mut doc = TableDocument::create("Large.ktable", 0, 0).unwrap();
-    call(&mut doc, "tables.delete", json!({ "tableId": 1 }));
+    call(&mut doc, "table.delete", json!({ "tableId": 1 }));
     let fields: Vec<Value> = (0..FIELDS)
         .map(|index| json!({ "name": format!("f{index}"), "title": format!("Field {index}"), "type": "text", "primary": index == 0 }))
         .collect();
-    let table = call(&mut doc, "tables.create", json!({ "title": "Rows", "fields": fields }));
+    let table = call(&mut doc, "table.add", json!({ "title": "Rows", "fields": fields }));
     let table_id = table["id"].as_i64().unwrap();
-    call(&mut doc, "dashboards.upsert", json!({ "dashboardId": "overview", "title": "Overview", "source_table_id": table_id, "widgets": [] }));
+    call(&mut doc, "dashboard.set", json!({ "dashboardId": "overview", "title": "Overview", "source_table_id": table_id, "widgets": [] }));
     for start in (0..RECORDS).step_by(1_000) {
         let records: Vec<Value> = (start..start + 1_000)
             .map(|row| (0..FIELDS).map(|column| (format!("f{column}"), json!(format!("row {row} review shipping invoice {column}")))).collect())
             .collect();
-        call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "records": records }] }));
+        call(&mut doc, "edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "records": records }] }));
     }
     let bytes = doc.saved_bytes().unwrap();
     (TableDocument::open("Large.ktable", &bytes).unwrap(), table_id)
@@ -73,21 +73,21 @@ fn what_a_host_asks_on_opening_does_not_read_every_record() {
         assert_eq!(inspected["dashboards"].as_array().unwrap().len(), 1);
     });
     let document = fastest(|| {
-        let answer = doc.call("documents.get", &Value::Null).unwrap();
+        let answer = doc.call("file.get", &Value::Null).unwrap();
         assert!(answer["result"]["tool_id"].is_string(), "{answer}");
         assert_eq!(answer["result"]["dashboards"].as_array().unwrap().len(), 1);
     });
     // A new revision before each run, so the size is not the one kept from the run before.
     let size = (0..3)
         .map(|run| {
-            call(&mut doc, "tables.update", json!({ "tableId": table_id, "title": format!("Rows {run}") }));
+            call(&mut doc, "table.set", json!({ "tableId": table_id, "title": format!("Rows {run}") }));
             timed(|| assert!(doc.width() > 1 && doc.height() > 1))
         })
         .fold(f64::INFINITY, f64::min);
-    eprintln!("every record {every_record:.4} s, inspect {overview:.4} s, documents.get {document:.4} s, size {size:.4} s");
+    eprintln!("every record {every_record:.4} s, inspect {overview:.4} s, file.get {document:.4} s, size {size:.4} s");
     // The size still arranges the view (reading each record's place, not its cells) and reads the
     // records the picture lays out whole.
-    for (what, took, share) in [("inspect", overview, 4.0), ("documents.get", document, 4.0), ("the picture's size", size, 2.0)] {
+    for (what, took, share) in [("inspect", overview, 4.0), ("file.get", document, 4.0), ("the picture's size", size, 2.0)] {
         assert!(took < every_record / share, "{what} took {took:.4} s, reading every record once {every_record:.4} s");
     }
 }
@@ -109,7 +109,7 @@ fn the_measured_size_is_the_drawn_pictures() {
     for path in files {
         let mut doc = TableDocument::open("Conformance.ktable", &std::fs::read(&path).unwrap()).unwrap();
         let mut shown = vec![Shown::default()];
-        for table in call(&mut doc, "documents.get", Value::Null)["tables"].as_array().unwrap() {
+        for table in call(&mut doc, "file.get", Value::Null)["tables"].as_array().unwrap() {
             let table_id = table["id"].as_i64();
             shown.push(Shown { table: table_id, plain: true, ..Shown::default() });
             shown.push(Shown { table: table_id, rows: Some((1, 2)), ..Shown::default() });

@@ -25,25 +25,25 @@ land work, then this list. The comparison with the target application is in
 
 Found by reading the write handlers; not fixed yet:
 
-- Link values written through `values`, `transact`, `csv.import` and `import.run` accept a record
-  of any table, where `links.replace` requires the target table.
-- `tables.update` with `primary_field_id` skips the cycle check that `fields.update` with
+- Link values written through `values`, `edit.transact`, `file.importCsv` and `file.runImport` accept a record
+  of any table, where `recordLink.replace` requires the target table.
+- `table.set` with `primary_field_id` skips the cycle check that `field.set` with
   `is_primary` runs.
 - A type change away from `formula` keeps `readonly`; `required` on a computed field blocks every
   create.
 - Option ids resolve deleted rows and other tables' rows.
-- `fields.duplicate` copies a symmetric partner claim.
+- `field.duplicate` copies a symmetric partner claim.
 - Deleting a field or a table leaves lookups, formulas, partners, view settings and dashboards
   that name it dangling.
-- `views.update` drops `filter_tree` but keeps sorts and groups; `patchField` writes its three
-  parts in three commits; `putSorts` and `putGroups`
+- `tableView.set` drops `filter_tree` but keeps sorts and groups; `setField` writes its three
+  parts in three commits; `setSorts` and `setGroups`
   answer the request rather than what was stored, and report validation errors as internal.
-- Upsert imports write each match from a snapshot taken before the first write; `csv.import` and
-  `import.run` map columns and convert cells differently.
+- Upsert imports write each match from a snapshot taken before the first write; `file.importCsv` and
+  `file.runImport` map columns and convert cells differently.
 - `ai.apply` writes into a field of any type with an `ai_config`, reports a dropped computed write
   as done, and hashes the stored config rather than the one run.
-- `attachments.put` answers the first stored MIME type and name of identical bytes.
-- `records.create` ignores `order`.
+- `attachment.add` answers the first stored MIME type and name of identical bytes.
+- `record.add` ignores `order`.
 - A delete holds every field of what it removes, so an outside edit of a cell of a record about
   to be deleted refuses the delete.
 

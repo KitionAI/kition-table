@@ -15,15 +15,15 @@ fn call(doc: &mut TableDocument, method: &str, params: Value) -> Value {
 #[test]
 fn grid_records_answers_the_records_asked_for_in_order_with_their_row_keys() {
     let mut doc = TableDocument::create("Records.ktable", 0, 0).unwrap();
-    let table = call(&mut doc, "documents.get", json!({}))["tables"][0].clone();
+    let table = call(&mut doc, "file.get", json!({}))["tables"][0].clone();
     let table_id = table["id"].as_i64().unwrap();
     let title = table["fields"].as_array().unwrap().iter().find(|field| field["is_primary"] == true).unwrap()["name"].as_str().unwrap().to_owned();
-    let made = call(&mut doc, "fields.create", json!({ "tableId": table_id, "title": "Amount", "type": "number" }));
+    let made = call(&mut doc, "field.add", json!({ "tableId": table_id, "title": "Amount", "type": "number" }));
     let amount = if made["field"].is_object() { made["field"]["name"].clone() } else { made["name"].clone() };
     let amount = amount.as_str().unwrap().to_owned();
     let records: Vec<Value> = (1..=3).map(|i| json!({ title.clone(): format!("Record {i}"), amount.clone(): i * 10 })).collect();
-    call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }));
-    let listed = call(&mut doc, "records.list", json!({ "tableId": table_id }));
+    call(&mut doc, "edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }));
+    let listed = call(&mut doc, "record.list", json!({ "tableId": table_id }));
     let items = listed["items"].as_array().unwrap();
     let ids: Vec<i64> = items.iter().map(|item| item["id"].as_i64().unwrap()).collect();
 
@@ -46,7 +46,7 @@ fn grid_records_answers_the_records_asked_for_in_order_with_their_row_keys() {
     assert_eq!(keys[0]["row_key"], items[1]["row_key"]);
 
     // Records of another table are not this table's.
-    let other = call(&mut doc, "tables.create", json!({ "title": "Other" }));
+    let other = call(&mut doc, "table.add", json!({ "title": "Other" }));
     let other_id = other["id"].as_i64().or_else(|| other["table"]["id"].as_i64()).unwrap();
     assert_eq!(doc.grid_records(&json!({ "tableId": other_id, "ids": [ids[0]] })).unwrap(), json!([]));
 
@@ -62,10 +62,10 @@ fn grid_records_answers_the_records_asked_for_in_order_with_their_row_keys() {
 #[test]
 fn grid_records_of_many_ids_answers_what_a_few_at_a_time_answer() {
     let mut doc = TableDocument::create("Many.ktable", 0, 0).unwrap();
-    let table = call(&mut doc, "documents.get", json!({}))["tables"][0].clone();
+    let table = call(&mut doc, "file.get", json!({}))["tables"][0].clone();
     let table_id = table["id"].as_i64().unwrap();
     let title = table["fields"].as_array().unwrap().iter().find(|field| field["is_primary"] == true).unwrap()["name"].as_str().unwrap().to_owned();
-    let made = call(&mut doc, "fields.create", json!({ "tableId": table_id, "title": "Amount", "type": "number" }));
+    let made = call(&mut doc, "field.add", json!({ "tableId": table_id, "title": "Amount", "type": "number" }));
     let amount = if made["field"].is_object() { made["field"]["name"].clone() } else { made["name"].clone() };
     let amount = amount.as_str().unwrap().to_owned();
     let records: Vec<Value> = (0..700)
@@ -76,11 +76,11 @@ fn grid_records_of_many_ids_answers_what_a_few_at_a_time_answer() {
             _ => json!({ amount.clone(): -i }),
         })
         .collect();
-    call(&mut doc, "transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }));
-    let listed = call(&mut doc, "records.list", json!({ "tableId": table_id, "limit": 1000 }));
+    call(&mut doc, "edit.transact", json!({ "ops": [{ "op": "records.create", "tableId": table_id, "at": null, "records": records }] }));
+    let listed = call(&mut doc, "record.list", json!({ "tableId": table_id, "limit": 1000 }));
     let mut ids: Vec<i64> = listed["items"].as_array().unwrap().iter().map(|item| item["id"].as_i64().unwrap()).collect();
     assert_eq!(ids.len(), 700);
-    call(&mut doc, "records.delete", json!({ "tableId": table_id, "recordId": ids[5] }));
+    call(&mut doc, "record.delete", json!({ "tableId": table_id, "recordId": ids[5] }));
     ids.reverse();
     let again = [ids[3], 999_999, ids[3], ids[10]];
     ids.extend(again);

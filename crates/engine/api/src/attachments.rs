@@ -2,7 +2,7 @@
 //! reading a blob back.
 //!
 //! The runtime's upload route takes a multipart file and calls [`put`]; a host without HTTP
-//! (a kit's engine) calls `attachments.put` with the bytes in base64. `attachments.read`
+//! (a kit's engine) calls `attachment.add` with the bytes in base64. `attachment.get`
 //! answers the bytes in base64 too, where the runtime's route sends them as the response body.
 
 use base64::Engine as _;
@@ -20,7 +20,7 @@ fn refused(err: TableFileError) -> ApiError {
     }
 }
 
-/// The params of `attachments.put`.
+/// The params of `attachment.add`.
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PutRequest {
@@ -47,7 +47,7 @@ pub fn put(file: &mut TableFile, table_id: i64, bytes: &[u8], name: &str, mime: 
     Ok(blobs::attachment_value(&info, name))
 }
 
-/// `attachments.put` with its params: the bytes in base64.
+/// `attachment.add` with its params: the bytes in base64.
 pub fn put_request(file: &mut TableFile, table_id: i64, request: &PutRequest) -> ApiResult<Value> {
     let bytes =
         base64::engine::general_purpose::STANDARD.decode(request.data.trim()).map_err(|_| ApiError::bad_request("Attachment data must be base64"))?;
