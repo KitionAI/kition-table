@@ -23,8 +23,12 @@ const editorKeys = (command: string) => command === 'edit.undo' || command === '
 /** The frame has no command tabs: the table editor draws its own toolbar, and the bar under the frame's top lists the tables and dashboards. */
 const NO_TABS = [] as const
 
-/** How many of the newest checkpoints a record's history reads (the engine reads at most 50). */
-const STORED_HISTORY_POINTS = 50
+/**
+ * How many of the newest checkpoints a record's history reads (the engine reads as many,
+ * `STORED_HISTORY_POINTS` in crates/engine/file/src/kdm/changes.rs): each is the whole document's
+ * snapshot, read from the host and loaded by the engine.
+ */
+const STORED_HISTORY_POINTS = 10
 
 /** The theme's `.dark` class follows the host's color scheme (@kition/sdk/editor sets `data-color-scheme`). */
 function useDarkClass() {
@@ -79,15 +83,15 @@ export function App({ host, i18n }: { host: HostConnection; i18n: i18n }) {
           checkpoints: async () => {
             // The newest checkpoints with the snapshots the host keeps for them: the history
             // before this session is what differs between consecutive ones.
+            // Read one at a time, newest first: one snapshot is held as bytes while it is encoded.
             const listed = await listCheckpoints(host.files, path, { limit: STORED_HISTORY_POINTS })
             if (!listed) return null
-            const read = await Promise.all(
-              listed.checkpoints.map(async ({ id, version, time, author }) => {
-                const kept = await readCheckpoint(host.files, path, id).catch(() => null)
-                return kept ? { version, time, ...(author ? { author } : {}), snapshot: toBase64(new Uint8Array(kept.snapshot)) } : null
-              }),
-            )
-            return read.filter((point) => point !== null).reverse()
+            const read: Array<{ version: string; time: number; author?: string; snapshot: string }> = []
+            for (const { id, version, time, author } of listed.checkpoints) {
+              const kept = await readCheckpoint(host.files, path, id).catch(() => null)
+              if (kept) read.push({ version, time, ...(author ? { author } : {}), snapshot: toBase64(new Uint8Array(kept.snapshot)) })
+            }
+            return read.reverse()
           },
         },
       ),

@@ -1,0 +1,27 @@
+format: 1
+id: table.records.history-kept/between-checkpoints
+feature: table.records.history-kept
+intent: >-
+  Each way records.history tells a record's history before the session from the host's
+  checkpoints: a creation and a deletion (a record deleted and brought back) at the checkpoints
+  that end their stretches; several edits between two checkpoints as one entry, by the author and
+  at the time of the checkpoint that ends that stretch and no other's; only the newest
+  checkpoints read (STORED_HISTORY_POINTS); a checkpoint without its snapshot, a repeated one and
+  one taken in this session passed over, while the session's own edit by an agent keeps its author
+  and time; a snapshot of another document refused.
+layer: gate
+source:
+  kind: synthetic
+  from: kition-sdk Kit UI protocol 7m, data model 7.2 and 7.3
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, filter: "a_record_deleted_and_brought_back_shows_its_creation_and_deletion_at_their_checkpoints" }
+  - cargo-test: { package: kition-table-kit, filter: "several_edits_between_two_checkpoints_show_as_one_by_that_stretch_s_checkpoint" }
+  - cargo-test: { package: kition-table-kit, filter: "only_the_newest_checkpoints_are_read" }
+  - cargo-test: { package: kition-table-kit, filter: "checkpoints_without_a_snapshot_or_taken_in_this_session_are_skipped_and_the_session_keeps_its_authors" }
+  - cargo-test: { package: kition-table-kit, filter: "a_checkpoint_of_another_document_is_refused" }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-25"

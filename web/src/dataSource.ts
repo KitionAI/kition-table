@@ -214,8 +214,16 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
         // The host's checkpoints tell the history before this session; a host that answers none
         // (or fails) leaves only this session's.
         const checkpoints = (await history.checkpoints?.().catch(() => null)) ?? null
-        const answer = await call<RecordHistoryResponse>('records.history', { ...own(params), ...(checkpoints?.length ? { checkpoints } : {}) })
-        return { ...answer, kept: history.kept ?? false }
+        if (checkpoints?.length) {
+          // Checkpoints the engine cannot take (a document too large to send its snapshots, one
+          // that is no longer this document's) leave this session's history, said as such.
+          const told = await call<RecordHistoryResponse>('records.history', { ...own(params), checkpoints }).catch(() => null)
+          if (told) return { ...told, kept: history.kept ?? false }
+          return { ...(await call<RecordHistoryResponse>('records.history', own(params))), kept: false }
+        }
+        const answer = await call<RecordHistoryResponse>('records.history', own(params))
+        // A stored snapshot holds no changes: without checkpoints nothing tells what came before.
+        return { ...answer, kept: (history.kept ?? false) && checkpoints !== null }
       },
       bulkDelete: (params) => call('records.bulkDelete', own(params)),
       bulkCopy: (params) => call('records.bulkCopy', own(params)),

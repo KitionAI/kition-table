@@ -5,6 +5,7 @@
 //! projected into the table like any write and is one undo step of the person.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
+use kition_kdm::UndoScope;
 use kition_kit::KitDocument;
 use kition_table_kit::{Origin, TableDocument};
 use serde_json::{Value, json};
@@ -80,6 +81,89 @@ fn model_reply_is_unchanged_without_tool_ids() {
     let doc = document();
     let reply = json!({ "target": doc.doc_id(), "note": "nothing to rename" });
     assert_eq!(doc.model_reply(&reply), reply, "the table's schema declares no tool ids");
+}
+
+#[test]
+fn model_reply_reads_only_the_objects_it_names_and_matches_the_full_read() {
+    let mut doc = document();
+    for n in 0..200 {
+        add(&mut doc, &format!("Record {n}"));
+    }
+    let replica = doc.file().replica();
+    let record = replica.objects_of_type("Record").into_iter().next().expect("a record");
+    // A reply naming one record: the same as the whole document's tool ids show it.
+    let naming = json!({ "updated": [record.as_str()], "count": 1 });
+    let full = kition_kdm::tool_ids::ToolIds::of_replica(replica);
+    let expected = if full.is_active() { full.show_json(&naming) } else { naming.clone() };
+    assert_eq!(doc.model_reply(&naming), expected, "the reply's ids as the full read names them");
+    // A reply naming no object comes back as it is.
+    let plain = json!({ "note": "nothing named", "count": 0 });
+    assert_eq!(doc.model_reply(&plain), plain);
+}
+
+/// What the editor reads of the table: its fields and its records (ids, keys and values).
+fn engine_view(doc: &mut TableDocument) -> Value {
+    let fields = run(doc, "table.fields.list", json!({ "tableId": 1 }));
+    let records = run(doc, "table.records.list", json!({ "tableId": 1 }));
+    let records: Vec<Value> = records["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|record| json!({ "id": record["id"], "row_key": record["row_key"], "values": record["values"] }))
+        .collect();
+    json!({ "fields": fields, "records": records })
+}
+
+fn state_hash(doc: &TableDocument) -> String {
+    doc.file().replica().state_hash().unwrap()
+}
+
+#[test]
+fn an_agent_s_draft_merged_is_one_step_of_the_person_and_undo_and_redo_are_exact() {
+    let mut doc = document();
+    let (mut draft, base) = draft(&doc);
+    add(&mut draft, "From the agent's draft");
+    let changes = draft.export_changes(&base).unwrap();
+    // Meanwhile the person adds another record to the same table: both additions merge.
+    add(&mut doc, "Meanwhile");
+    let (before, before_view) = (state_hash(&doc), engine_view(&mut doc));
+    doc.merge_changes(&changes, &Origin::agent("helper")).unwrap();
+    assert_eq!(titles(&mut doc), ["From the agent's draft", "Kept", "Meanwhile"], "both records are there");
+    let (merged, merged_view) = (state_hash(&doc), engine_view(&mut doc));
+    // The merge is the person's undo step, though an agent made the draft (KitModel M12a): the
+    // replica and the engine agree on whose step it is.
+    assert!(doc.file().can_step_in(UndoScope::Person, true));
+    assert!(!doc.file().can_step_in(UndoScope::Agent, true), "the agent has no step to undo");
+    let agent = run(&mut doc, "edit.undo", json!({ "scope": "agent" }));
+    assert_eq!(agent["done"], false, "{agent}");
+    assert_eq!(state_hash(&doc), merged, "the agent's undo leaves the merge");
+    let (done, _) = doc.undo().unwrap();
+    assert!(done);
+    assert_eq!(state_hash(&doc), before, "one undo of the person restores the exact state before the merge");
+    assert_eq!(engine_view(&mut doc), before_view, "and the engine's view of it");
+    let (redone, _) = doc.redo().unwrap();
+    assert!(redone);
+    assert_eq!(state_hash(&doc), merged, "redo restores the merged state exactly");
+    assert_eq!(engine_view(&mut doc), merged_view);
+}
+
+#[test]
+fn a_restored_state_undoes_and_redoes_exactly() {
+    let mut doc = document();
+    let checkpoint = doc.snapshot().unwrap();
+    add(&mut doc, "After the checkpoint");
+    let (before, before_view) = (state_hash(&doc), engine_view(&mut doc));
+    doc.restore_state(&checkpoint, &Origin::person("ann")).unwrap();
+    let (restored, restored_view) = (state_hash(&doc), engine_view(&mut doc));
+    assert_ne!(restored, before);
+    let (done, _) = doc.undo().unwrap();
+    assert!(done);
+    assert_eq!(state_hash(&doc), before, "one undo restores the exact state before the restore");
+    assert_eq!(engine_view(&mut doc), before_view);
+    let (redone, _) = doc.redo().unwrap();
+    assert!(redone);
+    assert_eq!(state_hash(&doc), restored, "redo restores the restored state exactly");
+    assert_eq!(engine_view(&mut doc), restored_view);
 }
 
 #[test]

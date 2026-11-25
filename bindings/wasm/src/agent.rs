@@ -114,7 +114,7 @@ fn query_params(method: &str) -> Vec<(&'static str, Value)> {
                 "checkpoints",
                 json!({
                     "type": "array",
-                    "description": "The host's checkpoints of the document, oldest first (Kit UI protocol 7m), with their snapshots: the history before this session is what differs between consecutive ones (the newest 50 are read).",
+                    "description": "The host's checkpoints of the document, oldest first (Kit UI protocol 7m), with their snapshots: the history before this session is what differs between consecutive ones (the newest 10 are read).",
                     "items": {
                         "type": "object",
                         "additionalProperties": false,

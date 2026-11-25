@@ -162,10 +162,21 @@ features:
     title: "A record's history survives closing the document: told between the host's checkpoints (their snapshots), each stretch at its checkpoint's time and by its author (nothing stored in the file)"
     dimension: [function, data-safety]
     priority: P1
-    status: has
+    status: partial
+    gap: >-
+      Coarser than before the plain model, whose stored replica held every change with its author:
+      across sessions a record's history is told only between the host's checkpoints (Kition
+      records one with each save), so several changes between two saves show as one, by the later
+      checkpoint's author and at its time, not each change's; what changed after the newest
+      checkpoint before the session (a replica write without one) shows with no author or time; a
+      host that keeps the replica without checkpoints shows the session's history only (the panel
+      says so); only the newest 10 checkpoints are read, each the whole document's snapshot sent to
+      the engine as base64, so on very large tables (tests/historyCost.mjs, printed by
+      tests/perf.mjs on 100,000 x 50) the panel falls back to the session's history when the
+      request cannot be made. Inside a session every change keeps its author and time.
     commands: [table.records.history]
-    paths: [crates/engine/file/src/kdm/changes.rs, crates/engine/api/src/records.rs, web/src/dataSource.ts, web/src/App.tsx, web/src/editor/table/components/TableRecordDetailDrawer.tsx, bindings/wasm/tests/record_history.rs, web/tests/flow.mjs]
-    cases: [table.records.history-kept/after-reload]
+    paths: [crates/engine/file/src/kdm/changes.rs, crates/engine/api/src/records.rs, web/src/dataSource.ts, web/src/App.tsx, web/src/editor/table/components/TableRecordDetailDrawer.tsx, bindings/wasm/tests/record_history.rs, web/tests/flow.mjs, web/tests/historyCost.mjs]
+    cases: [table.records.history-kept/after-reload, table.records.history-kept/between-checkpoints]
     since: "2026-11-24"
   - id: table.schema
     title: "Tables and fields: create, update, delete, duplicate, link candidates"

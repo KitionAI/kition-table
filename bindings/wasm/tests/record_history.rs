@@ -6,6 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use base64::Engine;
+use kition_table_file::kdm::changes::STORED_HISTORY_POINTS;
 use kition_table_kit::{KitDocument, Origin, TableDocument};
 use serde_json::{Value, json};
 
@@ -87,7 +88,11 @@ fn a_record_keeps_its_history_and_author_through_the_stored_replica() {
     // The file alone holds no history: only the content.
     let mut alone = TableDocument::open(FILE, &saved).unwrap();
     assert!(title_updates(&history(&mut alone, record, None)).is_empty(), "a file opened alone has no history before its session");
-    // Opened with the stored replica, without checkpoints: nothing tells what came before.
+    // Opened with the stored replica, without checkpoints: nothing tells what came before. The
+    // stored snapshot holds the state and its version, not the changes that led there (data model
+    // 7.3, 7.4): the reopened session's change log starts empty at its start, so what came before
+    // it is told by checkpoints alone. A host that keeps the replica but no checkpoints shows the
+    // session's history only, and the editor says so (`drawer.historySessionOnly`).
     let mut reopened = TableDocument::open_with_replica(FILE, &saved, &stored, &[]).unwrap();
     assert!(title_updates(&history(&mut reopened, record, None)).is_empty(), "no checkpoint, no history before the session");
     // With the host's checkpoints: the change between them, by the later one's author and at its time.
@@ -158,5 +163,148 @@ fn a_checkpoint_dates_the_changes_it_holds() {
         reopened
             .execute("table.records.history", json!({ "tableId": 1, "recordId": record, "checkpoints": [{ "version": "not base64!" }] }))
             .is_err()
+    );
+}
+
+/// Every entry of `items` as `(action, before title, after title, actor, time)`: the title of a
+/// creation or deletion is the one its values name.
+fn entries(items: &[Value]) -> Vec<(String, Value, Value, String, i64)> {
+    let title = |value: &Value| if value.is_object() { value["title"].clone() } else { value.clone() };
+    items
+        .iter()
+        .map(|entry| {
+            (
+                entry["action"].as_str().unwrap_or_default().to_owned(),
+                title(&entry["before"]),
+                title(&entry["after"]),
+                entry["actor"].as_str().unwrap_or_default().to_owned(),
+                entry["created_at"].as_i64().unwrap_or(-1),
+            )
+        })
+        .collect()
+}
+
+/// The id of the record titled `title` in `doc`'s first table.
+fn record_titled(doc: &mut TableDocument, title: &str) -> i64 {
+    let page = run(doc, "table.records.list", json!({ "tableId": 1 }));
+    page["items"].as_array().unwrap().iter().find(|record| record["values"]["title"] == title).unwrap_or_else(|| panic!("no record {title}: {page}"))
+        ["id"]
+        .as_i64()
+        .unwrap()
+}
+
+/// `doc` reopened as a host reopens it after a save: its file and its stored replica.
+fn reopen(doc: &mut TableDocument) -> TableDocument {
+    let (saved, stored) = host_save(doc);
+    TableDocument::open_with_replica(FILE, &saved, &stored, &[]).unwrap()
+}
+
+#[test]
+fn a_record_deleted_and_brought_back_shows_its_creation_and_deletion_at_their_checkpoints() {
+    let (bytes, _, _) = saved_file();
+    let mut doc = TableDocument::open(FILE, &bytes).unwrap();
+    let opened = checkpoint(&doc, 100, Some("ann"));
+    let made = run(&mut doc, "table.records.create", json!({ "tableId": 1, "values": { "title": "New" } }))["id"].as_i64().unwrap();
+    let created = checkpoint(&doc, 200, Some("bob"));
+    run(&mut doc, "table.records.delete", json!({ "tableId": 1, "recordId": made }));
+    let deleted = checkpoint(&doc, 300, Some("cy"));
+    assert!(doc.undo().unwrap().0, "the deletion is undone");
+    let back = checkpoint(&doc, 400, Some("dee"));
+    let mut reopened = reopen(&mut doc);
+    let record = record_titled(&mut reopened, "New");
+    assert_eq!(
+        entries(&history(&mut reopened, record, Some(json!([opened, created, deleted, back])))),
+        vec![
+            ("create".to_owned(), Value::Null, json!("New"), "dee".to_owned(), 400),
+            ("delete".to_owned(), json!("New"), Value::Null, "cy".to_owned(), 300),
+            ("create".to_owned(), Value::Null, json!("New"), "bob".to_owned(), 200),
+        ],
+        "newest first: each creation and deletion at the time and by the author of the checkpoint after it"
+    );
+}
+
+#[test]
+fn several_edits_between_two_checkpoints_show_as_one_by_that_stretch_s_checkpoint() {
+    let (bytes, record, _) = saved_file();
+    let mut doc = TableDocument::open(FILE, &bytes).unwrap();
+    let first = checkpoint(&doc, 100, Some("ann"));
+    // Another record changes in the stretches before and after the record's own.
+    let other = run(&mut doc, "table.records.create", json!({ "tableId": 1, "values": { "title": "Other" } }))["id"].as_i64().unwrap();
+    let second = checkpoint(&doc, 200, Some("bob"));
+    for title in ["A", "B", "C"] {
+        run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": record, "values": { "title": title } }));
+    }
+    let third = checkpoint(&doc, 300, Some("cy"));
+    run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": other, "values": { "title": "Other, edited" } }));
+    let fourth = checkpoint(&doc, 400, Some("dee"));
+    let mut reopened = reopen(&mut doc);
+    let record = record_titled(&mut reopened, "C");
+    assert_eq!(
+        entries(&history(&mut reopened, record, Some(json!([first, second, third, fourth])))),
+        vec![("update".to_owned(), json!("Draft"), json!("C"), "cy".to_owned(), 300)],
+        "three edits between two checkpoints are one entry, at the time and by the author of the checkpoint that ends their stretch, not another's"
+    );
+}
+
+#[test]
+fn only_the_newest_checkpoints_are_read() {
+    let (bytes, record, _) = saved_file();
+    let mut doc = TableDocument::open(FILE, &bytes).unwrap();
+    let count = STORED_HISTORY_POINTS + 2;
+    let mut points = Vec::new();
+    for n in 0..count {
+        run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": record, "values": { "title": format!("v{n}") } }));
+        points.push(checkpoint(&doc, 1_000 + i64::try_from(n).unwrap(), Some("ann")));
+    }
+    let mut reopened = reopen(&mut doc);
+    let record = record_titled(&mut reopened, &format!("v{}", count - 1));
+    // The newest STORED_HISTORY_POINTS are read: the first two checkpoints are not.
+    let expected: Vec<(Value, Value, String, i64)> = (3..count)
+        .rev()
+        .map(|n| (json!(format!("v{}", n - 1)), json!(format!("v{n}")), "ann".to_owned(), 1_000 + i64::try_from(n).unwrap()))
+        .collect();
+    assert_eq!(title_updates(&history(&mut reopened, record, Some(Value::Array(points)))), expected);
+}
+
+#[test]
+fn checkpoints_without_a_snapshot_or_taken_in_this_session_are_skipped_and_the_session_keeps_its_authors() {
+    let (bytes, record, _) = saved_file();
+    let mut doc = TableDocument::open(FILE, &bytes).unwrap();
+    let first = checkpoint(&doc, 100, Some("ann"));
+    run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": record, "values": { "title": "One" } }));
+    // A checkpoint listed without its snapshot (the host could not read it) tells nothing.
+    let mut unread = checkpoint(&doc, 200, Some("bob"));
+    unread.as_object_mut().unwrap().remove("snapshot");
+    run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": record, "values": { "title": "Two" } }));
+    let third = checkpoint(&doc, 300, Some("cy"));
+    let mut reopened = reopen(&mut doc);
+    let record = record_titled(&mut reopened, "Two");
+    // In this session, after the newest checkpoint before it, an agent edits the record; the host
+    // then records a checkpoint of this session.
+    reopened
+        .execute_as("table.records.update", json!({ "tableId": 1, "recordId": record, "values": { "title": "Three" } }), &Origin::agent("helper"))
+        .unwrap();
+    let in_session = checkpoint(&reopened, 400, Some("dee"));
+    let told = title_updates(&history(&mut reopened, record, Some(json!([first, unread, third.clone(), third, in_session]))));
+    assert_eq!(told.len(), 2, "{told:?}");
+    let (before, after, actor, time) = told[0].clone();
+    assert_eq!((before, after, actor), (json!("Two"), json!("Three"), "helper".to_owned()), "the session's own edit keeps its author");
+    assert!(time > 1_000_000_000_000, "and the time it was made, not a checkpoint's: {time}");
+    assert_eq!(
+        told[1],
+        (json!("Draft"), json!("Two"), "cy".to_owned(), 300),
+        "the checkpoint without a snapshot is passed over, the repeated one counts once, the session's own is not read"
+    );
+}
+
+#[test]
+fn a_checkpoint_of_another_document_is_refused() {
+    let (bytes, record, created) = saved_file();
+    let mut doc = TableDocument::open(FILE, &bytes).unwrap();
+    let other = TableDocument::create(FILE, 0, 0).unwrap();
+    let foreign = checkpoint(&other, 200, Some("bob"));
+    assert!(
+        doc.execute("table.records.history", json!({ "tableId": 1, "recordId": record, "checkpoints": [created, foreign] })).is_err(),
+        "another document's snapshot is no checkpoint of this one"
     );
 }

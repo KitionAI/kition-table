@@ -897,8 +897,11 @@ try {
   // A record's history survives closing the document: the file holds none, the host keeps a
   // snapshot per checkpoint (Kit UI protocol 7m), and the engine tells the record's history before
   // the session from the differences between consecutive checkpoints, by each later one's author
-  // (feature table.records.history-kept). Last: the page is the development host with the replica
-  // and checkpoints from here on.
+  // and at its time (feature table.records.history-kept). The host records a checkpoint with each
+  // save, as Kition does, by an author of its own, so what the record's history panel shows is
+  // checked against what the host recorded, through the editor's own reads of the checkpoints
+  // (web/src/App.tsx: listCheckpoints, then readCheckpoint of each). Last: the page is the
+  // development host with the replica and checkpoints from here on.
   await test('a record keeps its history and authors across saves and reloads', async () => {
     await page.goto(`${origin}/dev.html?locale=en-US&replica=1&checkpoints=1`)
     await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes(' open in '), null, { timeout: 60000 })
@@ -916,17 +919,21 @@ try {
       await page.keyboard.press('Enter')
       await until(async () => (await records(table.id))[0].values.title === text)
     }
-    /** Saves, records the host's checkpoint of the save (by `author`), and opens the document again as its last save left it, with its replica. */
+    /**
+     * Saves, records the host's checkpoint of the save (by `author`), and opens the document again
+     * as its last save left it, with its replica. Answers whether it saved and the checkpoint the
+     * host recorded.
+     */
     const saveAndReload = async (text, author) => {
       const saved = await page.evaluate(() => window.devHost.connection().save())
-      await page.evaluate((author) => window.devHost.recordCheckpoint({ origin: 'save', ...(author ? { author } : {}) }), author)
+      const checkpoint = await page.evaluate((author) => window.devHost.recordCheckpoint({ origin: 'save', author }), author)
       await page.evaluate(() => window.devHost.reload())
       await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes('Tasks.ktable open in '), null, { timeout: 60000 })
       await editor().waitFor({ timeout: 30000 })
       await until(async () => (await records(table.id))[0]?.values.title === text)
-      return saved.saved
+      return { saved: saved.saved, checkpoint }
     }
-    /** The host's checkpoints, oldest first, each with its snapshot (base64), as the editor reads them for the history. */
+    /** The host's checkpoints, oldest first, each with its snapshot (base64), as the engine takes them. */
     const checkpoints = () =>
       page.evaluate(async (path) => {
         const history = window.devHost.history
@@ -936,7 +943,7 @@ try {
           return btoa(binary)
         }
         const points = []
-        for (const checkpoint of history.checkpoints(path).slice(0, 50).reverse()) {
+        for (const checkpoint of history.checkpoints(path).slice(0, 10).reverse()) {
           const { snapshot } = await history.handlers().checkpoints.read({ path, id: checkpoint.id })
           points.push({ version: checkpoint.version, time: checkpoint.time, ...(checkpoint.author ? { author: checkpoint.author } : {}), snapshot: encode(snapshot) })
         }
@@ -946,19 +953,51 @@ try {
     const edits = (items) =>
       items.filter((entry) => entry.action === 'update' && entry.field_id === title.id).map((entry) => [entry.before, entry.after, entry.actor])
     // The host's checkpoint of the file as it opened.
-    const savedFirst = await saveAndReload(first.values.title)
+    const opened = await saveAndReload(first.values.title, 'user:opened')
     await retitle(first.values.title, 'Reviewed')
     const [session] = edits(await history())
     step('the session tells the edit and its author', session?.[1] === 'Reviewed' && typeof session?.[2] === 'string' && session[2].length > 0, JSON.stringify(session))
-    const author = session?.[2]
-    const savedOnce = savedFirst && (await saveAndReload('Reviewed', author))
+    // Each later save is recorded by another author than the session's, so an author shown is the host's.
+    const once = await saveAndReload('Reviewed', 'user:ada')
     await retitle('Reviewed', 'History kept')
-    const savedTwice = await saveAndReload('History kept', author)
+    const twice = await saveAndReload('History kept', 'agent:helper')
+    const recorded = [twice.checkpoint, once.checkpoint]
     const listed = edits(await history())
     step(
       'after two saves and reloads the record history lists both edits with their authors',
-      savedOnce && savedTwice && JSON.stringify(listed) === JSON.stringify([['Reviewed', 'History kept', author], [first.values.title, 'Reviewed', author]]),
-      JSON.stringify({ savedOnce, savedTwice, listed }),
+      opened.saved && once.saved && twice.saved && JSON.stringify(listed) === JSON.stringify([['Reviewed', 'History kept', recorded[0]?.author], [first.values.title, 'Reviewed', recorded[1]?.author]]),
+      JSON.stringify({ saved: [opened.saved, once.saved, twice.saved], listed, recorded }),
+    )
+    // The record's history panel, as a person opens it: Space on the record opens it, History
+    // lists what the editor read from the host's checkpoints, newest first.
+    await stage().click({ position: { x: 145, y: 48 } })
+    await page.keyboard.press(' ')
+    const toggle = kit.locator('.data-inline-record-history-toggle')
+    await toggle.waitFor({ timeout: 10000 })
+    await toggle.click()
+    const items = kit.locator('.data-inline-record-history-item')
+    await until(async () => (await items.count()) >= 2, 100)
+    const shown = await items.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const text = (selector) => node.querySelector(selector)?.textContent ?? null
+        return {
+          action: node.querySelector('.data-inline-record-history-action')?.className.replace(/.*--/, '') ?? null,
+          before: text('.data-inline-record-history-before'),
+          after: text('.data-inline-record-history-after'),
+          actor: text('.data-inline-record-history-actor'),
+          time: text('.data-inline-record-history-time'),
+        }
+      }),
+    )
+    const when = (checkpoint) => (checkpoint ? new Date(checkpoint.time).toLocaleString('en-US') : null)
+    const expected = [
+      { action: 'update', before: 'Reviewed', after: 'History kept', actor: recorded[0]?.author, time: when(recorded[0]) },
+      { action: 'update', before: first.values.title, after: 'Reviewed', actor: recorded[1]?.author, time: when(recorded[1]) },
+    ]
+    step(
+      'the history panel shows both edits newest first, each at the time and by the author the host recorded',
+      recorded.every((checkpoint) => checkpoint?.author && checkpoint.time > 0) && recorded[0].time !== recorded[1].time && JSON.stringify(shown) === JSON.stringify(expected),
+      JSON.stringify({ shown, expected }),
     )
   })
 } catch (error) {

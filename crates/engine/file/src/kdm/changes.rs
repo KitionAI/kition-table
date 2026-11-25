@@ -295,8 +295,17 @@ pub struct HistoryPoint {
     pub snapshot: Option<Vec<u8>>,
 }
 
-/// How many of the newest checkpoints [`TableFile::stored_record_history`] reads.
-pub const STORED_HISTORY_POINTS: usize = 50;
+/// How many of the newest checkpoints [`TableFile::stored_record_history`] reads: each one is
+/// the whole document's snapshot, loaded as a replica, so a record's history costs this many
+/// loads of the document at most (the editor reads as many, `web/src/App.tsx`).
+pub const STORED_HISTORY_POINTS: usize = 10;
+
+/// Where a stretch of [`TableFile::stored_record_history`] ends: a checkpoint, or the state this
+/// session started at.
+enum Stop<'a> {
+    Point(&'a HistoryPoint),
+    SessionStart,
+}
 
 impl TableFile {
     /// The replica version this handle's session started at: the record history rows
@@ -307,15 +316,18 @@ impl TableFile {
 
     /// A record's history before this session, newest first, at the granularity of the host's
     /// checkpoints: `points` are the checkpoints, oldest first, and of them the newest
-    /// [`STORED_HISTORY_POINTS`] that carry their snapshot are read. Between each two consecutive
-    /// ones, and from the newest to the state this session started at, the record's creation,
-    /// deletion or each field that differs (before and after values, as the session's rows hold
-    /// them) is one entry, at the later checkpoint's time and by its author (time 0 and no author
-    /// for the stretch up to the session's start, when no checkpoint names it). What happened
-    /// before the oldest checkpoint read, several changes between two checkpoints (only their sum
-    /// shows) and who made each of them are not known. A record whose changes all came in this
-    /// session, or a document with no checkpoints, has none. A snapshot of another document is
-    /// [`TableFileError::Invalid`].
+    /// [`STORED_HISTORY_POINTS`] that carry their snapshot are read, one at a time (two of them
+    /// are held at once). Between each two consecutive ones, and from the newest to the state this
+    /// session started at, the record's creation, deletion or each field that differs (before and
+    /// after values, as the session's rows hold them) is one entry, at the later checkpoint's time
+    /// and by its author (time 0 and no author for the stretch up to the session's start, when no
+    /// checkpoint names it). What happened before the oldest checkpoint read, several changes
+    /// between two checkpoints (only their sum shows) and who made each of them are not known: the
+    /// host keeps no changes, and a stored snapshot opens with an empty change log, so the
+    /// session's own log starts at its start. A checkpoint taken in this session tells nothing the
+    /// session's own rows do not and is skipped, as is one without its snapshot. A record whose
+    /// changes all came in this session, or a document with no checkpoints, has none. A snapshot
+    /// of another document is [`TableFileError::Invalid`].
     pub fn stored_record_history(&self, table_id: i64, record_id: i64, points: &[HistoryPoint]) -> Result<Vec<crate::HistoryEntry>> {
         let record = self
             .conn
@@ -324,8 +336,7 @@ impl TableFile {
             .optional()?;
         let Some(record) = record.map(ObjectId::from_string) else { return Ok(Vec::new()) };
         let end = self.session_start.clone();
-        // The checkpoints up to the session's start (one taken in this session tells nothing
-        // the session's own rows do not), each once.
+        // The checkpoints up to the session's start, each once.
         let mut read: Vec<&HistoryPoint> = Vec::new();
         for point in points.iter().filter(|point| point.snapshot.is_some()) {
             if point.version != end && point.version.includes(&end) {
@@ -342,18 +353,21 @@ impl TableFile {
         let document_id = self.info()?.document_id;
         let mut names = HashMap::new();
         let mut entries = Vec::new();
-        let mut prev = self.point_replica(first)?;
         // The stops after the first: each later checkpoint, then the session's start.
-        let mut stops: Vec<(Replica, i64, String)> = Vec::new();
-        for point in read.iter().skip(1) {
-            stops.push((self.point_replica(point)?, point.time, point.author.clone().unwrap_or_default()));
+        let mut stops: Vec<Stop<'_>> = read.iter().skip(1).copied().map(Stop::Point).collect();
+        if read.last().is_some_and(|last| last.version != end) {
+            stops.push(Stop::SessionStart);
         }
-        if read.last().is_some_and(|last| last.version != end)
-            && let Ok(start) = fork(&self.replica, &end)
-        {
-            stops.push((start, 0, String::new()));
-        }
-        for (next, time, actor) in stops {
+        let mut prev = self.point_replica(first)?;
+        for stop in stops {
+            // Each checkpoint's replica is loaded when its stretch is told, and dropped after the next.
+            let (next, time, actor) = match stop {
+                Stop::Point(point) => (self.point_replica(point)?, point.time, point.author.clone().unwrap_or_default()),
+                Stop::SessionStart => match fork(&self.replica, &end) {
+                    Ok(start) => (start, 0, String::new()),
+                    Err(_) => break,
+                },
+            };
             let was = ModelView::new(&prev).table_of_record(&record)?.is_some();
             let is = ModelView::new(&next).table_of_record(&record)?.is_some();
             let (old, new) = (cells(&prev, &record)?, cells(&next, &record)?);

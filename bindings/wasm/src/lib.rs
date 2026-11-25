@@ -665,10 +665,12 @@ impl TableDocument {
     }
 
     /// An agent's reply with every object id it holds named by its tool id (KitObjectModel OM9;
-    /// `modelReply`); unchanged when the schema declares no tool ids.
+    /// `modelReply`); unchanged when the schema declares no tool ids or the reply names no object.
+    /// The editor sends every `ai/inspect`, `document/check` and `ai/run` reply through it, so the
+    /// tool ids are read only at the objects the reply names (`ToolIds::show_reply`), never for the
+    /// whole table per call.
     pub fn model_reply(&self, value: &Value) -> Value {
-        let ids = kition_kdm::tool_ids::ToolIds::of_replica(self.file.replica());
-        if ids.is_active() { ids.show_json(value) } else { value.clone() }
+        kition_kdm::tool_ids::ToolIds::show_reply(self.file.replica(), value)
     }
 
     /// Runs a command ([`KitDocument::execute`]) as `origin` (a person, an agent, an extension)
