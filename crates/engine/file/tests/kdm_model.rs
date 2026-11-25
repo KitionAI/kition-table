@@ -13,6 +13,7 @@ use kition_table_file::kdm::{repair, schema};
 use kition_table_file::{FIELD_TYPES, FieldPatch, FieldSpec, TableFileError, TablePatch, TableSpec, VIEW_TYPES, ViewPatch, ViewSpec};
 use serde_json::{Map, Value, json};
 
+#[track_caller]
 fn ok<T, E: Display>(result: Result<T, E>) -> T {
     result.unwrap_or_else(|err| panic!("unexpected error: {err}"))
 }
@@ -1202,10 +1203,6 @@ fn run_incremental_matches_full(seed: u64, steps: usize) {
         let changed = target.take_changed();
         // A copy of the state as it is, unrepaired.
         let mut full = target.fork(ActorId::random()).unwrap_or_else(|err| panic!("{}: {err}", at("copy")));
-        // TEMPORARY probe: does the snapshot of this state load?
-        if let Err(err) = Replica::load(schema(), &ok(target.snapshot()), ActorId::random()) {
-            println!("PROBE {}: the snapshot does not load: {err}", at("snapshot"));
-        }
         let full_wrote = repair::run(&mut full, &changed).unwrap_or_else(|err| panic!("{}: {err}", at("full repair")));
         index.advance(&start, &target, &changed);
         let (wrote, _) =
