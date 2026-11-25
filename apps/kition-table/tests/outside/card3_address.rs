@@ -48,10 +48,10 @@ struct Address {
 
 impl Address {
     fn new(f: &Fixture) -> Self {
-        f.colleague("table.fields.create", json!({"tableId":1,"name":"rank","type":"number"}));
-        f.colleague("table.tables.create", json!({"title":"Linked"}));
-        f.colleague("table.records.create", json!({"tableId":2,"values":{"title":"Target"}}));
-        f.colleague("table.fields.create", json!({"tableId":1,"name":"friends","type":"link_to_record","options":{"target_table_id":2}}));
+        f.colleague("field.add", json!({"tableId":1,"name":"rank","type":"number"}));
+        f.colleague("table.add", json!({"title":"Linked"}));
+        f.colleague("record.add", json!({"tableId":2,"values":{"title":"Target"}}));
+        f.colleague("field.add", json!({"tableId":1,"name":"friends","type":"link_to_record","options":{"target_table_id":2}}));
         let doc = f.disk();
         let table = doc.file().get_table(1).unwrap();
         let field = |name| table.fields.iter().find(|field| field.name == name).unwrap().id;
@@ -64,10 +64,10 @@ impl Address {
             linked: json!(doc.file().list_records(2).unwrap()[0].row_key),
             rank,
         };
-        f.colleague("table.links.replace", json!({"tableId":1,"recordId":2,"field_id":link,"target_row_keys":[out.linked]}));
-        f.colleague("table.views.putSorts", json!({"tableId":1,"viewId":1,"items":[{"field_id":rank,"direction":"asc"}]}));
+        f.colleague("recordLink.replace", json!({"tableId":1,"recordId":2,"field_id":link,"target_row_keys":[out.linked]}));
+        f.colleague("tableView.setSorts", json!({"tableId":1,"viewId":1,"items":[{"field_id":rank,"direction":"asc"}]}));
         f.colleague(
-            "table.views.putFilterTree",
+            "tableView.setFilterTree",
             json!({"tableId":1,"viewId":1,"tree":{"conjunction":"and","children":[{"condition":{"field_id":2,"operator":"neq","value":"Done"}}]}}),
         );
         out
@@ -77,44 +77,44 @@ impl Address {
         let field = if select { 2 } else { 3 };
         let key = if select { "status" } else { "notes" };
         match column {
-            0 => f.colleague("table.records.update", json!({"tableId":1,"recordId":2,"values":{key:if select {"Done"} else {"Theirs"}}})),
-            1 => f.colleague("table.records.update", json!({"tableId":1,"recordId":2,"values":{"title":"Other cell"}})),
-            2 => f.colleague("table.records.update", json!({"tableId":1,"recordId":2,"values":{"rank":42}})),
-            3 => f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"values":{"status":"Done"}})),
-            4 => f.colleague("table.records.delete", json!({"tableId":1,"recordId":2})),
-            5 => f.colleague("table.transact", json!({"ops":[{"op":"records.create","tableId":1,"at":{"before":self.record},"records":[{"title":"Inserted"}]}]})),
-            6 => f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"order":3})),
+            0 => f.colleague("record.set", json!({"tableId":1,"recordId":2,"values":{key:if select {"Done"} else {"Theirs"}}})),
+            1 => f.colleague("record.set", json!({"tableId":1,"recordId":2,"values":{"title":"Other cell"}})),
+            2 => f.colleague("record.set", json!({"tableId":1,"recordId":2,"values":{"rank":42}})),
+            3 => f.colleague("record.set", json!({"tableId":1,"recordId":1,"values":{"status":"Done"}})),
+            4 => f.colleague("record.delete", json!({"tableId":1,"recordId":2})),
+            5 => f.colleague("edit.transact", json!({"ops":[{"op":"records.create","tableId":1,"at":{"before":self.record},"records":[{"title":"Inserted"}]}]})),
+            6 => f.colleague("record.set", json!({"tableId":1,"recordId":1,"order":3})),
             7 => {
                 let doc = f.disk();
                 let id = doc.inspect().unwrap()["tables"][0]["fields"][(field - 1) as usize]["tool_id"].clone();
                 f.colleague_model(json!([{"op":"set","target":id,"field":"name","value":"renamed"}]));
             }
-            8 => f.colleague("table.fields.update", json!({"tableId":1,"fieldId":field,"type":"text"})),
-            9 => f.colleague("table.fields.delete", json!({"tableId":1,"fieldId":field})),
-            10 => f.colleague("table.views.putFilterTree", json!({"tableId":1,"viewId":1,"tree":null})),
-            11 => f.colleague("table.views.putSorts", json!({"tableId":1,"viewId":1,"items":[]})),
-            12 => f.colleague("table.views.putGroups", json!({"tableId":1,"viewId":1,"items":[{"field_id":self.rank,"direction":"asc"}]})),
-            13..=14 | 20 => f.colleague("table.fields.update", json!({"tableId":1,"fieldId":2,"options":{"choices":match column {13 => json!(["Renamed","In progress","Done"]),14 => json!(["In progress","Done"]),_ => json!(["To do","In progress","Finished"])}}})),
-            15 => f.colleague("table.records.update", json!({"tableId":1,"recordId":2,"values":{"title":"Primary changed"}})),
-            16 => f.colleague("table.records.update", json!({"tableId":2,"recordId":4,"values":{"title":"Target renamed"}})),
-            17 => f.colleague("table.records.delete", json!({"tableId":2,"recordId":4})),
-            18 => f.colleague("table.fields.create", json!({"tableId":1,"name":"inserted","order":1})),
-            19 => f.colleague("table.transact", json!({"ops":[{"op":"fields.move","tableId":1,"fieldIds":[3],"toIndex":0}]})),
+            8 => f.colleague("field.set", json!({"tableId":1,"fieldId":field,"type":"text"})),
+            9 => f.colleague("field.delete", json!({"tableId":1,"fieldId":field})),
+            10 => f.colleague("tableView.setFilterTree", json!({"tableId":1,"viewId":1,"tree":null})),
+            11 => f.colleague("tableView.setSorts", json!({"tableId":1,"viewId":1,"items":[]})),
+            12 => f.colleague("tableView.setGroups", json!({"tableId":1,"viewId":1,"items":[{"field_id":self.rank,"direction":"asc"}]})),
+            13..=14 | 20 => f.colleague("field.set", json!({"tableId":1,"fieldId":2,"options":{"choices":match column {13 => json!(["Renamed","In progress","Done"]),14 => json!(["In progress","Done"]),_ => json!(["To do","In progress","Finished"])}}})),
+            15 => f.colleague("record.set", json!({"tableId":1,"recordId":2,"values":{"title":"Primary changed"}})),
+            16 => f.colleague("record.set", json!({"tableId":2,"recordId":4,"values":{"title":"Target renamed"}})),
+            17 => f.colleague("record.delete", json!({"tableId":2,"recordId":4})),
+            18 => f.colleague("field.add", json!({"tableId":1,"name":"inserted","order":1})),
+            19 => f.colleague("edit.transact", json!({"ops":[{"op":"fields.move","tableId":1,"fieldIds":[3],"toIndex":0}]})),
             _ => unreachable!(),
         }
     }
 
     fn write(&self, form: usize) -> (&'static str, Value) {
         match form {
-            0 | 3 => ("table.records.update", json!({"tableId":self.table,"recordId":self.record,"values":{"notes":"Mine"}})),
-            1 => ("table.records.update", json!({"tableId":self.table,"recordId":2,"values":{"notes":"Mine"}})),
-            2 => ("table.fields.update", json!({"tableId":self.table,"fieldId":self.field,"title":"Mine"})),
-            4 => ("table.fields.update", json!({"tableId":self.table,"fieldId":3,"title":"Mine"})),
+            0 | 3 => ("record.set", json!({"tableId":self.table,"recordId":self.record,"values":{"notes":"Mine"}})),
+            1 => ("record.set", json!({"tableId":self.table,"recordId":2,"values":{"notes":"Mine"}})),
+            2 => ("field.set", json!({"tableId":self.table,"fieldId":self.field,"title":"Mine"})),
+            4 => ("field.set", json!({"tableId":self.table,"fieldId":3,"title":"Mine"})),
             5 => (
-                "table.transact",
+                "edit.transact",
                 json!({"ops":[{"op":"cells.set","tableId":self.table,"records":[{"rowKey":self.record,"values":{"notes":"Mine"}}]}]}),
             ),
-            6 => ("table.records.update", json!({"tableId":self.table,"recordId":self.record,"values":{"status":"To do"}})),
+            6 => ("record.set", json!({"tableId":self.table,"recordId":self.record,"values":{"status":"To do"}})),
             _ => unreachable!(),
         }
     }
@@ -132,18 +132,18 @@ async fn select_labels_hold_membership_without_holding_other_choices_or_order() 
         ] {
             let f = Fixture::new(Guard::Premise);
             if multi {
-                f.colleague("table.fields.update", json!({"tableId":1,"fieldId":2,"type":"multi_select"}));
+                f.colleague("field.set", json!({"tableId":1,"fieldId":2,"type":"multi_select"}));
             }
             let doc = f.disk();
             let table = doc.inspect().unwrap()["tables"][0]["tool_id"].clone();
             let record = doc.file().get_record(1, 1).unwrap().row_key;
             let basis = f.basis().await;
-            f.colleague("table.fields.update", json!({"tableId":1,"fieldId":2,"options":{"choices":choices}}));
+            f.colleague("field.set", json!({"tableId":1,"fieldId":2,"options":{"choices":choices}}));
             let before = f.bytes();
             let answer = f
                 .write(
                     basis,
-                    "table.records.update",
+                    "record.set",
                     json!({"tableId":table,"recordId":record,"values":{"status":if multi {json!(["To do"])} else {json!("To do")}}}),
                 )
                 .await;
@@ -287,13 +287,11 @@ async fn a_raw_cell_rests_on_its_fields_type_and_options() {
         let field = json!(status_field(&f).to_string());
         let basis = f.basis().await;
         match change {
-            "type" => f.colleague("table.fields.update", json!({"tableId":1,"fieldId":2,"type":"text"})),
-            "rename option" => {
-                f.colleague("table.fields.update", json!({"tableId":1,"fieldId":2,"options":{"choices":["Renamed","In progress","Done"]}}))
-            }
-            "delete option" => f.colleague("table.fields.update", json!({"tableId":1,"fieldId":2,"options":{"choices":["In progress","Done"]}})),
+            "type" => f.colleague("field.set", json!({"tableId":1,"fieldId":2,"type":"text"})),
+            "rename option" => f.colleague("field.set", json!({"tableId":1,"fieldId":2,"options":{"choices":["Renamed","In progress","Done"]}})),
+            "delete option" => f.colleague("field.set", json!({"tableId":1,"fieldId":2,"options":{"choices":["In progress","Done"]}})),
             "rename field" => f.colleague_model(json!([{"op":"set","target":field,"field":"name","value":"renamed"}])),
-            _ => f.colleague("table.fields.update", json!({"tableId":1,"fieldId":3,"type":"text"})),
+            _ => f.colleague("field.set", json!({"tableId":1,"fieldId":3,"type":"text"})),
         }
         let before = f.bytes();
         let answer = f
@@ -317,14 +315,14 @@ async fn a_raw_cell_rests_on_its_fields_type_and_options() {
 #[tokio::test]
 async fn unavailable_write_addresses_are_rejected_without_saving() {
     let f = Fixture::new(Guard::Premise);
-    f.colleague("table.fields.create", json!({"tableId":1,"name":"friends","type":"link_to_record","options":{"target_table_id":1}}));
+    f.colleague("field.add", json!({"tableId":1,"name":"friends","type":"link_to_record","options":{"target_table_id":1}}));
     for (name, command, params) in [
-        ("view row", "table.records.update", json!({"tableId":1,"viewId":1,"row":2,"values":{"notes":"Mine"}})),
-        ("primary value", "table.records.update", json!({"tableId":1,"recordId":"Two","values":{"notes":"Mine"}})),
-        ("view name", "table.views.patchConfig", json!({"tableId":1,"viewId":"All","row_height":"tall"})),
-        ("table name", "table.tables.update", json!({"tableId":"table","title":"Mine"})),
-        ("view range", "table.records.bulkDelete", json!({"tableId":1,"viewId":1,"rows":[1,2]})),
-        ("linked display", "table.records.update", json!({"tableId":1,"recordId":1,"values":{"friends":["Two"]}})),
+        ("view row", "record.set", json!({"tableId":1,"viewId":1,"row":2,"values":{"notes":"Mine"}})),
+        ("primary value", "record.set", json!({"tableId":1,"recordId":"Two","values":{"notes":"Mine"}})),
+        ("view name", "tableView.setConfig", json!({"tableId":1,"viewId":"All","row_height":"tall"})),
+        ("table name", "table.set", json!({"tableId":"table","title":"Mine"})),
+        ("view range", "record.bulkDelete", json!({"tableId":1,"viewId":1,"rows":[1,2]})),
+        ("linked display", "record.set", json!({"tableId":1,"recordId":1,"values":{"friends":["Two"]}})),
     ] {
         let basis = f.basis().await;
         let before = f.bytes();

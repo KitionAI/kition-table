@@ -465,15 +465,15 @@ try {
     const from = await mark()
     const key = await modifier()
     await page.keyboard.press(`${key}+z`)
-    await until(async () => (await sent(from, 'table.undo')).length === 1)
+    await until(async () => (await sent(from, 'history.undo')).length === 1)
     await until(async () => (await records(table.id))[0].values.title === first.values.title)
     const undone = (await records(table.id))[0].values.title
-    step('Cmd/Ctrl+Z runs one engine undo', (await sent(from, 'table.undo')).length === 1 && undone === 'Phase 2 wrap', undone)
+    step('Cmd/Ctrl+Z runs one engine undo', (await sent(from, 'history.undo')).length === 1 && undone === 'Phase 2 wrap', undone)
     await page.keyboard.press(`${key}+Shift+z`)
-    await until(async () => (await sent(from, 'table.redo')).length === 1)
+    await until(async () => (await sent(from, 'history.redo')).length === 1)
     await until(async () => (await records(table.id))[0].values.title === 'Phase 2 renamed')
     const redone = (await records(table.id))[0].values.title
-    step('Cmd/Ctrl+Shift+Z runs one engine redo', (await sent(from, 'table.redo')).length === 1 && redone === 'Phase 2 renamed', redone)
+    step('Cmd/Ctrl+Shift+Z runs one engine redo', (await sent(from, 'history.redo')).length === 1 && redone === 'Phase 2 renamed', redone)
   })
 
   // 13. Date cells open a compact calendar and time menu.
@@ -502,7 +502,7 @@ try {
     await until(async () => (await writes(from)).length > 0)
     const made = await writes(from)
     const stored = (await records(table.id)).find((record) => record.id === first.id).values.received_at
-    const one = made.length === 1 && made[0].command === 'table.records.update' && made[0].params.values?.received_at === next.stored && made[0].ok
+    const one = made.length === 1 && made[0].command === 'record.set' && made[0].params.values?.received_at === next.stored && made[0].ok
     step('picking a day writes one records.update', one && stored === next.stored, JSON.stringify({ made: made.map((call) => [call.command, call.params.values]), stored }))
     await stage().click({ position: { x: 545, y: 48 } })
     await calendar.waitFor({ timeout: 5000 })
@@ -531,7 +531,7 @@ try {
     await page.waitForTimeout(300)
     const made = await writes(from)
     const ops = made[0]?.params.ops?.map((op) => op.op) ?? []
-    step('pastes a 3x3 block as one engine transact', made.length === 1 && made[0].command === 'table.transact' && made[0].ok && ops.join() === 'cells.set,records.create', JSON.stringify(made.map((call) => [call.command, call.params.ops?.map((op) => op.op), call.error])))
+    step('pastes a 3x3 block as one engine transact', made.length === 1 && made[0].command === 'edit.transact' && made[0].ok && ops.join() === 'cells.set,records.create', JSON.stringify(made.map((call) => [call.command, call.params.ops?.map((op) => op.op), call.error])))
     const titles = (await records(table.id)).map((record) => record.values.title)
     step('the pasted rows are in the table', titles.join() === 'a1,a2,a3', titles.join())
   })
@@ -551,7 +551,7 @@ try {
     await page.waitForTimeout(300)
     const made = await writes(from)
     const expected = JSON.stringify([{ op: 'records.move', tableId: table.id, rowKeys: [two.row_key], before: one.row_key }])
-    step('drags a row as one engine transact with records.move', made.length === 1 && made[0].command === 'table.transact' && JSON.stringify(made[0].params.ops) === expected && made[0].ok, JSON.stringify(made.map((call) => [call.command, call.params])))
+    step('drags a row as one engine transact with records.move', made.length === 1 && made[0].command === 'edit.transact' && JSON.stringify(made[0].params.ops) === expected && made[0].ok, JSON.stringify(made.map((call) => [call.command, call.params])))
     const order = (await records(table.id)).map((record) => record.values.title)
     step('the row moved', order.join() === 'Phase 3 deferred,Phase 2 wrap', order.join())
   })
@@ -571,7 +571,7 @@ try {
     await page.waitForTimeout(300)
     const made = await writes(from)
     const expected = JSON.stringify([{ op: 'fields.move', tableId: table.id, fieldIds: [score.id], toIndex: 0 }])
-    step('drags a column as one engine transact with fields.move', made.length === 1 && made[0].command === 'table.transact' && JSON.stringify(made[0].params.ops) === expected && made[0].ok, JSON.stringify(made.map((call) => [call.command, call.params])))
+    step('drags a column as one engine transact with fields.move', made.length === 1 && made[0].command === 'edit.transact' && JSON.stringify(made[0].params.ops) === expected && made[0].ok, JSON.stringify(made.map((call) => [call.command, call.params])))
     const order = (await tables())[0].fields.map((field) => field.name)
     step('the column moved', order[0] === 'score', order.join())
   })
@@ -603,7 +603,7 @@ try {
     await page.waitForTimeout(300)
     const made = await writes(from)
     // The width is saved once, on release.
-    const saved = made.length >= 1 && made.every((call) => call.command === 'table.views.patchField' && call.params.fieldId === title.id && call.ok) && made.at(-1).params.width === 280
+    const saved = made.length >= 1 && made.every((call) => call.command === 'tableView.setField' && call.params.fieldId === title.id && call.ok) && made.at(-1).params.width === 280
     step('saves the width with views.patchField', saved, JSON.stringify(made.map((call) => [call.command, call.params])))
     await page.mouse.move(boundary + 80, y)
     step('the new boundary resizes', await until(async () => (await cursor()) === 'ew-resize'))
@@ -646,7 +646,7 @@ try {
   // every one.
   await test('arranges the whole table without reading it', async () => {
     await open('Messages.ktable', LARGE)
-    const reads = (await sent(0, 'table.records.list')).filter((call) => call.ok)
+    const reads = (await sent(0, 'record.list')).filter((call) => call.ok)
     const footer = kit.locator('.data-inline-footer')
     const shown = async () => (await frame().evaluate(() => window.__arranged)).at(-1)
     step('arranges the whole table without reading it', reads.length === 0 && (await shown()) === 1137 && (await footer.textContent()).includes('1137 records'), JSON.stringify({ reads: reads.map((call) => call.params), axis: await shown() }))
@@ -657,7 +657,7 @@ try {
     await page.keyboard.press('Escape')
     await page.waitForTimeout(300)
     const sorted = await shown()
-    step('a sort keeps every record', label.includes('Sort (1)') && sorted === 1137 && (await footer.textContent()).includes('1137 records') && (await sent(0, 'table.records.list')).length === 0, `${label} / ${await footer.textContent()} / ${sorted}`)
+    step('a sort keeps every record', label.includes('Sort (1)') && sorted === 1137 && (await footer.textContent()).includes('1137 records') && (await sent(0, 'record.list')).length === 0, `${label} / ${await footer.textContent()} / ${sorted}`)
   })
 
   // Changes made through the engine from outside the editor (the agent, a host feature) show live.
@@ -691,7 +691,7 @@ try {
     await stage().click({ position: { x: 145, y: 48 } })
     const from = await mark()
     await page.keyboard.press(`${await modifier()}+z`)
-    await until(async () => (await sent(from, 'table.undo')).length === 1)
+    await until(async () => (await sent(from, 'history.undo')).length === 1)
     await until(async () => !(await records(table.id)).some((record) => record.values.title === 'Mine'))
     const titles = (await records(table.id)).map((record) => record.values.title)
     step("the person's Undo does not undo the workflow's write", titles.includes('From a workflow') && !titles.includes('Mine') && titles.includes('Phase 3 deferred'), titles.join())
@@ -728,7 +728,7 @@ try {
     const added = (await tables()).find((table) => !before.some((old) => old.id === table.id))
     const rows = added ? (await records(added.id)).map((record) => Object.values(record.values).join(':')) : []
     const commands = (await sent(from)).map((call) => call.command).filter((command) => command.startsWith('table.import.'))
-    step('imports a CSV file as a new table', added?.title === 'People' && rows.length === 2 && rows.join().includes('Ada') && commands.join() === 'table.import.preview,table.import.run', JSON.stringify({ title: added?.title, rows, commands }))
+    step('imports a CSV file as a new table', added?.title === 'People' && rows.length === 2 && rows.join().includes('Ada') && commands.join() === 'file.previewImport,file.runImport', JSON.stringify({ title: added?.title, rows, commands }))
     const current = added ? await kit.getByTestId(`table-tab-${added.id}`).getAttribute('aria-current') : null
     step('shows the imported table', current === 'page')
   })

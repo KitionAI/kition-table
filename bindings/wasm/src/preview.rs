@@ -1,5 +1,5 @@
 //! The document's pixels: the editor's view of it ([`kition_table_picture`]), for hosts' renders
-//! and thumbnails and the agent's preview (`table.file.render`, the manifest's `agent.render`: a
+//! and thumbnails and the agent's preview (`file.render`, the manifest's `agent.render`: a
 //! diagnostic's target, a table, a view or a range of its rows, a scale, and a size budget; KHP
 //! A39, Kition platform K21). `preview.show` picks the table, view or dashboard the picture shows.
 
@@ -8,7 +8,7 @@ use kition_table_file::TableFile;
 use kition_table_picture::{Focus, Picture, Shown};
 use serde_json::{Value, json};
 
-/// The largest scale and size `table.file.render` takes (A39).
+/// The largest scale and size `file.render` takes (A39).
 pub const MAX_SCALE: f64 = 2.0;
 pub const MAX_SIZE: u32 = 4096;
 /// The area around a focused cell a preview shows, at most.
@@ -30,7 +30,7 @@ fn parse_id(file: &TableFile, text: &str, what: &str) -> Result<i64, String> {
 }
 
 /// The render command (`kit.json` `agent.render`).
-pub const RENDER_COMMAND: &str = "table.file.render";
+pub const RENDER_COMMAND: &str = "file.render";
 
 /// What a `target` shows: a diagnostic's (A21) `path` (`tables/<id>`, `tables/<id>/fields/<id>`,
 /// `tables/<id>/records/<id>`, `tables/<id>/records/<id>/fields/<id>`, `dashboards/<id>`), or a
@@ -121,7 +121,7 @@ fn area_of(picture: &Picture) -> (f64, f64, f64, f64) {
     }
 }
 
-/// `table.file.render`: `{ target?, slide?, scale?, maxSize? }` answers the picture of `target`
+/// `file.render`: `{ target?, slide?, scale?, maxSize? }` answers the picture of `target`
 /// ([`target_of`]), else of the table at position `slide` (counted from 0, a host's part
 /// preview), else what the editor opens (the first table's first view), never what the
 /// document's picture shows (`preview.show`, editor state), at `scale` device pixels per document pixel (default 1, up to

@@ -2,7 +2,7 @@ format: 1
 id: table.records/save-reopen
 feature: table.records
 intent: >-
-  A record made with table.records.create survives a save and a reopen: the reopened file lists it,
+  A record made with record.add survives a save and a reopen: the reopened file lists it,
   and keeps the same document id and replica version.
 layer: unit
 source:

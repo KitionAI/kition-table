@@ -38,6 +38,6 @@ solution:
     args:
       path: tasks.ktable
       steps:
-        - { command: table.records.update, params: { tableId: 1, recordId: 1, values: { notes: Follows Review the plan } } }
+        - { command: record.set, params: { tableId: 1, recordId: 1, values: { notes: Follows Review the plan } } }
 since: "2026-11-16"
 timeout_s: 600

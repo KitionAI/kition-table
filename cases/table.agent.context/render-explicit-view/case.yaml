@@ -2,7 +2,7 @@ format: 1
 id: table.agent.context/render-explicit-view
 feature: table.agent.context
 intent: >-
-  table.file.render is a function of the file and the call: what the picture shows changes neither a named view nor the default (the first table's first view), rendering changes nothing, and the same call answers the same bytes, also after a save and a reopen.
+  file.render is a function of the file and the call: what the picture shows changes neither a named view nor the default (the first table's first view), rendering changes nothing, and the same call answers the same bytes, also after a save and a reopen.
 layer: gate
 source:
   kind: synthetic

@@ -36,7 +36,7 @@ fn version(doc: &TableDocument) -> String {
 }
 
 fn since(doc: &mut TableDocument, version: &str) -> Value {
-    doc.execute("table.changes.since", json!({ "version": version })).unwrap()["result"].clone()
+    doc.execute("change.list", json!({ "version": version })).unwrap()["result"].clone()
 }
 
 #[test]
@@ -61,14 +61,14 @@ const PEOPLE: &[u8] = b"Name,Score\nAda,10\nGrace,7\n";
 fn import_previews_and_runs_as_one_request_outside_the_undo_history() {
     let mut doc = new_document();
     let start = version(&doc);
-    let preview = doc.execute("table.import.preview", json!({ "fileName": "people.csv", "content": b64(PEOPLE) })).unwrap();
+    let preview = doc.execute("file.previewImport", json!({ "fileName": "people.csv", "content": b64(PEOPLE) })).unwrap();
     assert_eq!(preview["change"], Value::Null);
     let preview = preview["result"].clone();
     assert_eq!(preview["row_count"], 2);
     assert!(!doc.dirty(), "a preview reads only");
     let run = doc
         .execute(
-            "table.import.run",
+            "file.runImport",
             json!({
                 "fileName": "people.csv",
                 "content": b64(PEOPLE),
@@ -101,7 +101,7 @@ fn a_failed_import_leaves_the_document_as_it_was() {
     let mut doc = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     // `Extra` is created first; the rows then fail: the starter table's `Title` is required.
     let failed = doc.execute(
-        "table.import.run",
+        "file.runImport",
         json!({
             "fileName": "notes.csv",
             "content": b64(b"Extra,Notes\na,b\n"),
@@ -114,7 +114,7 @@ fn a_failed_import_leaves_the_document_as_it_was() {
     let (_, after) = first_table(&mut doc);
     assert_eq!(after, fields);
     assert!(!doc.dirty());
-    assert!(doc.execute("table.records.create", json!({ "tableId": table_id, "values": { field_name(&fields, "Title"): "Still works" } })).is_ok());
+    assert!(doc.execute("record.add", json!({ "tableId": table_id, "values": { field_name(&fields, "Title"): "Still works" } })).is_ok());
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn ai_fields_prepare_prompts_and_apply_results_as_the_ai_field_origin() {
     let notes_id = fields.iter().find(|(title, _, _)| title == "Notes").unwrap().2;
     let summary = doc
         .execute(
-            "table.fields.create",
+            "field.add",
             json!({ "tableId": table_id, "title": "Summary", "type": "text", "options": { "ai_config": { "type": "summarize", "source_field_id": notes_id } } }),
         )
         .unwrap()["result"]
@@ -132,11 +132,11 @@ fn ai_fields_prepare_prompts_and_apply_results_as_the_ai_field_origin() {
     let summary_id = summary["id"].as_i64().unwrap();
     let summary_name = summary["name"].as_str().unwrap().to_owned();
     let values = json!({ field_name(&fields, "Title"): "Plan", field_name(&fields, "Notes"): "Write the plan, then the code." });
-    let record = doc.execute("table.records.create", json!({ "tableId": table_id, "values": values })).unwrap()["result"].clone();
+    let record = doc.execute("record.add", json!({ "tableId": table_id, "values": values })).unwrap()["result"].clone();
     let record_id = record["id"].as_i64().unwrap();
     let start = version(&doc);
 
-    let prepared = doc.execute("table.ai.prepare", json!({ "tableId": table_id, "fieldId": summary_id, "record_ids": [record_id] })).unwrap();
+    let prepared = doc.execute("ai.prepare", json!({ "tableId": table_id, "fieldId": summary_id, "record_ids": [record_id] })).unwrap();
     assert_eq!(prepared["change"], Value::Null);
     let request = &prepared["result"]["requests"][0];
     assert_eq!(request["recordId"], record_id);
@@ -144,10 +144,10 @@ fn ai_fields_prepare_prompts_and_apply_results_as_the_ai_field_origin() {
 
     // The person retitles the record, then the AI cell is written.
     let title = field_name(&fields, "Title");
-    doc.execute("table.records.update", json!({ "tableId": table_id, "recordId": record_id, "values": { title.clone(): "Plan v2" } })).unwrap();
+    doc.execute("record.set", json!({ "tableId": table_id, "recordId": record_id, "values": { title.clone(): "Plan v2" } })).unwrap();
     let applied = doc
         .execute(
-            "table.ai.apply",
+            "ai.apply",
             json!({ "tableId": table_id, "fieldId": summary_id, "results": [{ "recordId": record_id, "text": "Plan, then code." }] }),
         )
         .unwrap();
@@ -172,18 +172,15 @@ fn as_origin_writes_as_a_system_feature_outside_the_persons_undo() {
     let (table_id, fields) = first_table(&mut doc);
     let (title, notes) = (field_name(&fields, "Title"), field_name(&fields, "Notes"));
     let start = version(&doc);
-    let mine = doc.execute("table.records.create", json!({ "tableId": table_id, "values": { title.clone(): "Mine" } })).unwrap();
+    let mine = doc.execute("record.add", json!({ "tableId": table_id, "values": { title.clone(): "Mine" } })).unwrap();
     let mine_id = mine["result"]["id"].as_i64().unwrap();
     let synced = doc
-        .execute(
-            "table.records.create",
-            json!({ "tableId": table_id, "values": { title.clone(): "From a workflow" }, "asOrigin": "system:workflow" }),
-        )
+        .execute("record.add", json!({ "tableId": table_id, "values": { title.clone(): "From a workflow" }, "asOrigin": "system:workflow" }))
         .unwrap();
     assert_eq!(synced["change"]["origin"], "workflow");
     let synced_id = synced["result"]["id"].as_i64().unwrap();
     doc.execute(
-        "table.records.update",
+        "record.set",
         json!({ "tableId": table_id, "recordId": mine_id, "values": { notes.clone(): "Seen" }, "asOrigin": "system:workflow" }),
     )
     .unwrap();
@@ -216,7 +213,7 @@ fn as_origin_writes_as_a_system_feature_outside_the_persons_undo() {
 
     // Only `system:<name>` origins, and never for undo or redo.
     for refused in [json!("agent:turn-1"), json!("person:someone"), json!("system:"), json!("system:a b"), json!(1)] {
-        let answer = doc.execute("table.records.create", json!({ "tableId": table_id, "values": { title.clone(): "No" }, "asOrigin": refused }));
+        let answer = doc.execute("record.add", json!({ "tableId": table_id, "values": { title.clone(): "No" }, "asOrigin": refused }));
         assert!(answer.is_err(), "{refused}");
     }
     assert!(doc.call("undo", &json!({ "asOrigin": "system:workflow" })).is_err());
@@ -226,12 +223,12 @@ fn as_origin_writes_as_a_system_feature_outside_the_persons_undo() {
 fn changes_since_the_start_and_since_now() {
     let mut doc = new_document();
     let (table_id, fields) = first_table(&mut doc);
-    let record = doc.execute("table.records.create", json!({ "tableId": table_id, "values": { field_name(&fields, "Title"): "Ada" } })).unwrap();
+    let record = doc.execute("record.add", json!({ "tableId": table_id, "values": { field_name(&fields, "Title"): "Ada" } })).unwrap();
     let all = since(&mut doc, "");
     assert_eq!(all["created"], json!([{ "tableId": table_id, "recordId": record["result"]["id"], "origin": "person:kit" }]));
     let now = all["version"].as_str().unwrap().to_owned();
     assert_eq!(since(&mut doc, &now), json!({ "version": now, "created": [], "updated": [], "deleted": [] }));
-    assert!(doc.execute("table.changes.since", json!({ "version": "not base64!" })).is_err());
+    assert!(doc.execute("change.list", json!({ "version": "not base64!" })).is_err());
     let other = new_document();
-    assert!(doc.execute("table.changes.since", json!({ "version": version(&other) })).is_err());
+    assert!(doc.execute("change.list", json!({ "version": version(&other) })).is_err());
 }

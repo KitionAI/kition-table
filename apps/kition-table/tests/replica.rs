@@ -18,7 +18,7 @@ fn params(value: Value) -> Map<String, Value> {
 
 /// The first table's records, as an agent reads them (ids and values).
 fn records(kit: &mut Headless<TableDocument>, id: &str) -> Value {
-    let read = kit.execute(id, "table.read", params(json!({ "tableId": 1 })), Origin::Agent).unwrap();
+    let read = kit.execute(id, "file.read", params(json!({ "tableId": 1 })), Origin::Agent).unwrap();
     read.result.unwrap_or_default()["result"]["rows"].clone()
 }
 
@@ -29,13 +29,12 @@ fn a_table_opens_from_its_exported_replica_with_its_attachments() {
     std::fs::create_dir_all(&root).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     let mut doc = TableDocument::create("Tasks.ktable", 0, 0).unwrap();
-    doc.execute("table.fields.create", json!({ "tableId": 1, "name": "files", "title": "Files", "type": "attachment" })).unwrap();
+    doc.execute("field.add", json!({ "tableId": 1, "name": "files", "title": "Files", "type": "attachment" })).unwrap();
     let bytes = b"a picture's bytes".to_vec();
     let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
     let attachment =
-        doc.execute("table.attachments.put", json!({ "tableId": 1, "name": "note.txt", "mimeType": "text/plain", "data": data })).unwrap()["result"]
-            .clone();
-    doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "With a file", "files": [attachment] } })).unwrap();
+        doc.execute("attachment.add", json!({ "tableId": 1, "name": "note.txt", "mimeType": "text/plain", "data": data })).unwrap()["result"].clone();
+    doc.execute("record.add", json!({ "tableId": 1, "values": { "title": "With a file", "files": [attachment] } })).unwrap();
     std::fs::write(root.join("Tasks.ktable"), doc.saved_bytes().unwrap()).unwrap();
 
     let mut kit = Headless::<TableDocument>::with_replica_port(
@@ -44,7 +43,7 @@ fn a_table_opens_from_its_exported_replica_with_its_attachments() {
     let folder = HostFolder::new(&root).unwrap();
     kit.set_host(folder.host());
     let file = kit.open(OpenRequest { file: &folder.file("Tasks.ktable").unwrap(), read_only: false, create: None }).unwrap().id;
-    kit.execute(&file, "table.records.create", params(json!({ "tableId": 1, "values": { "title": "Second" } })), Origin::Agent).unwrap();
+    kit.execute(&file, "record.add", params(json!({ "tableId": 1, "values": { "title": "Second" } })), Origin::Agent).unwrap();
     let before = records(&mut kit, &file);
     assert_eq!(before.as_array().map(Vec::len), Some(2), "{before}");
 
@@ -57,13 +56,12 @@ fn a_table_opens_from_its_exported_replica_with_its_attachments() {
     assert_ne!(replica, file);
     assert_eq!(records(&mut kit, &replica), before, "the replica is the document");
     let hash = attachment["url"].as_str().unwrap().trim_start_matches("kition-blob:").to_owned();
-    let read = kit.execute(&replica, "table.attachments.read", params(json!({ "hash": hash })), Origin::Agent).unwrap();
+    let read = kit.execute(&replica, "attachment.get", params(json!({ "hash": hash })), Origin::Agent).unwrap();
     let read = read.result.unwrap_or_default()["result"]["data"].as_str().unwrap_or_default().to_owned();
     assert_eq!(base64::engine::general_purpose::STANDARD.decode(read).unwrap(), bytes, "and holds the attachment's bytes");
 
     // The replica takes edits of its own and leaves the file's document alone.
-    kit.execute(&replica, "table.records.create", params(json!({ "tableId": 1, "values": { "title": "Only in the draft" } })), Origin::Agent)
-        .unwrap();
+    kit.execute(&replica, "record.add", params(json!({ "tableId": 1, "values": { "title": "Only in the draft" } })), Origin::Agent).unwrap();
     assert_eq!(records(&mut kit, &file), before);
     assert_ne!(records(&mut kit, &replica), before);
     let saved = kit.model("model.save", json!({ "documentId": replica })).unwrap();

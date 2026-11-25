@@ -37,10 +37,10 @@ describe('exportFile', () => {
       exportFile: async (path: string, bytes: Uint8Array) => (writes.push([path, bytes]), `${path} (host)`),
     }
     expect(await exportTableThroughHost(engine(calls), host, 'csv', { id: 3, title: 'Staff' }, 2)).toBe('Team/People - Staff.csv (host)')
-    expect(calls[0]).toEqual(['table.file.export', { format: 'csv', tableId: 3 }])
+    expect(calls[0]).toEqual(['file.export', { format: 'csv', tableId: 3 }])
     expect(new TextDecoder().decode(writes[0][1])).toBe('Name,Score\r\nAda,10\r\n')
     await exportTableThroughHost(engine(calls), host, 'md', { id: 1, title: 'Staff' }, 1)
-    expect(calls[1]).toEqual(['table.file.export', { format: 'md', tableId: 1 }])
+    expect(calls[1]).toEqual(['file.export', { format: 'md', tableId: 1 }])
     expect(writes[1][0]).toBe('Team/People.md')
   })
 

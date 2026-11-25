@@ -32,20 +32,20 @@ fn result(doc: &mut TableDocument, command: &str, params: Value) -> Value {
 fn file() -> Vec<u8> {
     let mut doc = TableDocument::create("Work.ktable", 0, 0).unwrap();
     for title in ["Write the plan", "Review the plan"] {
-        result(&mut doc, "table.records.create", json!({ "tableId": 1, "values": { "title": title } }));
+        result(&mut doc, "record.add", json!({ "tableId": 1, "values": { "title": title } }));
     }
     result(
         &mut doc,
-        "table.tables.create",
+        "table.add",
         json!({ "title": "Tasks", "name": "tasks", "fields": [
             { "title": "Title", "name": "title", "type": "text", "primary": true },
             { "title": "Done", "name": "done", "type": "checkbox" },
         ] }),
     );
     for title in ["Book", "Pack", "Go"] {
-        result(&mut doc, "table.records.create", json!({ "tableId": 2, "values": { "title": title } }));
+        result(&mut doc, "record.add", json!({ "tableId": 2, "values": { "title": title } }));
     }
-    result(&mut doc, "table.views.create", json!({ "tableId": 2, "title": "Open", "type": "grid" }));
+    result(&mut doc, "tableView.add", json!({ "tableId": 2, "title": "Open", "type": "grid" }));
     doc.saved_bytes().unwrap()
 }
 
@@ -99,9 +99,9 @@ impl Fixture {
         (seen["details"]["tables"].as_array().unwrap().clone(), seen["revision"].as_str().unwrap().to_owned())
     }
 
-    /// Record `id` of table `table` as `table.records.list` answers it.
+    /// Record `id` of table `table` as `record.list` answers it.
     async fn record(&self, table: i64, id: i64) -> Value {
-        let ran = self.ok("run", json!({ "steps": [{ "command": "table.records.list", "params": { "tableId": table } }] })).await;
+        let ran = self.ok("run", json!({ "steps": [{ "command": "record.list", "params": { "tableId": table } }] })).await;
         ran["completed"][0]["result"]["result"]["items"].as_array().unwrap().iter().find(|r| r["id"] == json!(id)).cloned().unwrap()
     }
 
@@ -124,7 +124,7 @@ async fn a_step_with_on_and_at_part_updates_exactly_that_record_and_the_receipt_
     let ran = f
         .ok(
             "run",
-            json!({ "steps": [{ "command": "table.records.update", "at": { "part": { "table": 2 } }, "on": [4], "params": { "tableId": 2, "values": { "title": "Pack light" } } }] }),
+            json!({ "steps": [{ "command": "record.set", "at": { "part": { "table": 2 } }, "on": [4], "params": { "tableId": 2, "values": { "title": "Pack light" } } }] }),
         )
         .await;
     assert_eq!(ran["completed"][0]["result"]["result"]["id"], json!(4), "{ran}");
@@ -148,7 +148,7 @@ async fn a_step_with_on_and_at_part_updates_exactly_that_record_and_the_receipt_
 #[tokio::test(flavor = "multi_thread")]
 async fn a_field_rename_is_reported_with_its_title_before_and_after() {
     let f = Fixture::new();
-    let ran = f.ok("run", json!({ "steps": [{ "command": "table.fields.update", "on": [5], "params": { "tableId": 2, "title": "Packed" } }] })).await;
+    let ran = f.ok("run", json!({ "steps": [{ "command": "field.set", "on": [5], "params": { "tableId": 2, "title": "Packed" } }] })).await;
     let changed = ran["changes"]["changed"].as_array().unwrap();
     assert_eq!(changed.len(), 1, "{ran}");
     assert_eq!(
@@ -167,8 +167,8 @@ async fn a_failing_later_step_changes_nothing() {
         .refused(
             "run",
             json!({ "target": { "table": 2 }, "steps": [
-                { "command": "table.records.update", "on": [4], "params": { "tableId": 2, "values": { "title": "kept?" } } },
-                { "command": "table.records.update", "on": [99], "params": { "tableId": 2, "values": {} } }
+                { "command": "record.set", "on": [4], "params": { "tableId": 2, "values": { "title": "kept?" } } },
+                { "command": "record.set", "on": [99], "params": { "tableId": 2, "values": {} } }
             ] }),
         )
         .await;
@@ -182,11 +182,11 @@ async fn a_part_the_file_lacks_a_time_or_a_stray_on_is_refused() {
     let f = Fixture::new();
     let before = f.bytes();
     for (input, says) in [
-        (json!({ "target": { "table": 9 }, "steps": [{ "command": "table.records.list", "params": { "tableId": 2 } }] }), "no table 9"),
-        (json!({ "steps": [{ "command": "table.records.list", "at": { "part": { "view": 9 } }, "params": { "tableId": 2 } }] }), "no view 9"),
-        (json!({ "steps": [{ "command": "table.records.list", "at": { "time": 1 }, "params": { "tableId": 2 } }] }), "no timeline"),
-        (json!({ "steps": [{ "command": "table.views.update", "on": [3], "params": { "tableId": 2, "viewId": 3, "title": "X" } }] }), "on"),
-        (json!({ "steps": [{ "command": "table.records.update", "on": [4], "params": { "tableId": 2, "recordId": 4, "values": {} } }] }), "recordId"),
+        (json!({ "target": { "table": 9 }, "steps": [{ "command": "record.list", "params": { "tableId": 2 } }] }), "no table 9"),
+        (json!({ "steps": [{ "command": "record.list", "at": { "part": { "view": 9 } }, "params": { "tableId": 2 } }] }), "no view 9"),
+        (json!({ "steps": [{ "command": "record.list", "at": { "time": 1 }, "params": { "tableId": 2 } }] }), "no timeline"),
+        (json!({ "steps": [{ "command": "tableView.set", "on": [3], "params": { "tableId": 2, "viewId": 3, "title": "X" } }] }), "on"),
+        (json!({ "steps": [{ "command": "record.set", "on": [4], "params": { "tableId": 2, "recordId": 4, "values": {} } }] }), "recordId"),
     ] {
         let refused = f.refused("run", input.clone()).await;
         assert!(refused.to_string().contains(says), "{input}: {refused}");
@@ -202,9 +202,9 @@ async fn integer_ids_from_an_earlier_inspect_name_the_same_objects_after_a_new_s
     f.ok(
         "run",
         json!({ "steps": [
-            { "command": "table.tables.update", "params": { "tableId": 2, "title": "Trip" } },
-            { "command": "table.fields.update", "on": [4], "params": { "tableId": 2, "title": "What" } },
-            { "command": "table.records.update", "on": [5], "params": { "tableId": 2, "values": { "title": "Leave" } } }
+            { "command": "table.set", "params": { "tableId": 2, "title": "Trip" } },
+            { "command": "field.set", "on": [4], "params": { "tableId": 2, "title": "What" } },
+            { "command": "record.set", "on": [5], "params": { "tableId": 2, "values": { "title": "Leave" } } }
         ] }),
     )
     .await;
@@ -224,9 +224,7 @@ async fn integer_ids_from_an_earlier_inspect_name_the_same_objects_after_a_new_s
     assert_eq!(ids_of(&after), ids_of(&before), "every table, field, view and record keeps its id");
     assert_eq!(after[1]["label"], "Trip");
     assert_eq!(f.record(2, 5).await["values"]["title"], "Leave");
-    let ran = f
-        .ok("run", json!({ "steps": [{ "command": "table.records.update", "on": [5], "params": { "tableId": 2, "values": { "done": true } } }] }))
-        .await;
+    let ran = f.ok("run", json!({ "steps": [{ "command": "record.set", "on": [5], "params": { "tableId": 2, "values": { "done": true } } }] })).await;
     assert_eq!(ran["completed"][0]["result"]["result"]["id"], json!(5), "{ran}");
     f.shutdown().await;
 }
@@ -236,20 +234,21 @@ async fn another_agents_edit_of_another_record_is_reported_and_my_write_applies(
     let f = Fixture::new();
     let (_, basis) = f.tables().await;
     let theirs = f.record(2, 3).await["row_key"].as_str().unwrap().to_owned();
-    f.by(
-        OTHER,
-        "run",
-        json!({ "steps": [{ "command": "table.records.update", "on": [3], "params": { "tableId": 2, "values": { "title": "Book early" } } }] }),
-    )
-    .await;
-    let ran = f.ok("run", json!({ "basis": basis, "steps": [{ "command": "table.records.update", "on": [4], "params": { "tableId": 2, "values": { "done": true } } }] })).await;
+    f.by(OTHER, "run", json!({ "steps": [{ "command": "record.set", "on": [3], "params": { "tableId": 2, "values": { "title": "Book early" } } }] }))
+        .await;
+    let ran = f
+        .ok(
+            "run",
+            json!({ "basis": basis, "steps": [{ "command": "record.set", "on": [4], "params": { "tableId": 2, "values": { "done": true } } }] }),
+        )
+        .await;
     assert_eq!(ids(&ran["others"]["changed"]), [theirs], "{ran}");
     assert_eq!(ran["others"]["by"], json!([OTHER]), "{ran}");
     assert_eq!(ran["completed"][0]["result"]["result"]["id"], json!(4), "{ran}");
     f.shutdown().await;
 }
 
-/// `table_inspect` with `preview` draws the named table or view through `table.file.render`,
+/// `table_inspect` with `preview` draws the named table or view through `file.render`,
 /// whatever the person's picture shows.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_preview_of_a_named_view_draws_that_view() {

@@ -1,7 +1,7 @@
 //! The document's picture is what the editor shows: the tab bar, the shown view's
 //! bar, and the view itself with every field and record (fields' titles and values drawn as text
 //! in the faces the host registers), or a dashboard. It shows the first table's first view, as the
-//! editor opens, until `table.preview.show` picks a table, a view or a dashboard.
+//! editor opens, until `preview.show` picks a table, a view or a dashboard.
 
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
@@ -117,7 +117,7 @@ fn a_view_shows_its_records_as_it_filters_sorts_and_lays_them_out() {
     for bad in
         [json!({ "viewId": 999 }), json!({ "tableId": 999 }), json!({ "dashboardId": "none" }), json!({ "tableId": table, "dashboardId": "x" })]
     {
-        assert!(doc.execute("table.preview.show", bad.clone()).is_err(), "{bad}");
+        assert!(doc.execute("preview.show", bad.clone()).is_err(), "{bad}");
     }
 }
 

@@ -8,17 +8,17 @@ async fn inline_link_seed_holds_target_schema_and_local_address_window() {
     for numeric in [false, true] {
         for change in ["primary_type", "primary_switch", "table_reorder", "unrelated_cell"] {
             let f = Fixture::new(Guard::Premise);
-            f.colleague("table.tables.create", json!({"title":"Second"}));
+            f.colleague("table.add", json!({"title":"Second"}));
             let doc = f.disk();
             let table = doc.inspect().unwrap()["tables"][0]["tool_id"].clone();
             let base = doc.file().replica().objects_of_type("Base")[0].to_string();
             let target = if numeric { json!(1) } else { table };
             let basis = f.basis().await;
             match change {
-                "primary_type" => f.colleague("table.fields.update", json!({"tableId":1,"fieldId":1,"type":"long_text"})),
-                "primary_switch" => f.colleague("table.tables.update", json!({"tableId":1,"primary_field_id":3})),
+                "primary_type" => f.colleague("field.set", json!({"tableId":1,"fieldId":1,"type":"long_text"})),
+                "primary_switch" => f.colleague("table.set", json!({"tableId":1,"primary_field_id":3})),
                 "table_reorder" => f.colleague_model(json!([{"op":"list.move","target":base,"field":"tables","from":0,"to":2}])),
-                _ => f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"values":{"notes":"Unrelated"}})),
+                _ => f.colleague("record.set", json!({"tableId":1,"recordId":1,"values":{"notes":"Unrelated"}})),
             }
             // The target's primary field is read only by the cycle check, which refuses the
             // call itself; a link shows the primary live.
@@ -30,7 +30,7 @@ async fn inline_link_seed_holds_target_schema_and_local_address_window() {
             let answer = f
                 .write(
                     basis,
-                    "table.tables.create",
+                    "table.add",
                     json!({"title":"Linked","fields":[{"name":"friends","type":"link_to_record","options":{"target_table_id":target}}]}),
                 )
                 .await;

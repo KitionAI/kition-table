@@ -21,13 +21,13 @@ async fn a_record_deleted_by_id_does_not_rest_on_where_it_is() {
         let one = f.disk().file().get_record(1, 1).unwrap().row_key;
         let basis = f.basis().await;
         if necessary {
-            f.colleague("table.records.update", json!({"tableId":1,"recordId":2,"values":{"notes":"Theirs"}}));
+            f.colleague("record.set", json!({"tableId":1,"recordId":2,"values":{"notes":"Theirs"}}));
             let before = f.bytes();
-            conflict(f.write(basis, "table.records.delete", json!({"tableId":table,"recordId":two})).await, "changed");
+            conflict(f.write(basis, "record.delete", json!({"tableId":table,"recordId":two})).await, "changed");
             assert_eq!(before, f.bytes());
         } else {
-            f.colleague("table.transact", json!({"ops":[{"op":"records.move","tableId":1,"rowKeys":[two],"before":one}]}));
-            f.write(basis, "table.records.delete", json!({"tableId":table,"recordId":two})).await.unwrap();
+            f.colleague("edit.transact", json!({"ops":[{"op":"records.move","tableId":1,"rowKeys":[two],"before":one}]}));
+            f.write(basis, "record.delete", json!({"tableId":table,"recordId":two})).await.unwrap();
             assert!(f.disk().file().get_record(1, 2).is_err());
         }
         f.kits.shutdown().await;
@@ -44,14 +44,14 @@ async fn a_sort_rests_on_its_field_name_not_its_title() {
         let view = f.disk().inspect().unwrap()["tables"][0]["views"][0]["tool_id"].clone();
         let basis = f.basis().await;
         if necessary {
-            f.colleague("table.fields.delete", json!({"tableId":1,"fieldId":3}));
+            f.colleague("field.delete", json!({"tableId":1,"fieldId":3}));
             conflict(
-                f.write(basis, "table.views.putSorts", json!({"tableId":table,"viewId":view,"items":[{"field_id":notes,"direction":"desc"}]})).await,
+                f.write(basis, "tableView.setSorts", json!({"tableId":table,"viewId":view,"items":[{"field_id":notes,"direction":"desc"}]})).await,
                 "deleted",
             );
         } else {
-            f.colleague("table.fields.update", json!({"tableId":1,"fieldId":3,"title":"Remarks"}));
-            f.write(basis, "table.views.putSorts", json!({"tableId":table,"viewId":view,"items":[{"field_id":notes,"direction":"desc"}]}))
+            f.colleague("field.set", json!({"tableId":1,"fieldId":3,"title":"Remarks"}));
+            f.write(basis, "tableView.setSorts", json!({"tableId":table,"viewId":view,"items":[{"field_id":notes,"direction":"desc"}]}))
                 .await
                 .unwrap();
             let sorts = f.disk().file().get_view(1, 1).unwrap().config["sorts"].clone();
@@ -70,14 +70,14 @@ async fn a_cell_write_does_not_rest_on_validation_flags() {
     for change in ["readonly", "required elsewhere", "type"] {
         let f = Fixture::new(Guard::Premise);
         let (table, _, one) = ids(&f, "notes", 1);
-        f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"values":{"status":"Done"}}));
+        f.colleague("record.set", json!({"tableId":1,"recordId":1,"values":{"status":"Done"}}));
         let basis = f.basis().await;
         match change {
-            "readonly" => f.colleague("table.fields.update", json!({"tableId":1,"fieldId":3,"readonly":true})),
-            "required elsewhere" => f.colleague("table.fields.update", json!({"tableId":1,"fieldId":2,"required":true})),
-            _ => f.colleague("table.fields.update", json!({"tableId":1,"fieldId":3,"type":"formula","formula":"{title}"})),
+            "readonly" => f.colleague("field.set", json!({"tableId":1,"fieldId":3,"readonly":true})),
+            "required elsewhere" => f.colleague("field.set", json!({"tableId":1,"fieldId":2,"required":true})),
+            _ => f.colleague("field.set", json!({"tableId":1,"fieldId":3,"type":"formula","formula":"{title}"})),
         }
-        let answer = f.write(basis, "table.records.update", json!({"tableId":table,"recordId":one,"values":{"notes":"Mine"}})).await;
+        let answer = f.write(basis, "record.set", json!({"tableId":table,"recordId":one,"values":{"notes":"Mine"}})).await;
         if change == "type" {
             conflict(answer, "changed");
         } else {
@@ -96,11 +96,11 @@ async fn a_type_change_does_not_rest_on_the_column_cells() {
         let (table, notes, _) = ids(&f, "notes", 1);
         let basis = f.basis().await;
         if necessary {
-            f.colleague("table.fields.update", json!({"tableId":1,"fieldId":3,"type":"url"}));
-            conflict(f.write(basis, "table.fields.update", json!({"tableId":table,"fieldId":notes,"type":"text"})).await, "changed");
+            f.colleague("field.set", json!({"tableId":1,"fieldId":3,"type":"url"}));
+            conflict(f.write(basis, "field.set", json!({"tableId":table,"fieldId":notes,"type":"text"})).await, "changed");
         } else {
-            f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"values":{"notes":"Theirs"}}));
-            f.write(basis, "table.fields.update", json!({"tableId":table,"fieldId":notes,"type":"text"})).await.unwrap();
+            f.colleague("record.set", json!({"tableId":1,"recordId":1,"values":{"notes":"Theirs"}}));
+            f.write(basis, "field.set", json!({"tableId":table,"fieldId":notes,"type":"text"})).await.unwrap();
             assert_eq!(f.disk().file().get_record(1, 1).unwrap().values["notes"], "Theirs");
         }
         f.kits.shutdown().await;
@@ -119,11 +119,11 @@ async fn a_check_that_only_refuses_runs_again_on_the_current_file() {
         let (table, _, one) = ids(&f, "notes", 1);
         let basis = f.basis().await;
         let (command, params) = if check == "required" {
-            f.colleague("table.fields.update", json!({"tableId":1,"fieldId":2,"required":true}));
-            ("table.records.update", json!({"tableId":table,"recordId":one,"values":{"notes":"Mine"}}))
+            f.colleague("field.set", json!({"tableId":1,"fieldId":2,"required":true}));
+            ("record.set", json!({"tableId":table,"recordId":one,"values":{"notes":"Mine"}}))
         } else {
-            f.colleague("table.fields.update", json!({"tableId":1,"fieldId":3,"type":"formula","formula":"{loop}"}));
-            ("table.fields.create", json!({"tableId":table,"name":"loop","type":"formula","formula":"{notes}"}))
+            f.colleague("field.set", json!({"tableId":1,"fieldId":3,"type":"formula","formula":"{loop}"}));
+            ("field.add", json!({"tableId":table,"name":"loop","type":"formula","formula":"{notes}"}))
         };
         let before = f.bytes();
         let error = f.write(basis, command, params).await.unwrap_err();
@@ -146,15 +146,15 @@ async fn a_schema_replacing_import_rests_on_the_primary_field() {
         let (table, _, _) = ids(&f, "notes", 1);
         let basis = f.basis().await;
         if necessary {
-            f.colleague("table.tables.update", json!({"tableId":1,"primary_field_id":3}));
+            f.colleague("table.set", json!({"tableId":1,"primary_field_id":3}));
         } else {
-            f.colleague("table.tables.update", json!({"tableId":1,"title":"Theirs"}));
+            f.colleague("table.set", json!({"tableId":1,"title":"Theirs"}));
         }
         let before = f.bytes();
         let answer = f
             .write(
                 basis,
-                "table.import.run",
+                "file.runImport",
                 json!({"fileName":"in.csv","content":base64::engine::general_purpose::STANDARD.encode("A,B\n1,2\n"),"target":{"kind":"existing_table","table_id":table},"write_mode":"append","schema_mode":"auto"}),
             )
             .await;

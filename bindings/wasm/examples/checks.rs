@@ -23,7 +23,7 @@ fn id(value: &Value) -> Result<i64, String> {
 }
 
 fn task(doc: &mut TableDocument, values: Value) -> Result<Value, String> {
-    call(doc, "table.records.create", json!({ "tableId": TASKS, "values": values }))
+    call(doc, "record.add", json!({ "tableId": TASKS, "values": values }))
 }
 
 fn field(doc: &mut TableDocument, table: i64, spec: Value) -> Result<i64, String> {
@@ -31,13 +31,13 @@ fn field(doc: &mut TableDocument, table: i64, spec: Value) -> Result<i64, String
     if let (Some(target), Some(spec)) = (params.as_object_mut(), spec.as_object()) {
         target.extend(spec.clone());
     }
-    id(&call(doc, "table.fields.create", params)?)
+    id(&call(doc, "field.add", params)?)
 }
 
 /// A second table, "Projects", with one record.
 fn projects(doc: &mut TableDocument) -> Result<i64, String> {
-    let table = id(&call(doc, "table.tables.create", json!({ "title": "Projects" }))?)?;
-    call(doc, "table.records.create", json!({ "tableId": table, "values": { "title": "Launch" } }))?;
+    let table = id(&call(doc, "table.add", json!({ "title": "Projects" }))?)?;
+    call(doc, "record.add", json!({ "tableId": table, "values": { "title": "Launch" } }))?;
     Ok(table)
 }
 
@@ -57,7 +57,7 @@ fn main() -> Result<(), String> {
         }
     }
     if only.is_empty() || only.iter().any(|wanted| wanted == "edit.json") {
-        let edit = json!({ "steps": [{ "command": "table.records.create", "params": { "tableId": TASKS, "values": { "title": "Ship the plan", "status": "In progress" } } }] });
+        let edit = json!({ "steps": [{ "command": "record.add", "params": { "tableId": TASKS, "values": { "title": "Ship the plan", "status": "In progress" } } }] });
         let text = serde_json::to_string_pretty(&edit).map_err(|error| error.to_string())?;
         std::fs::write(dir.join("edit.json"), format!("{text}\n")).map_err(|error| error.to_string())?;
     }
@@ -81,7 +81,7 @@ pub fn fixtures() -> Result<Vec<(&'static str, Vec<u8>)>, String> {
                 let target = projects(doc)?;
                 field(doc, TASKS, json!({ "title": "Project", "type": "link_to_record", "options": { "target_table_id": target } }))?;
                 task(doc, json!({ "title": "Write the plan" }))?;
-                call(doc, "table.tables.delete", json!({ "tableId": target })).map(|_| ())
+                call(doc, "table.delete", json!({ "tableId": target })).map(|_| ())
             })?,
         ),
         (
@@ -89,7 +89,7 @@ pub fn fixtures() -> Result<Vec<(&'static str, Vec<u8>)>, String> {
             table("Lookups.ktable", |doc| {
                 let target = projects(doc)?;
                 let link = field(doc, TASKS, json!({ "title": "Project", "type": "link_to_record", "options": { "target_table_id": target } }))?;
-                let target_title = call(doc, "table.fields.list", json!({ "tableId": target }))?;
+                let target_title = call(doc, "field.list", json!({ "tableId": target }))?;
                 let read = target_title
                     .as_array()
                     .or_else(|| target_title["items"].as_array())
@@ -102,7 +102,7 @@ pub fn fixtures() -> Result<Vec<(&'static str, Vec<u8>)>, String> {
                     json!({ "title": "Project name", "type": "lookup", "options": { "link_field_id": link, "target_field_id": read } }),
                 )?;
                 task(doc, json!({ "title": "Write the plan" }))?;
-                call(doc, "table.fields.delete", json!({ "tableId": TASKS, "fieldId": link })).map(|_| ())
+                call(doc, "field.delete", json!({ "tableId": TASKS, "fieldId": link })).map(|_| ())
             })?,
         ),
         (
@@ -111,10 +111,10 @@ pub fn fixtures() -> Result<Vec<(&'static str, Vec<u8>)>, String> {
                 let target = projects(doc)?;
                 call(
                     doc,
-                    "table.dashboards.upsert",
+                    "dashboard.set",
                     json!({ "dashboardId": "projects", "title": "Projects", "source_table_id": target, "layout": [], "widgets": [] }),
                 )?;
-                call(doc, "table.tables.delete", json!({ "tableId": target })).map(|_| ())
+                call(doc, "table.delete", json!({ "tableId": target })).map(|_| ())
             })?,
         ),
         (
@@ -147,7 +147,7 @@ pub fn fixtures() -> Result<Vec<(&'static str, Vec<u8>)>, String> {
             table("Required.ktable", |doc| {
                 task(doc, json!({ "title": "Write the plan" }))?;
                 // The notes field becomes required after the record was written without notes.
-                call(doc, "table.fields.update", json!({ "tableId": TASKS, "fieldId": 3, "required": true })).map(|_| ())
+                call(doc, "field.set", json!({ "tableId": TASKS, "fieldId": 3, "required": true })).map(|_| ())
             })?,
         ),
         (

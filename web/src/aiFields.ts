@@ -5,7 +5,7 @@ import type { GeneratePart, GenerateResult, HostServices } from './hostRequests'
 /** A prompt part as the engine builds it: text, a blob held in the file (`hash`), or an image URL. */
 type PreparedPart = { type: 'text'; text: string } | { type: 'image'; hash?: string; url?: string; mime?: string }
 
-/** What `table.ai.prepare` answers: one model request per record to run, and the records it skips. */
+/** What `ai.prepare` answers: one model request per record to run, and the records it skips. */
 type Prepared = {
   fieldId: number
   output: 'text' | 'image'
@@ -20,7 +20,7 @@ type Prepared = {
   skipped: Array<{ recordId: number; reason?: string; message?: string }>
 }
 
-/** One record's outcome, for `table.ai.apply`. */
+/** One record's outcome, for `ai.apply`. */
 type Outcome =
   | { recordId: number; text: string }
   | { recordId: number; images: Array<{ mime: string; content: string }> }
@@ -58,7 +58,7 @@ async function mapLimited<T, R>(items: T[], limit: number, run: (item: T) => Pro
 
 /**
  * AI fields over the engine and the host's model (Kit UI protocol section 7j): the engine builds
- * each record's prompt (`table.ai.prepare`) and writes the answers (`table.ai.apply`, one Undo
+ * each record's prompt (`ai.prepare`) and writes the answers (`ai.apply`, one Undo
  * step); the host runs the model (`host/generate`, purpose `ai-field`) with the person's own
  * settings, so the kit never holds a key or picks the provider. Images held in the file go to the
  * host as bytes, external ones as their `http(s):` URL.
@@ -94,7 +94,7 @@ export function engineAIHost(
 
 /**
  * One AI field run over the engine and the host's model: prepares, generates, and applies it, and
- * answers what `table.ai.apply` answers. `engineAIHost` runs the editor's AI controls with it, and
+ * answers what `ai.apply` answers. `engineAIHost` runs the editor's AI controls with it, and
  * a table from files (`fromFiles.ts`) fills its AI fields with it.
  */
 export function engineAIRun(
@@ -153,7 +153,7 @@ export function engineAIRun(
     }
   }
 
-  /** Prepares, generates, and applies one run; answers what `table.ai.apply` answers. */
+  /** Prepares, generates, and applies one run; answers what `ai.apply` answers. */
   async function run<T>(params: RunParams, signal?: AbortSignal): Promise<T> {
     const { tableId, fieldId, action } = params
     const prepared = await source.command<Prepared>('ai.prepare', {

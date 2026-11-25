@@ -190,7 +190,7 @@ test('a step run as the agent is the agent’s: the agent’s undo and redo take
   const table = firstTable(doc)
   const primary = table.fields.find((field) => field.id === table.primary_field_id).name
   assert.equal(typeof doc.executeAs, 'function')
-  const edit = JSON.parse(doc.executeAs('table.records.create', JSON.stringify({ tableId: table.id, values: { [primary]: 'From the agent' } }), agent))
+  const edit = JSON.parse(doc.executeAs('record.add', JSON.stringify({ tableId: table.id, values: { [primary]: 'From the agent' } }), agent))
   assert.equal(edit.change.origin, 'agent:agent:kition')
   assert.deepEqual(titles(doc), ['From the agent'])
   const undone = JSON.parse(doc.executeAs('edit.undo', JSON.stringify({ scope: 'agent' }), agent))
@@ -202,21 +202,21 @@ test('a step run as the agent is the agent’s: the agent’s undo and redo take
   doc.free()
 })
 
-test('table.file.export answers the table as CSV or Markdown bytes, for the host to write, and changes nothing', () => {
+test('file.export answers the table as CSV or Markdown bytes, for the host to write, and changes nothing', () => {
   const doc = TableDocument.create('Team.ktable', 0, 0)
   add(doc, 'Ada, Countess')
   doc.markSaved()
   const table = firstTable(doc)
   const revision = doc.revision
-  const csv = JSON.parse(doc.execute('table.file.export', JSON.stringify({ format: 'csv', tableId: table.id })))
+  const csv = JSON.parse(doc.execute('file.export', JSON.stringify({ format: 'csv', tableId: table.id })))
   assert.deepEqual([csv.extension, csv.mime], ['csv', 'text/csv'])
   const text = Buffer.from(csv.data, 'base64').toString('utf8')
   assert.equal(text, call(doc, 'csv.export', { tableId: table.id }).result.content)
   assert.match(text, /"Ada, Countess"/)
-  const md = JSON.parse(doc.execute('table.file.export', JSON.stringify({ format: 'md' })))
+  const md = JSON.parse(doc.execute('file.export', JSON.stringify({ format: 'md' })))
   assert.deepEqual([md.extension, md.mime, md.tableId], ['md', 'text/markdown', table.id])
   assert.ok(Buffer.from(md.data, 'base64').toString('utf8').startsWith('|'))
-  assert.throws(() => doc.execute('table.file.export', JSON.stringify({ format: 'pdf' })))
+  assert.throws(() => doc.execute('file.export', JSON.stringify({ format: 'pdf' })))
   assert.equal(doc.revision, revision)
   assert.equal(doc.dirty, false)
   doc.free()

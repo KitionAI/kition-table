@@ -27,16 +27,16 @@ async fn derived_value_matrix() {
         for (column, (change, expected)) in CHANGES.iter().zip(expected.chars()).enumerate() {
             let f = Fixture::new(Guard::Premise);
             f.colleague(
-                "table.tables.create",
+                "table.add",
                 json!({"title":"Sources","fields":[{"name":"title","type":"text","primary":true},{"name":"notes","type":"text"}]}),
             );
             for title in ["Linked one", "Linked two"] {
-                f.colleague("table.records.create", json!({"tableId":2,"values":{"title":title,"notes":"N"}}));
+                f.colleague("record.add", json!({"tableId":2,"values":{"title":title,"notes":"N"}}));
             }
-            f.colleague("table.fields.create", json!({"tableId":1,"name":"friends","type":"link_to_record","options":{"target_table_id":2}}));
+            f.colleague("field.add", json!({"tableId":1,"name":"friends","type":"link_to_record","options":{"target_table_id":2}}));
             let doc = f.disk();
             let targets = doc.file().list_records(2).unwrap();
-            f.colleague("table.links.replace", json!({"tableId":1,"recordId":1,"field_id":6,"target_row_keys":[targets[0].row_key]}));
+            f.colleague("recordLink.replace", json!({"tableId":1,"recordId":1,"field_id":6,"target_row_keys":[targets[0].row_key]}));
             if kind != "link display" {
                 let options = if kind == "count" {
                     json!({"link_field_id":6,"aggregation":"count"})
@@ -46,32 +46,32 @@ async fn derived_value_matrix() {
                     json!({"link_field_id":6,"target_field_id":5,"aggregation":"concat"})
                 };
                 f.colleague(
-                    "table.fields.create",
+                    "field.add",
                     json!({"tableId":1,"name":"input","type":if kind == "count" {"rollup"} else {kind},"formula":"{notes}","options":options}),
                 );
             }
-            f.colleague("table.fields.create", json!({"tableId":1,"name":"summary","type":"ai","options":{"ai_config":{"type":"summarize","source_field_name":if kind == "link display" {"friends"} else {"input"}}}}));
+            f.colleague("field.add", json!({"tableId":1,"name":"summary","type":"ai","options":{"ai_config":{"type":"summarize","source_field_name":if kind == "link display" {"friends"} else {"input"}}}}));
             let (table, record, output) = (table(&f), row(&f, 1), field(&f, "summary"));
             let basis = f.basis().await;
             match column {
-                0 => f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"values":{"notes":"New local"}})),
-                1 => f.colleague("table.records.update", json!({"tableId":2,"recordId":4,"values":{"notes":"New linked"}})),
+                0 => f.colleague("record.set", json!({"tableId":1,"recordId":1,"values":{"notes":"New local"}})),
+                1 => f.colleague("record.set", json!({"tableId":2,"recordId":4,"values":{"notes":"New linked"}})),
                 2 => f.colleague(
-                    "table.links.replace",
+                    "recordLink.replace",
                     json!({"tableId":1,"recordId":1,"field_id":6,"target_row_keys":[targets[0].row_key,targets[1].row_key]}),
                 ),
-                3 => f.colleague("table.records.delete", json!({"tableId":2,"recordId":4})),
-                4 => f.colleague("table.records.update", json!({"tableId":2,"recordId":4,"values":{"title":"New display"}})),
-                5 => f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"values":{"title":"Other cell"}})),
-                6 => f.colleague("table.records.update", json!({"tableId":1,"recordId":3,"values":{"notes":"Other record"}})),
-                7 => f.colleague("table.records.update", json!({"tableId":2,"recordId":4,"order":2})),
+                3 => f.colleague("record.delete", json!({"tableId":2,"recordId":4})),
+                4 => f.colleague("record.set", json!({"tableId":2,"recordId":4,"values":{"title":"New display"}})),
+                5 => f.colleague("record.set", json!({"tableId":1,"recordId":1,"values":{"title":"Other cell"}})),
+                6 => f.colleague("record.set", json!({"tableId":1,"recordId":3,"values":{"notes":"Other record"}})),
+                7 => f.colleague("record.set", json!({"tableId":2,"recordId":4,"order":2})),
                 _ => unreachable!(),
             }
             let before = f.bytes();
             let answer = f
                 .write(
                     basis,
-                    "table.ai.apply",
+                    "ai.apply",
                     json!({"tableId":table,"fieldId":output,"recordId":record,"results":[{"recordId":record,"text":"Prepared answer"}]}),
                 )
                 .await;
@@ -112,22 +112,22 @@ async fn copy_and_type_matrix() {
         let expected_row = if kind == "type update" { "AAAAA" } else { "CAAAA" };
         for (column, expected) in expected_row.chars().enumerate() {
             let f = Fixture::new(Guard::Premise);
-            f.colleague("table.fields.create", json!({"tableId":1,"name":"computed","type":"formula","formula":"{notes}"}));
+            f.colleague("field.add", json!({"tableId":1,"name":"computed","type":"formula","formula":"{notes}"}));
             let (table, record, notes) = (table(&f), row(&f, 1), field(&f, "notes"));
             let basis = f.basis().await;
             match column {
-                0 => f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"values":{"notes":"Theirs"}})),
-                1 => f.colleague("table.records.update", json!({"tableId":1,"recordId":2,"values":{"title":"Unrelated"}})),
-                2 => f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"order":3})),
-                3 => f.colleague("table.views.patchConfig", json!({"tableId":1,"viewId":1,"row_height":"tall"})),
-                4 => f.colleague("table.tables.update", json!({"tableId":1,"title":"Renamed table"})),
+                0 => f.colleague("record.set", json!({"tableId":1,"recordId":1,"values":{"notes":"Theirs"}})),
+                1 => f.colleague("record.set", json!({"tableId":1,"recordId":2,"values":{"title":"Unrelated"}})),
+                2 => f.colleague("record.set", json!({"tableId":1,"recordId":1,"order":3})),
+                3 => f.colleague("tableView.setConfig", json!({"tableId":1,"viewId":1,"row_height":"tall"})),
+                4 => f.colleague("table.set", json!({"tableId":1,"title":"Renamed table"})),
                 _ => unreachable!(),
             }
             let before = f.bytes();
             let (command, params) = if kind == "duplicate record" {
-                ("table.records.bulkCopy", json!({"tableId":table,"row_keys":[record]}))
+                ("record.bulkCopy", json!({"tableId":table,"row_keys":[record]}))
             } else {
-                ("table.fields.update", json!({"tableId":table,"fieldId":notes,"type":"text"}))
+                ("field.set", json!({"tableId":table,"fieldId":notes,"type":"text"}))
             };
             let answer = f.write(basis, command, params).await;
             let got = super::card3_address::outcome(&answer);

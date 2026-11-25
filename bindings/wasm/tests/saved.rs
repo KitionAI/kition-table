@@ -37,11 +37,11 @@ fn representative_commands_on_every_conformance_file_reopen_as_told() {
         let view = table.views[0].id;
         let field = table.fields[0].id;
         for (command, params) in [
-            ("table.tables.update", json!({"tableId":table.id,"title":"Saved title"})),
-            ("table.fields.update", json!({"tableId":table.id,"fieldId":field,"title":"Saved field"})),
-            ("table.views.patchConfig", json!({"tableId":table.id,"viewId":view,"row_height":"tall"})),
-            ("table.views.patchField", json!({"tableId":table.id,"viewId":view,"fieldId":field,"width":5000,"visible":false})),
-            ("table.fields.create", json!({"tableId":table.id,"title":"Saved addition","order":2})),
+            ("table.set", json!({"tableId":table.id,"title":"Saved title"})),
+            ("field.set", json!({"tableId":table.id,"fieldId":field,"title":"Saved field"})),
+            ("tableView.setConfig", json!({"tableId":table.id,"viewId":view,"row_height":"tall"})),
+            ("tableView.setField", json!({"tableId":table.id,"viewId":view,"fieldId":field,"width":5000,"visible":false})),
+            ("field.add", json!({"tableId":table.id,"title":"Saved addition","order":2})),
         ] {
             doc.execute(command, params).unwrap();
             agrees(&mut doc, command);
@@ -58,7 +58,7 @@ fn fractional_model_width_is_the_integer_width_the_api_and_file_hold() {
     let view = doc.file().replica().objects_of_type("View")[0].clone();
     let field = doc.file().replica().objects_of_type("Field")[0].clone();
     let field_id: i64 = doc.file().conn().query_row("SELECT id FROM kition_fields WHERE kdm_id = ?1", [field.as_str()], |r| r.get(0)).unwrap();
-    doc.execute("table.views.patchField", json!({"tableId":1,"viewId":1,"fieldId":field_id,"width":200})).unwrap();
+    doc.execute("tableView.setField", json!({"tableId":1,"viewId":1,"fieldId":field_id,"width":200})).unwrap();
     let answer = Exchange::new()
         .batch(
             &mut doc,
@@ -79,14 +79,14 @@ fn fractional_model_width_is_the_integer_width_the_api_and_file_hold() {
 fn column_layout_changes_are_in_the_replica_receipt() {
     let mut doc = TableDocument::create("Saved.ktable", 0, 0).unwrap();
     let before = doc.version();
-    doc.execute("table.views.patchField", json!({"tableId":1,"viewId":1,"fieldId":1,"position":2,"frozen":true})).unwrap();
+    doc.execute("tableView.setField", json!({"tableId":1,"viewId":1,"fieldId":1,"position":2,"frozen":true})).unwrap();
     assert_ne!(doc.version(), before, "a public document write must have a replica change");
     let mut again = TableDocument::open("Saved.ktable", &doc.saved_bytes().unwrap()).unwrap();
-    let fields = again.execute("table.views.listFields", json!({"tableId":1,"viewId":1})).unwrap();
+    let fields = again.execute("tableView.listFields", json!({"tableId":1,"viewId":1})).unwrap();
     assert_eq!(fields["result"]["items"][0]["position"], 2);
     assert_eq!(fields["result"]["items"][0]["frozen"], true);
     doc.execute("edit.undo", json!({})).unwrap();
-    let fields = doc.execute("table.views.listFields", json!({"tableId":1,"viewId":1})).unwrap();
+    let fields = doc.execute("tableView.listFields", json!({"tableId":1,"viewId":1})).unwrap();
     assert_eq!(fields["result"]["items"][0]["position"], 0, "undo removes the layout from the projection");
     assert_eq!(fields["result"]["items"][0]["frozen"], false);
 }

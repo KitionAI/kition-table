@@ -30,19 +30,19 @@ fn result(doc: &mut TableDocument, command: &str, params: Value) -> Value {
 /// field), and a view of Projects that keeps the open ones, by title from Z to A.
 fn fixture() -> TableDocument {
     let mut doc = TableDocument::create("Work.ktable", 0, 0).unwrap();
-    doc.execute("table.tables.delete", json!({ "tableId": 1, "asOrigin": "system:setup" })).unwrap();
+    doc.execute("table.delete", json!({ "tableId": 1, "asOrigin": "system:setup" })).unwrap();
     let people = result(
         &mut doc,
-        "table.tables.create",
+        "table.add",
         json!({ "title": "People", "name": "people", "fields": [{ "title": "Name", "name": "name", "type": "text", "primary": true }] }),
     );
     let people_id = people["id"].as_i64().unwrap();
     for name in ["Ada", "Grace", "Linus"] {
-        result(&mut doc, "table.records.create", json!({ "tableId": people_id, "values": { "name": name } }));
+        result(&mut doc, "record.add", json!({ "tableId": people_id, "values": { "name": name } }));
     }
     let projects = result(
         &mut doc,
-        "table.tables.create",
+        "table.add",
         json!({ "title": "Projects", "name": "projects", "fields": [
             { "title": "Title", "name": "title", "type": "text", "primary": true },
             { "title": "Status", "name": "status", "type": "single_select", "options": { "choices": ["Open", "Done"] } },
@@ -50,27 +50,27 @@ fn fixture() -> TableDocument {
         ] }),
     );
     let projects_id = projects["id"].as_i64().unwrap();
-    let ada = result(&mut doc, "table.records.list", json!({ "tableId": people_id }))["items"][0]["id"].clone();
+    let ada = result(&mut doc, "record.list", json!({ "tableId": people_id }))["items"][0]["id"].clone();
     for n in 1..=30 {
         let status = if n % 3 == 0 { "Done" } else { "Open" };
         result(
             &mut doc,
-            "table.records.create",
+            "record.add",
             json!({ "tableId": projects_id, "values": { "title": format!("Project {n:02}"), "status": status, "lead": [ada] } }),
         );
     }
-    let view = result(&mut doc, "table.views.create", json!({ "tableId": projects_id, "title": "Open work", "type": "grid" }));
+    let view = result(&mut doc, "tableView.add", json!({ "tableId": projects_id, "title": "Open work", "type": "grid" }));
     let status = projects["fields"].as_array().unwrap().iter().find(|field| field["name"] == "status").unwrap()["id"].clone();
     let title = projects["fields"].as_array().unwrap().iter().find(|field| field["name"] == "title").unwrap()["id"].clone();
     let view_id = view["id"].clone();
     result(
         &mut doc,
-        "table.views.putFilterTree",
+        "tableView.setFilterTree",
         json!({ "tableId": projects_id, "viewId": view_id, "tree": { "conjunction": "and", "children": [{ "condition": { "field_id": status, "operator": "neq", "value": "Done" } }] } }),
     );
     result(
         &mut doc,
-        "table.views.putSorts",
+        "tableView.setSorts",
         json!({ "tableId": projects_id, "viewId": view_id, "items": [{ "field_id": title, "direction": "desc" }] }),
     );
     doc
@@ -167,12 +167,12 @@ fn inspect_answers_tables_fields_views_and_records_with_the_ids_the_commands_tak
 
     // The ids work in the commands as they are.
     let (table_id, record_id) = (projects["id"].clone(), records["rows"][1]["id"].clone());
-    let updated = w.run(&id, "table.records.update", json!({ "tableId": table_id, "recordId": record_id, "values": { "status": "Done" } }));
+    let updated = w.run(&id, "record.set", json!({ "tableId": table_id, "recordId": record_id, "values": { "status": "Done" } }));
     assert_eq!(updated["result"]["values"]["title"], "Project 02");
     let view_id = view["id"].clone();
     w.run(
         &id,
-        "table.views.putSorts",
+        "tableView.setSorts",
         json!({ "tableId": table_id, "viewId": view_id, "items": [{ "field_id": field(projects, "status")["id"], "direction": "asc" }] }),
     );
 }
@@ -187,7 +187,7 @@ fn inspect_cuts_the_records_and_table_read_lists_the_rest_a_page_at_a_time() {
     assert_eq!(records["rows"].as_array().unwrap().len(), 20, "a table's records are cut: {records}");
     assert_eq!((records["from"].clone(), records["to"].clone(), records["total"].clone()), (json!(1), json!(20), json!(30)));
     let next = records["next"].clone();
-    assert_eq!(next["command"], "table.read", "the cut answer names the step for the rest: {records}");
+    assert_eq!(next["command"], "file.read", "the cut answer names the step for the rest: {records}");
     assert!(table(&inspected, "people")["records"].get("next").is_none(), "nothing is cut of People");
 
     // The step, run as it is, lists the rest; the last page names no next.
@@ -199,15 +199,15 @@ fn inspect_cuts_the_records_and_table_read_lists_the_rest_a_page_at_a_time() {
 
     // One view's records: those its filter keeps, in its order, `limit` at a time.
     let view_id = projects["views"].as_array().unwrap().iter().find(|view| view["label"] == "Open work").unwrap()["id"].clone();
-    let first = w.run(&id, "table.read", json!({ "viewId": view_id, "limit": 5 }))["result"].clone();
+    let first = w.run(&id, "file.read", json!({ "viewId": view_id, "limit": 5 }))["result"].clone();
     assert_eq!(first["total"], 20, "30 projects, 10 done");
     assert_eq!(first["rows"].as_array().unwrap().len(), 5);
     assert_eq!(cell(&first, 0, "title"), "Project 29");
     assert_eq!(cell(&first, 1, "title"), "Project 28");
-    let second = w.run(&id, "table.read", first["next"]["params"].clone())["result"].clone();
+    let second = w.run(&id, "file.read", first["next"]["params"].clone())["result"].clone();
     assert_eq!(cell(&second, 0, "title"), "Project 22");
-    assert!(w.kit.execute(&id, "table.read", params(json!({ "viewId": 999 })), Origin::Agent).is_err());
-    assert!(w.kit.execute(&id, "table.read", params(json!({ "tableId": 1, "limit": 0 })), Origin::Agent).is_err());
+    assert!(w.kit.execute(&id, "file.read", params(json!({ "viewId": 999 })), Origin::Agent).is_err());
+    assert!(w.kit.execute(&id, "file.read", params(json!({ "tableId": 1, "limit": 0 })), Origin::Agent).is_err());
 }
 
 #[test]
@@ -218,8 +218,8 @@ fn an_edit_changes_the_answer_and_survives_a_save_and_a_reopen() {
     let projects = table(&before, "projects");
     let (table_id, status) = (projects["id"].clone(), field(projects, "status")["id"].clone());
     let record = projects["records"]["rows"][0]["id"].clone();
-    w.run(&id, "table.fields.update", json!({ "tableId": table_id, "fieldId": status, "title": "Stage" }));
-    w.run(&id, "table.records.update", json!({ "tableId": table_id, "recordId": record, "values": { "title": "Renamed project" } }));
+    w.run(&id, "field.set", json!({ "tableId": table_id, "fieldId": status, "title": "Stage" }));
+    w.run(&id, "record.set", json!({ "tableId": table_id, "recordId": record, "values": { "title": "Renamed project" } }));
     let edited = w.inspect(&id);
     assert_ne!(edited, before);
     let projects = table(&edited, "projects");

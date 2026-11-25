@@ -74,7 +74,7 @@ describe('co-editing a table', () => {
     }
     const byId = new Map(commands.map((command) => [command.id, command]))
     // The edit a viewer tries in Kition One's case, and the ones the grid makes.
-    for (const id of ['table.records.create', 'table.records.update', 'table.records.delete', 'table.fields.create', 'table.tables.delete', 'edit.undo']) {
+    for (const id of ['record.add', 'record.set', 'record.delete', 'field.add', 'table.delete', 'edit.undo']) {
       expect([id, editsDocument(byId.get(id)!)]).toEqual([id, true])
     }
     for (const method of READS) expect([method, byId.has(`table.${method}`)]).toEqual([method, true])
@@ -92,7 +92,7 @@ describe('co-editing a table', () => {
     source.observe(Number(bob.revision))
 
     // Ann's edit arrives.
-    ann.execute('table.records.create', JSON.stringify({ tableId: 1, values: { title: 'Ann wrote this' } }))
+    ann.execute('record.add', JSON.stringify({ tableId: 1, values: { title: 'Ann wrote this' } }))
     relay(ann, bob)
     source.observe(Number(bob.revision))
     await vi.waitFor(() => expect(heard).toHaveLength(1))
@@ -110,7 +110,7 @@ describe('co-editing a table', () => {
     // And Bob's edit reaches Ann: both show both records.
     relay(bob, ann)
     const titles = async (doc: Doc) => {
-      const page = JSON.parse(doc.execute('table.records.list', JSON.stringify({ tableId: 1 }))).result as { items: Array<{ values: { title: string } }> }
+      const page = JSON.parse(doc.execute('record.list', JSON.stringify({ tableId: 1 }))).result as { items: Array<{ values: { title: string } }> }
       return page.items.map((record) => record.values.title).sort()
     }
     expect(await titles(ann)).toEqual(['Ann wrote this', 'Bob wrote this'])

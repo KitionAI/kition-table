@@ -101,7 +101,7 @@ describe('a table from files leaves no half-made table', () => {
   it('after the engine refuses the second record, the document holds what it held before', async () => {
     const doc = documentWithAnEdit()
     const before = contents(doc)
-    const source = sourceOf(doc, (command, nth) => command === 'table.records.create' && nth === 2)
+    const source = sourceOf(doc, (command, nth) => command === 'record.add' && nth === 2)
     await expect(tableFromFiles({ source, services: model(), files: RECEIPTS, request: 'Archive my receipts' })).rejects.toThrow()
     expect(contents(doc)).toEqual(before)
     doc.free()
@@ -152,7 +152,7 @@ describe('making a table from files is one undo step', () => {
 
   it('Undo after a failure brings nothing of the run back', async () => {
     const doc = documentWithAnEdit()
-    const source = sourceOf(doc, (command, nth) => command === 'table.records.create' && nth === 2)
+    const source = sourceOf(doc, (command, nth) => command === 'record.add' && nth === 2)
     await expect(tableFromFiles({ source, services: model(), files: RECEIPTS, request: 'Archive my receipts' })).rejects.toThrow()
     call(doc, 'undo')
     expect(contents(doc).some((table) => table.title === 'Receipt Archive')).toBe(false)

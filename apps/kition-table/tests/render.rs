@@ -119,7 +119,7 @@ fn expected(name: &str) -> Image {
 #[test]
 fn the_render_command_draws_the_expected_previews_with_the_embedded_faces() {
     let mut k = open("expected");
-    assert_eq!(k.command, "table.file.render");
+    assert_eq!(k.command, "file.render");
     for (name, value) in [
         ("basic.png", json!({ "scale": 1 })),
         ("basic-scale-2.png", json!({ "scale": 2 })),
@@ -142,9 +142,9 @@ fn scale_size_and_parts() {
     assert_eq!(k.render(json!({ "target": { "path": "tables/1" } })).rgba, whole.rgba);
 
     // A view: the records it keeps (one of the two is not done).
-    let view = k.run("table.views.create", json!({ "tableId": 1, "title": "Open", "type": "grid" })).unwrap()["result"]["id"].clone();
+    let view = k.run("tableView.add", json!({ "tableId": 1, "title": "Open", "type": "grid" })).unwrap()["result"]["id"].clone();
     k.run(
-        "table.views.putFilterTree",
+        "tableView.setFilterTree",
         json!({ "tableId": 1, "viewId": view, "tree": { "conjunction": "and", "children": [{ "condition": { "field_id": 2, "operator": "neq", "value": "Done" } }] } }),
     )
     .unwrap();
@@ -153,7 +153,7 @@ fn scale_size_and_parts() {
 
     // A range of rows, counted from 1: rows 3 to 5 of 12.
     for n in 0..10 {
-        k.run("table.records.create", json!({ "tableId": 1, "values": { "title": format!("Task {n}") } })).unwrap();
+        k.run("record.add", json!({ "tableId": 1, "values": { "title": format!("Task {n}") } })).unwrap();
     }
     let all = k.render(json!({}));
     assert_eq!(all.height, 276 + 10 * 40);

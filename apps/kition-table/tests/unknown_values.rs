@@ -1,5 +1,5 @@
 //! A record `values` key that names no field of the table is refused, not dropped:
-//! `table.records.create`, `table.records.update` and `table.transact` (its `cells.set` and
+//! `record.add`, `record.set` and `edit.transact` (its `cells.set` and
 //! `records.create` ops) answer `invalid_params` with one `data.errors` entry per unknown key, at
 //! its JSON Pointer, and the call changes nothing. A key that is a field's title, or its name in
 //! another case or with spaces for underscores, is told the field's name. The engine refuses it,
@@ -30,7 +30,7 @@ fn contacts(name: &str) -> (Headless<TableDocument>, String, HostFolder) {
     let file = folder.file(&format!("{name}.ktable")).unwrap();
     let id = kit.open(OpenRequest { file: &file, read_only: false, create: Some(("ktable", None)) }).unwrap().id;
     let fields = json!([{ "title": "Primary channel", "type": "text", "primary": true }, { "title": "Email", "type": "text" }]);
-    let table = run(&mut kit, &id, "table.tables.create", json!({ "title": "Contacts", "fields": fields }));
+    let table = run(&mut kit, &id, "table.add", json!({ "title": "Contacts", "fields": fields }));
     assert_eq!(table["result"]["id"], 2);
     let names: Vec<&str> = table["result"]["fields"].as_array().unwrap().iter().map(|field| field["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["primary_channel", "email"], "the names derived from the titles");
@@ -62,7 +62,7 @@ fn refused(kit: &mut Headless<TableDocument>, id: &str, command: &str, call: Val
 }
 
 fn records(kit: &mut Headless<TableDocument>, id: &str) -> Vec<Value> {
-    run(kit, id, "table.records.list", json!({ "tableId": 2 }))["result"]["items"].as_array().unwrap().clone()
+    run(kit, id, "record.list", json!({ "tableId": 2 }))["result"]["items"].as_array().unwrap().clone()
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn records_create_refuses_a_key_that_names_no_field_and_writes_nothing() {
     let (detail, errors) = refused(
         &mut kit,
         &id,
-        "table.records.create",
+        "record.add",
         json!({ "tableId": 2, "values": { "Primary channel": "Email", "a/b~c": 1, "email": "ada@example.com" } }),
     );
     let title = "`values.Primary channel` names no field of table 2; the field titled \"Primary channel\" is named `primary_channel`";
@@ -82,26 +82,25 @@ fn records_create_refuses_a_key_that_names_no_field_and_writes_nothing() {
 
     // A name in another case, or with spaces for underscores, is told the name too.
     for key in ["PRIMARY_CHANNEL", "primary channel"] {
-        let (_, errors) = refused(&mut kit, &id, "table.records.create", json!({ "tableId": 2, "values": { key: "Email" } }));
+        let (_, errors) = refused(&mut kit, &id, "record.add", json!({ "tableId": 2, "values": { key: "Email" } }));
         assert_eq!(errors.len(), 1);
         assert!(errors[0].1.ends_with("is named `primary_channel`"), "{key}: {}", errors[0].1);
     }
 
     // Keyed by name, the same record is written.
-    let created = run(&mut kit, &id, "table.records.create", json!({ "tableId": 2, "values": { "primary_channel": "Email" } }));
+    let created = run(&mut kit, &id, "record.add", json!({ "tableId": 2, "values": { "primary_channel": "Email" } }));
     assert_eq!(created["result"]["values"]["primary_channel"], "Email");
 }
 
 #[test]
 fn records_update_refuses_a_key_that_names_no_field_and_writes_nothing() {
     let (mut kit, id, _folder) = contacts("update");
-    let created =
-        run(&mut kit, &id, "table.records.create", json!({ "tableId": 2, "values": { "primary_channel": "Email", "email": "ada@example.com" } }));
+    let created = run(&mut kit, &id, "record.add", json!({ "tableId": 2, "values": { "primary_channel": "Email", "email": "ada@example.com" } }));
     let record_id = created["result"]["id"].clone();
     let (_, errors) = refused(
         &mut kit,
         &id,
-        "table.records.update",
+        "record.set",
         json!({ "tableId": 2, "recordId": record_id, "values": { "no_such_field": "x", "email": "bob@example.com" } }),
     );
     assert_eq!(errors, [("/values/no_such_field".to_owned(), "`values.no_such_field` names no field of table 2".to_owned())]);
@@ -111,13 +110,13 @@ fn records_update_refuses_a_key_that_names_no_field_and_writes_nothing() {
 #[test]
 fn transact_refuses_a_key_that_names_no_field_in_any_op_and_writes_nothing() {
     let (mut kit, id, _folder) = contacts("transact");
-    let created = run(&mut kit, &id, "table.records.create", json!({ "tableId": 2, "values": { "email": "ada@example.com" } }));
+    let created = run(&mut kit, &id, "record.add", json!({ "tableId": 2, "values": { "email": "ada@example.com" } }));
     let row_key = created["result"]["row_key"].clone();
     let ops = json!([
         { "op": "cells.set", "tableId": 2, "records": [{ "rowKey": row_key, "values": { "email": "bob@example.com", "Email": "bob@example.com" } }] },
         { "op": "records.create", "tableId": 2, "records": [{ "primary_channel": "Phone" }, { "Bogus": 1 }] },
     ]);
-    let (_, errors) = refused(&mut kit, &id, "table.transact", json!({ "ops": ops }));
+    let (_, errors) = refused(&mut kit, &id, "edit.transact", json!({ "ops": ops }));
     assert_eq!(
         errors,
         [
@@ -137,9 +136,9 @@ fn transact_refuses_a_key_that_names_no_field_in_any_op_and_writes_nothing() {
 fn the_in_page_engine_refuses_with_the_same_errors() {
     let mut doc = TableDocument::create("Table.ktable", 0, 0).unwrap();
     let fields = json!([{ "title": "Primary channel", "type": "text", "primary": true }]);
-    doc.execute("table.tables.create", json!({ "title": "Contacts", "fields": fields })).unwrap();
+    doc.execute("table.add", json!({ "title": "Contacts", "fields": fields })).unwrap();
     let revision = doc.revision();
-    let error = doc.execute("table.records.create", json!({ "tableId": 2, "values": { "Primary channel": "Email" } })).unwrap_err();
+    let error = doc.execute("record.add", json!({ "tableId": 2, "values": { "Primary channel": "Email" } })).unwrap_err();
     // `kition_kit::schema::refusal`: the message, the record separator, the errors as JSON.
     let (message, errors) = error.split_once('\u{1e}').unwrap_or_else(|| panic!("not a refusal: {error:?}"));
     let title = "`values.Primary channel` names no field of table 2; the field titled \"Primary channel\" is named `primary_channel`";

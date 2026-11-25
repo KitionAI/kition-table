@@ -18,7 +18,7 @@ fn first_table(doc: &mut TableDocument) -> (i64, String) {
 
 fn add_record(doc: &mut TableDocument, title: &str) -> Value {
     let (table_id, field) = first_table(doc);
-    doc.execute("table.records.create", json!({ "tableId": table_id, "values": { field: title } })).unwrap()
+    doc.execute("record.add", json!({ "tableId": table_id, "values": { field: title } })).unwrap()
 }
 
 fn titles(doc: &mut TableDocument) -> Vec<String> {
@@ -99,7 +99,7 @@ fn every_read_method_is_known_and_its_command_does_not_mutate() {
         let command = commands.iter().find(|command| command.id == format!("table.{method}")).unwrap();
         assert!(!command.mutates, "{method}");
     }
-    let create = commands.iter().find(|command| command.id == "table.records.create").unwrap();
+    let create = commands.iter().find(|command| command.id == "record.add").unwrap();
     assert!(create.mutates);
 }
 
@@ -215,8 +215,7 @@ fn a_change_undo_does_not_revert_keeps_the_document_unsaved() {
     let mut doc = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     add_record(&mut doc, "Ada");
     let (table_id, field) = first_table(&mut doc);
-    doc.execute_as("table.records.create", json!({ "tableId": table_id, "values": { field: "Repair" } }), &kition_kdm::Origin::system("repair"))
-        .unwrap();
+    doc.execute_as("record.add", json!({ "tableId": table_id, "values": { field: "Repair" } }), &kition_kdm::Origin::system("repair")).unwrap();
     doc.execute("edit.undo", json!({})).unwrap();
     assert_eq!(titles(&mut doc), ["Repair"]);
     assert!(doc.dirty());
@@ -362,7 +361,7 @@ fn execute_as_records_the_given_origin_and_keeps_the_editors() {
     let mut doc = new_document();
     let (table_id, field) = first_table(&mut doc);
     let origin = kition_kdm::Origin::agent("agent-1");
-    let answer = doc.execute_as("table.records.create", json!({ "tableId": table_id, "values": { field: "From the agent" } }), &origin).unwrap();
+    let answer = doc.execute_as("record.add", json!({ "tableId": table_id, "values": { field: "From the agent" } }), &origin).unwrap();
     assert_eq!(answer["change"]["origin"], "agent:agent-1");
     let mine = add_record(&mut doc, "Mine");
     assert_eq!(mine["change"]["origin"], "person:kit");
@@ -486,11 +485,8 @@ fn two_copies_sync_a_blob_attachment() {
 fn inspect_lists_the_tables_and_dashboards_a_view_can_name() {
     let mut doc = new_document();
     let (table_id, _) = first_table(&mut doc);
-    doc.execute(
-        "table.dashboards.upsert",
-        json!({ "dashboardId": "overview", "title": "Overview", "source_table_id": table_id, "layout": [], "widgets": [] }),
-    )
-    .unwrap();
+    doc.execute("dashboard.set", json!({ "dashboardId": "overview", "title": "Overview", "source_table_id": table_id, "layout": [], "widgets": [] }))
+        .unwrap();
     let inspected = doc.inspect().unwrap();
     assert_eq!(inspected["tables"][0]["id"], table_id);
     let dashboards = inspected["dashboards"].as_array().unwrap();

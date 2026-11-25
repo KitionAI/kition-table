@@ -168,8 +168,8 @@ An agent reads the file, then runs commands by the ids it was given:
 ```json
 table_inspect {"path": "crm.ktable"}
 table_run {"path": "crm.ktable", "basis": "<revision>", "steps": [
-  {"command": "table.records.create", "params": {"tableId": 1, "values": {"title": "Book the venue", "status": "To do"}}},
-  {"command": "table.records.update", "params": {"tableId": 1, "recordId": 1, "values": {"status": "In progress"}}}
+  {"command": "record.add", "params": {"tableId": 1, "values": {"title": "Book the venue", "status": "To do"}}},
+  {"command": "record.set", "params": {"tableId": 1, "recordId": 1, "values": {"status": "In progress"}}}
 ]}
 table_check {"path": "crm.ktable"}
 ```

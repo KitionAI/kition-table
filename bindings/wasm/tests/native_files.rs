@@ -22,7 +22,7 @@ fn a_document_the_kit_saves_opens_natively_with_its_edits() {
     let mut doc = TableDocument::create("Tasks.ktable", 0, 0).unwrap();
     let document = doc.call("documents.get", &Value::Null).unwrap()["result"].clone();
     let table_id = document["tables"][0]["id"].as_i64().unwrap();
-    let rows = doc.execute("table.records.create", json!({ "tableId": table_id, "values": { "title": "From the kit" } })).unwrap();
+    let rows = doc.execute("record.add", json!({ "tableId": table_id, "values": { "title": "From the kit" } })).unwrap();
     let field = rows["result"]["values"].as_object().unwrap().keys().next().unwrap().clone();
     let path = scratch("kit-saved.ktable");
     std::fs::write(&path, doc.saved_bytes().unwrap()).unwrap();

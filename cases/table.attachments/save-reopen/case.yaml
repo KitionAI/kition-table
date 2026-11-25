@@ -2,7 +2,7 @@ format: 1
 id: table.attachments/save-reopen
 feature: table.attachments
 intent: >-
-  An attachment put with table.attachments.put travels in the .ktable: after a save and reopen, and a second save, table.attachments.read answers the same bytes.
+  An attachment put with attachment.add travels in the .ktable: after a save and reopen, and a second save, attachment.get answers the same bytes.
 layer: gate
 source:
   kind: synthetic

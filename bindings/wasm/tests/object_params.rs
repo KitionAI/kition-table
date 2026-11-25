@@ -5,7 +5,7 @@ use kition_table_kit::{KitDocument, TableDocument};
 use serde_json::Value;
 
 // This denotes the host's singleton document, not an object in the table replica.
-const ALLOW: &[(&str, &str)] = &[("table.import.run", "target.document_id")];
+const ALLOW: &[(&str, &str)] = &[("file.runImport", "target.document_id")];
 
 fn walk(node: &Value, path: &str, visit: &mut impl FnMut(&str, &Value)) {
     visit(path, node);
@@ -45,8 +45,8 @@ fn every_id_parameter_is_marked_and_typed() {
     println!("ID declarations: {count} marked; {} allowed: target.document_id is the host singleton", ALLOW.len());
     // The SDK scanner also has to detect a declaration removed later.
     let mut missing = commands;
-    missing.iter_mut().find(|c| c.id == "table.tables.update").unwrap().objects = &[];
-    missing.iter_mut().find(|c| c.id == "table.tables.update").unwrap().places = &[];
+    missing.iter_mut().find(|c| c.id == "table.set").unwrap().objects = &[];
+    missing.iter_mut().find(|c| c.id == "table.set").unwrap().places = &[];
     assert!(kition_kit::testing::check_id_params(&missing, ALLOW).is_err());
 }
 
@@ -62,8 +62,8 @@ fn name_inputs_are_creation_names_or_have_a_declaration() {
                     return;
                 }
                 let reason = match (command.id.as_str(), path) {
-                    ("table.tables.create", "name" | "fields[].name") | ("table.fields.create", "name") => "assigns a new internal name",
-                    ("table.attachments.put", "name") => "assigns a blob filename",
+                    ("table.add", "name" | "fields[].name") | ("field.add", "name") => "assigns a new internal name",
+                    ("attachment.add", "name") => "assigns a blob filename",
                     _ => {
                         assert!(command.name_params.iter().any(|(p, _)| *p == path), "{} {path}", command.id);
                         "resolves an existing object"
@@ -82,13 +82,13 @@ fn nested_references_follow_the_resolver() {
     let doc = TableDocument::create("Tasks.ktable", 0, 0).unwrap();
     let commands = doc.commands();
     for (id, path, ty) in [
-        ("table.ai.apply", "results[].recordId", "Record"),
-        ("table.fields.create", "options.target_table_id", "Table"),
-        ("table.fields.update", "options.ai_config.source_field_id", "Field"),
-        ("table.views.putSorts", "items[].field_id", "Field"),
-        ("table.transact", "ops[].fieldIds", "Field"),
-        ("table.transact", "ops[].records[].rowKey", "Record"),
-        ("table.import.run", "target.table_id", "Table"),
+        ("ai.apply", "results[].recordId", "Record"),
+        ("field.add", "options.target_table_id", "Table"),
+        ("field.set", "options.ai_config.source_field_id", "Field"),
+        ("tableView.setSorts", "items[].field_id", "Field"),
+        ("edit.transact", "ops[].fieldIds", "Field"),
+        ("edit.transact", "ops[].records[].rowKey", "Record"),
+        ("file.runImport", "target.table_id", "Table"),
     ] {
         let command = commands.iter().find(|c| c.id == id).unwrap();
         assert!(command.objects.contains(&path), "{id} {path}");
@@ -99,7 +99,7 @@ fn nested_references_follow_the_resolver() {
 #[test]
 fn source_field_names_are_declared_as_names_not_new_labels() {
     let doc = TableDocument::create("Tasks.ktable", 0, 0).unwrap();
-    for id in ["table.fields.create", "table.fields.update"] {
+    for id in ["field.add", "field.set"] {
         let command = doc.commands().into_iter().find(|c| c.id == id).unwrap();
         assert!(command.name_params.contains(&("options.ai_config.source_field_name", "name")), "{id}");
     }

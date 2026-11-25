@@ -1,4 +1,4 @@
-//! The agent's preview (`table.file.render`, KHP A39) of `conformance/basic.ktable`: not uniform,
+//! The agent's preview (`file.render`, KHP A39) of `conformance/basic.ktable`: not uniform,
 //! framed to the table's fields and records, of a diagnostic's target (`target`), at a scale up to 2 and a
 //! size budget, and equal to `conformance/expected/` within `expected/tolerance.json`. The picture's
 //! faces come from the kition-fonts checkout beside this repository (or `KITION_FONTS_DIR`).
@@ -45,7 +45,7 @@ fn decode(png_bytes: &[u8]) -> Image {
 
 /// The preview's answer and its pixels.
 fn render(doc: &mut TableDocument, params: Value) -> (Value, Image, Vec<u8>) {
-    let answer = doc.execute("table.file.render", params).unwrap();
+    let answer = doc.execute("file.render", params).unwrap();
     assert_eq!(answer["mimeType"], "image/png");
     let bytes = base64::engine::general_purpose::STANDARD.decode(answer["png"].as_str().unwrap()).unwrap();
     let image = decode(&bytes);
@@ -59,14 +59,14 @@ fn colours(image: &Image) -> BTreeSet<[u8; 4]> {
 
 /// The basic fixture's ids: its table, its second record, and its `status` field.
 fn title(doc: &mut TableDocument) -> String {
-    doc.execute("table.tables.list", json!({})).unwrap()["result"]["items"][0]["title"].as_str().unwrap().to_owned()
+    doc.execute("table.list", json!({})).unwrap()["result"]["items"][0]["title"].as_str().unwrap().to_owned()
 }
 
 fn ids(doc: &mut TableDocument) -> (i64, i64, i64) {
-    let document = doc.execute("table.documents.get", json!({})).unwrap()["result"].clone();
+    let document = doc.execute("file.get", json!({})).unwrap()["result"].clone();
     let table = &document["tables"][0];
     let status = table["fields"].as_array().unwrap().iter().find(|field| field["name"] == "status").unwrap()["id"].as_i64().unwrap();
-    let records = doc.execute("table.records.list", json!({ "tableId": table["id"] })).unwrap()["result"]["items"].clone();
+    let records = doc.execute("record.list", json!({ "tableId": table["id"] })).unwrap()["result"]["items"].clone();
     (table["id"].as_i64().unwrap(), records[1]["id"].as_i64().unwrap(), status)
 }
 
@@ -80,7 +80,7 @@ fn the_preview_is_real_and_framed_to_the_table() {
     assert_eq!((image.width, image.height), (772, 276));
     assert_eq!((doc.width(), doc.height()), (772, 276));
     assert!(colours(&image).len() > 4, "a uniform preview: {:?}", colours(&image));
-    doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "Ship the plan" } })).unwrap();
+    doc.execute("record.add", json!({ "tableId": 1, "values": { "title": "Ship the plan" } })).unwrap();
     let (_, grown, _) = render(&mut doc, json!({}));
     assert_eq!((grown.width, grown.height), (772, 316));
 }
@@ -93,7 +93,7 @@ fn scale_and_size_budget() {
     let (_, small, _) = render(&mut doc, json!({ "scale": 2, "maxSize": 120 }));
     assert_eq!((small.width, small.height), (120, 43));
     for bad in [json!({ "scale": 3 }), json!({ "scale": 0 }), json!({ "maxSize": 5000 }), json!({ "target": "tables/1" })] {
-        assert!(doc.execute("table.file.render", bad.clone()).is_err(), "{bad}");
+        assert!(doc.execute("file.render", bad.clone()).is_err(), "{bad}");
     }
 }
 
@@ -112,7 +112,7 @@ fn a_target_moves_the_preview_to_it() {
     let (_, by_title, _) = render(&mut doc, json!({ "target": { "sheet": sheet } }));
     assert_eq!(by_title.rgba, whole.rgba);
     for missing in ["tables/99", format!("tables/{table}/records/99/fields/{status}").as_str(), "dashboards/none"] {
-        let error = doc.execute("table.file.render", json!({ "target": { "path": missing } })).unwrap_err();
+        let error = doc.execute("file.render", json!({ "target": { "path": missing } })).unwrap_err();
         assert!(error.contains("not found"), "{missing}: {error}");
     }
     // A diagnostic's target previews as it is: the fixture's own check targets.

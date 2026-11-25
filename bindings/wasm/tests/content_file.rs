@@ -55,13 +55,12 @@ fn stored(bytes: &[u8]) -> (Vec<u8>, i64) {
 fn table_with_history() -> (TableDocument, i64) {
     let mut doc = TableDocument::create(FILE, 0, 0).unwrap();
     CREATED.with(|created| *created.borrow_mut() = doc.version());
-    let kept =
-        run(&mut doc, "table.records.create", json!({ "tableId": 1, "values": { "title": "Kept", "notes": "Start" } }))["id"].as_i64().unwrap();
-    run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "notes": format!("Start {TYPED_THEN_DELETED}") } }));
-    run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "notes": "Start", "title": OVERWRITTEN } }));
-    run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "title": "Kept" } }));
-    let gone = run(&mut doc, "table.records.create", json!({ "tableId": 1, "values": { "title": DELETED_RECORD } }))["id"].as_i64().unwrap();
-    run(&mut doc, "table.records.delete", json!({ "tableId": 1, "recordId": gone }));
+    let kept = run(&mut doc, "record.add", json!({ "tableId": 1, "values": { "title": "Kept", "notes": "Start" } }))["id"].as_i64().unwrap();
+    run(&mut doc, "record.set", json!({ "tableId": 1, "recordId": kept, "values": { "notes": format!("Start {TYPED_THEN_DELETED}") } }));
+    run(&mut doc, "record.set", json!({ "tableId": 1, "recordId": kept, "values": { "notes": "Start", "title": OVERWRITTEN } }));
+    run(&mut doc, "record.set", json!({ "tableId": 1, "recordId": kept, "values": { "title": "Kept" } }));
+    let gone = run(&mut doc, "record.add", json!({ "tableId": 1, "values": { "title": DELETED_RECORD } }))["id"].as_i64().unwrap();
+    run(&mut doc, "record.delete", json!({ "tableId": 1, "recordId": gone }));
     (doc, kept)
 }
 
@@ -128,7 +127,7 @@ fn a_file_opened_alone_is_the_same_document_with_its_ids_and_edits() {
     };
     assert_eq!(ids(&opened), ids(&doc), "every object keeps its id");
     assert_eq!(opened.file().get_record(1, kept).unwrap().row_key, doc.file().get_record(1, kept).unwrap().row_key);
-    run(&mut opened, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "notes": "Start, then more" } }));
+    run(&mut opened, "record.set", json!({ "tableId": 1, "recordId": kept, "values": { "notes": "Start, then more" } }));
     assert_eq!(opened.file().get_record(1, kept).unwrap().values["notes"], "Start, then more");
     let again = host_save(&mut opened);
     assert_eq!(TableDocument::open(FILE, &again).unwrap().file().get_record(1, kept).unwrap().values["notes"], "Start, then more");
@@ -137,7 +136,7 @@ fn a_file_opened_alone_is_the_same_document_with_its_ids_and_edits() {
 #[test]
 fn undo_after_a_save_takes_back_the_last_edit() {
     let (mut doc, kept) = table_with_history();
-    run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "title": "Last" } }));
+    run(&mut doc, "record.set", json!({ "tableId": 1, "recordId": kept, "values": { "title": "Last" } }));
     host_save(&mut doc);
     doc.mark_saved();
     let (done, _) = doc.undo().unwrap();
@@ -159,7 +158,7 @@ fn a_file_opens_on_the_replica_a_host_stored_by_its_changes_or_by_its_state() {
     // A file saved elsewhere from changes the store never saw: its state, written over the
     // stored replica.
     let mut elsewhere = TableDocument::open(FILE, &bytes).unwrap();
-    run(&mut elsewhere, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "title": "Saved elsewhere" } }));
+    run(&mut elsewhere, "record.set", json!({ "tableId": 1, "recordId": kept, "values": { "title": "Saved elsewhere" } }));
     let later = host_save(&mut elsewhere);
     let reopened = TableDocument::open_with_replica(FILE, &later, &history, &[]).unwrap();
     assert_eq!(reopened.file().get_record(1, kept).unwrap().values["title"], "Saved elsewhere");
@@ -176,11 +175,11 @@ fn a_file_with_a_new_link_is_taken_in_by_its_state() {
     let mut elsewhere = TableDocument::open(FILE, &bytes).unwrap();
     run(
         &mut elsewhere,
-        "table.fields.create",
+        "field.add",
         json!({ "tableId": 1, "name": "related", "title": "Related", "type": "link_to_record", "options": { "target_table_id": 1, "allow_multiple": true } }),
     );
     let key = elsewhere.file().get_record(1, kept).unwrap().row_key;
-    run(&mut elsewhere, "table.records.create", json!({ "tableId": 1, "values": { "title": "Linking", "related": [key] } }));
+    run(&mut elsewhere, "record.add", json!({ "tableId": 1, "values": { "title": "Linking", "related": [key] } }));
     assert_eq!(elsewhere.file().replica().objects_of_type("Link").len(), 1, "the edit made one link");
     let later = host_save(&mut elsewhere);
     let reopened = TableDocument::open_with_replica(FILE, &later, &history, &[]).unwrap();

@@ -1,5 +1,5 @@
 //! `kition-table` served headless keeps the editor's state (the table, view or dashboard its picture
-//! shows, `table.preview.show`) out of what an agent reads, and sets it for one call and puts it
+//! shows, `preview.show`) out of what an agent reads, and sets it for one call and puts it
 //! back through the Kit Process Protocol's `context.get`, `context.set` and `context.restore`
 //! (section 7a), so nothing an agent does depends on or leaves behind what the person looks at.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
@@ -29,11 +29,11 @@ fn result(doc: &mut TableDocument, command: &str, params: Value) -> Value {
 fn document() -> TableDocument {
     let mut doc = TableDocument::create("Work.ktable", 0, 0).unwrap();
     for title in ["Write the plan", "Review the plan"] {
-        result(&mut doc, "table.records.create", json!({ "tableId": 1, "values": { "title": title } }));
+        result(&mut doc, "record.add", json!({ "tableId": 1, "values": { "title": title } }));
     }
     let tasks = result(
         &mut doc,
-        "table.tables.create",
+        "table.add",
         json!({ "title": "Tasks", "name": "tasks", "fields": [
             { "title": "Title", "name": "title", "type": "text", "primary": true },
             { "title": "Done", "name": "done", "type": "checkbox" },
@@ -41,9 +41,9 @@ fn document() -> TableDocument {
     );
     assert_eq!(tasks["id"], json!(2));
     for title in ["Book", "Pack", "Go"] {
-        result(&mut doc, "table.records.create", json!({ "tableId": 2, "values": { "title": title } }));
+        result(&mut doc, "record.add", json!({ "tableId": 2, "values": { "title": title } }));
     }
-    result(&mut doc, "table.views.create", json!({ "tableId": 2, "title": "Open", "type": "grid" }));
+    result(&mut doc, "tableView.add", json!({ "tableId": 2, "title": "Open", "type": "grid" }));
     doc
 }
 
@@ -76,7 +76,7 @@ fn what_an_agent_reads_of_the_file_leaves_out_what_the_picture_shows() {
     let (mut kit, id, root) = open("reads");
     let before = kit.describe(&id).unwrap().state;
     let saved = kit.context_get(&id).unwrap();
-    run(&mut kit, &id, "table.preview.show", json!({ "viewId": 2 }), Origin::User);
+    run(&mut kit, &id, "preview.show", json!({ "viewId": 2 }), Origin::User);
     assert_ne!(kit.context_get(&id).unwrap(), saved, "the person's picture moved");
     assert_eq!(kit.describe(&id).unwrap().state, before, "what the picture shows changed what the agent reads");
     let shown = Value::Object(kit.describe(&id).unwrap().state);
@@ -91,13 +91,13 @@ fn what_an_agent_reads_of_the_file_leaves_out_what_the_picture_shows() {
 #[test]
 fn a_run_sets_each_steps_part_and_puts_the_editor_back() {
     let (mut kit, id, root) = open("run");
-    run(&mut kit, &id, "table.preview.show", json!({ "tableId": 1 }), Origin::User);
+    run(&mut kit, &id, "preview.show", json!({ "tableId": 1 }), Origin::User);
     let saved = kit.context_get(&id).unwrap();
     kit.context_set(&id, &params(json!({ "part": { "table": 2 } }))).unwrap();
     assert_ne!(kit.context_get(&id).unwrap(), saved, "the part moved the editor for the step");
-    run(&mut kit, &id, "table.records.update", json!({ "tableId": 2, "recordId": 4, "values": { "title": "Pack light" } }), Origin::Agent);
+    run(&mut kit, &id, "record.set", json!({ "tableId": 2, "recordId": 4, "values": { "title": "Pack light" } }), Origin::Agent);
     kit.context_set(&id, &params(json!({ "part": { "view": 2 } }))).unwrap();
-    run(&mut kit, &id, "table.records.update", json!({ "tableId": 2, "recordId": 5, "values": { "done": true } }), Origin::Agent);
+    run(&mut kit, &id, "record.set", json!({ "tableId": 2, "recordId": 5, "values": { "done": true } }), Origin::Agent);
     kit.context_restore(&id, &saved).unwrap();
     assert_eq!(kit.context_get(&id).unwrap(), saved, "the picture shows the person's table again");
     assert_eq!(titles(&mut kit, &id, 2), [json!("Book"), json!("Pack light"), json!("Go")]);
@@ -135,17 +135,17 @@ fn a_context_the_file_lacks_or_cannot_mean_is_refused_and_moves_nothing() {
 }
 
 /// An agent's command leaves the person's picture as it was, also when it fails; only
-/// `table.preview.show`, whose work is moving the picture, keeps its effect.
+/// `preview.show`, whose work is moving the picture, keeps its effect.
 #[test]
 fn an_agents_command_moves_nothing_but_preview_show() {
     let (mut kit, id, root) = open("named");
     let saved = kit.context_get(&id).unwrap();
-    run(&mut kit, &id, "table.records.create", json!({ "tableId": 2, "values": { "title": "Return" } }), Origin::Agent);
-    run(&mut kit, &id, "table.file.render", json!({ "target": { "table": 2 } }), Origin::Agent);
+    run(&mut kit, &id, "record.add", json!({ "tableId": 2, "values": { "title": "Return" } }), Origin::Agent);
+    run(&mut kit, &id, "file.render", json!({ "target": { "table": 2 } }), Origin::Agent);
     assert_eq!(kit.context_get(&id).unwrap(), saved, "an agent's command moved the picture");
-    assert!(kit.execute(&id, "table.records.update", params(json!({ "tableId": 2, "recordId": 99, "values": {} })), Origin::Agent).is_err());
+    assert!(kit.execute(&id, "record.set", params(json!({ "tableId": 2, "recordId": 99, "values": {} })), Origin::Agent).is_err());
     assert_eq!(kit.context_get(&id).unwrap(), saved, "a failed command moved the picture");
-    run(&mut kit, &id, "table.preview.show", json!({ "tableId": 2 }), Origin::Agent);
+    run(&mut kit, &id, "preview.show", json!({ "tableId": 2 }), Origin::Agent);
     assert_ne!(kit.context_get(&id).unwrap(), saved, "preview.show is the agent's move");
     kit.context_restore(&id, &saved).unwrap();
     assert_eq!(kit.context_get(&id).unwrap(), saved);
@@ -176,11 +176,11 @@ fn the_agents_commands_say_what_on_fills_and_read_no_editor_state() {
     for command in commands.iter() {
         assert!(command.params.get("x-khp-reads").is_none(), "{} reads {}", command.id, command.params["x-khp-reads"]);
     }
-    assert_eq!(params("table.records.update")["properties"]["recordId"]["x-khp-role"], "targets");
-    assert_eq!(params("table.records.delete")["properties"]["recordId"]["x-khp-role"], "targets");
-    assert_eq!(params("table.fields.update")["properties"]["fieldId"]["x-khp-role"], "targets");
-    assert_eq!(params("table.views.update")["properties"]["viewId"]["x-khp-role"], "object", "a view is an explicit object, not what on names");
-    let mut view = params("table.file.render")["properties"]["target"]["properties"].as_object().unwrap().keys().cloned().collect::<Vec<_>>();
+    assert_eq!(params("record.set")["properties"]["recordId"]["x-khp-role"], "targets");
+    assert_eq!(params("record.delete")["properties"]["recordId"]["x-khp-role"], "targets");
+    assert_eq!(params("field.set")["properties"]["fieldId"]["x-khp-role"], "targets");
+    assert_eq!(params("tableView.set")["properties"]["viewId"]["x-khp-role"], "object", "a view is an explicit object, not what on names");
+    let mut view = params("file.render")["properties"]["target"]["properties"].as_object().unwrap().keys().cloned().collect::<Vec<_>>();
     view.sort();
     assert_eq!(view, ["path", "rows", "sheet", "table", "view"]);
     let _ = std::fs::remove_dir_all(root);

@@ -1,5 +1,5 @@
 //! What an agent reads of a table document (KHP A52): `inspect()` answers its tables with their
-//! fields, views, record counts and first records, and its dashboards; `table.read` answers the
+//! fields, views, record counts and first records, and its dashboards; `file.read` answers the
 //! records of one table or one view, a page at a time (A24a, A25). The kits server passes an
 //! inspect `target` on to no kit command but a spreadsheet's or a text document's reader, so
 //! the part is read with that command instead, as the answer's `next` step says.
@@ -7,8 +7,8 @@
 //! Objects expose stable UUIDs as `tool_id`, accepted by every corresponding command parameter;
 //! numeric ids remain local projection addresses. Dashboards use their UUID directly, and
 //! inspect's link chips retain local record addresses. Records are listed under
-//! `columns`, the field names their values are keyed by in `table.records.create` and
-//! `table.records.update`, one `cells` entry per column.
+//! `columns`, the field names their values are keyed by in `record.add` and
+//! `record.set`, one `cells` entry per column.
 //!
 //! Hosts that relay `inspect()` over the Kit Protocol leave out every `title` key (a session key
 //! there), so each object's title is answered as `label`; a table's and a dashboard's `title`
@@ -16,7 +16,7 @@
 //!
 //! The answer stays within a budget: [`ROWS_PER_TABLE`] records of a table and [`ROWS_IN_ALL`] of
 //! the document, each text cut at [`CELL_CHARS`] characters. A table whose records are cut says
-//! so and names the `table.read` step that lists the rest (`next`).
+//! so and names the `file.read` step that lists the rest (`next`).
 
 use kition_table_arrange::Arrangement;
 use kition_table_file::{Field, FilterTree, Record, Table, TableFile, View};
@@ -28,9 +28,9 @@ use crate::error;
 pub const ROWS_PER_TABLE: usize = 20;
 /// The most records `inspect()` lists in all.
 pub const ROWS_IN_ALL: usize = 100;
-/// The most characters of a text value `inspect()` and `table.read` answer; longer ones end in `…`.
+/// The most characters of a text value `inspect()` and `file.read` answer; longer ones end in `…`.
 pub const CELL_CHARS: usize = 200;
-/// The page `table.read` answers without a `limit`, and the largest it takes.
+/// The page `file.read` answers without a `limit`, and the largest it takes.
 pub const READ_LIMIT: usize = 50;
 pub const MAX_READ_LIMIT: usize = 200;
 
@@ -178,7 +178,7 @@ fn filter_text(tree: &FilterTree, fields: &[Field]) -> String {
 }
 
 /// Records under their columns: `{columns, rows: [{id, cells}], from, to, total, next?}`; `from`
-/// and `to` count the listed records from 1 among `total`, and `next` is the `table.read` step for
+/// and `to` count the listed records from 1 among `total`, and `next` is the `file.read` step for
 /// the records after them (`part` names the table or view: `{tableId}` or `{viewId}`).
 fn rows_json(file: &TableFile, fields: &[Field], records: &[Record], offset: usize, total: usize, part: Value) -> Value {
     let columns: Vec<&str> = fields.iter().map(|field| field.name.as_str()).collect();
@@ -204,7 +204,7 @@ fn rows_json(file: &TableFile, fields: &[Field], records: &[Record], offset: usi
 }
 
 /// The command that lists one table's or view's records.
-pub const READ_COMMAND: &str = "table.read";
+pub const READ_COMMAND: &str = "file.read";
 
 /// A value as the commands take it: a link's records by record id (`{id, display}`), and text cut
 /// at [`CELL_CHARS`] characters.
@@ -236,7 +236,7 @@ fn cut(value: &Value) -> Value {
     }
 }
 
-/// `table.read`: `{ tableId? | viewId?, limit?, cursor? }` answers the records of a table (in
+/// `file.read`: `{ tableId? | viewId?, limit?, cursor? }` answers the records of a table (in
 /// order) or of a view (filtered and in its order), `limit` at a time (default [`READ_LIMIT`], at
 /// most [`MAX_READ_LIMIT`]) from `cursor` (a previous answer's `next`), as
 /// `{ tableId, viewId?, columns, rows, from, to, total, next? }`.

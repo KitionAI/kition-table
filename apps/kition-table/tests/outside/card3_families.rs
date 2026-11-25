@@ -8,8 +8,8 @@ async fn derived_receipt_edits_match_the_published_schema() {
     // `~` fact, and every edit it reports satisfies the published schema.
     let f = Fixture::new(Guard::Premise);
     let basis = f.basis().await;
-    f.colleague("table.records.update", json!({"tableId":1,"recordId":2,"values":{"notes":"Unrelated"}}));
-    let answer = f.write(basis, "table.records.create", json!({"tableId":1,"values":{"title":"Created"}})).await.unwrap();
+    f.colleague("record.set", json!({"tableId":1,"recordId":2,"values":{"notes":"Unrelated"}}));
+    let answer = f.write(basis, "record.add", json!({"tableId":1,"values":{"title":"Created"}})).await.unwrap();
     let schemas = tools::schemas::tool_schemas();
     let run = schemas["tools"].as_object().unwrap().iter().find(|(name, _)| name.ends_with("_run")).unwrap().1;
     let required = &run["output"]["properties"]["changes"]["properties"]["changed"]["items"]["properties"]["edits"]["items"]["required"];
@@ -43,10 +43,10 @@ async fn new_table_import_holds_generated_name_dependencies() {
             if related {
                 f.colleague_model(json!([{"op":"set","target":table,"field":"name","value":"renamed"}]));
             } else {
-                f.colleague("table.tables.update", json!({"tableId":1,"title":"Other title"}));
+                f.colleague("table.set", json!({"tableId":1,"title":"Other title"}));
             }
             let before = f.bytes();
-            let answer = f.write(basis,"table.import.run",json!({"fileName":"in.csv","content":base64::engine::general_purpose::STANDARD.encode("Title,Notes\nImported,N\n"),"target":{"kind":kind,"table_title":"Table"},"write_mode":"append","schema_mode":"preserve"})).await;
+            let answer = f.write(basis,"file.runImport",json!({"fileName":"in.csv","content":base64::engine::general_purpose::STANDARD.encode("Title,Notes\nImported,N\n"),"target":{"kind":kind,"table_title":"Table"},"write_mode":"append","schema_mode":"preserve"})).await;
             let expected = if related { 'R' } else { 'A' };
             let got = super::card3_address::outcome(&answer);
             counts[0] += 1;
@@ -80,7 +80,7 @@ async fn creation_names_hold_collisions_without_holding_unrelated_names() {
         for related in [true, false] {
             let f = Fixture::new(Guard::Premise);
             if kind == "fields.duplicate" {
-                f.colleague("table.fields.create", json!({"tableId":1,"name":"notes_copy","title":"Collision"}));
+                f.colleague("field.add", json!({"tableId":1,"name":"notes_copy","title":"Collision"}));
             }
             let doc = f.disk();
             let inspect = doc.inspect().unwrap();
@@ -93,7 +93,7 @@ async fn creation_names_hold_collisions_without_holding_unrelated_names() {
                 (fields[if related { if kind == "fields.duplicate" { 3 } else { 2 } } else { 1 }]["tool_id"].clone(), "renamed")
             };
             if kind == "tables.create" && !related {
-                f.colleague("table.tables.update", json!({"tableId":1,"title":"Unrelated title"}));
+                f.colleague("table.set", json!({"tableId":1,"title":"Unrelated title"}));
             } else {
                 f.colleague_model(json!([{"op":"set","target":object,"field":"name","value":name}]));
             }
@@ -140,24 +140,24 @@ async fn deleted_table_premise_in_upload() {
         for related in [true, false] {
             let f = Fixture::new(Guard::Premise);
             if attachment {
-                f.colleague("table.tables.create", json!({"title":"Other"}));
+                f.colleague("table.add", json!({"title":"Other"}));
             }
             let inspect = f.disk().inspect().unwrap();
             let table = inspect["tables"][0]["tool_id"].clone();
             let notes = inspect["tables"][0]["fields"][2]["tool_id"].clone();
             let basis = f.basis().await;
             if attachment && related {
-                f.colleague("table.tables.delete", json!({"tableId":1}));
+                f.colleague("table.delete", json!({"tableId":1}));
             } else if related {
-                f.colleague("table.fields.delete", json!({"tableId":1,"fieldId":3}));
+                f.colleague("field.delete", json!({"tableId":1,"fieldId":3}));
             } else {
-                f.colleague("table.records.update", json!({"tableId":1,"recordId":1,"values":{"notes":"Unrelated value"}}));
+                f.colleague("record.set", json!({"tableId":1,"recordId":1,"values":{"notes":"Unrelated value"}}));
             }
             let before = f.bytes();
             let (command, params) = if attachment {
-                ("table.attachments.put", json!({"tableId":table,"name":"file.txt","mimeType":"text/plain","data":"QQ=="}))
+                ("attachment.add", json!({"tableId":table,"name":"file.txt","mimeType":"text/plain","data":"QQ=="}))
             } else {
-                ("table.views.create", json!({"tableId":table,"title":"Filtered","config":{"sorts":[{"field_id":notes,"direction":"asc"}]}}))
+                ("tableView.add", json!({"tableId":table,"title":"Filtered","config":{"sorts":[{"field_id":notes,"direction":"asc"}]}}))
             };
             let answer = f.write(basis, command, params).await;
             // The deleted table is named by the tool id the agent observed.
@@ -177,9 +177,9 @@ async fn last_table_deletion_keeps_tool_ids() {
     let f = Fixture::new(Guard::Premise);
     let table = f.disk().inspect().unwrap()["tables"][0]["tool_id"].clone();
     let basis = f.basis().await;
-    f.colleague("table.tables.delete", json!({"tableId":1}));
+    f.colleague("table.delete", json!({"tableId":1}));
     let before = f.bytes();
-    let answer = f.write(basis, "table.attachments.put", json!({"tableId":table,"name":"file.txt","mimeType":"text/plain","data":"QQ=="})).await;
+    let answer = f.write(basis, "attachment.add", json!({"tableId":table,"name":"file.txt","mimeType":"text/plain","data":"QQ=="})).await;
     let error = conflict(answer, "deleted");
     assert!(error["conflicts"].as_array().unwrap().iter().any(|c| c["reason"] == "deleted" && c["id"] == table), "{error}");
     assert_eq!(before, f.bytes());
@@ -193,15 +193,15 @@ async fn default_creation_without_a_place_parameter() {
     let basis = f.basis().await;
     f.colleague_model(json!([{"op":"set","target":table,"field":"name","value":"renamed"}]));
     let before = f.bytes();
-    let answer = f.write(basis, "table.tables.create", json!({})).await;
+    let answer = f.write(basis, "table.add", json!({})).await;
     // The generated name rests on the root's names even with no place parameter.
     assert_eq!(super::card3_address::outcome(&answer), 'R', "{answer:?}");
     assert_eq!(before, f.bytes());
     f.kits.shutdown().await;
     let f = Fixture::new(Guard::Premise);
     let basis = f.basis().await;
-    f.colleague("table.tables.update", json!({"tableId":1,"title":"Unrelated title"}));
-    f.write(basis, "table.tables.create", json!({})).await.unwrap();
+    f.colleague("table.set", json!({"tableId":1,"title":"Unrelated title"}));
+    f.write(basis, "table.add", json!({})).await.unwrap();
     assert_eq!(f.disk().file().list_tables().unwrap().last().unwrap().name, "table_2");
     f.kits.shutdown().await;
 }

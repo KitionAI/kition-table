@@ -1,4 +1,4 @@
-//! `table.file.outline`: the document's outline (`kit.json` `outline.command`, platform K24), the
+//! `file.outline`: the document's outline (`kit.json` `outline.command`, platform K24), the
 //! parts of a table file a host lists under it and opens the file at: its tables, then its
 //! dashboards, each in the document's order. An item is `{ id, title, kind, view }`: `kind` is
 //! `table` or `dashboard`, and `view` is the place as the editor takes it (Kit UI protocol
@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use crate::error;
 
 /// The command id.
-pub const OUTLINE_COMMAND: &str = "table.file.outline";
+pub const OUTLINE_COMMAND: &str = "file.outline";
 
 /// Its parameters (a `ParameterSchemaSpec`, KHP A5): none.
 pub fn input_schema() -> Value {

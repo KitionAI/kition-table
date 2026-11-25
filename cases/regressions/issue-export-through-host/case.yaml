@@ -4,7 +4,7 @@ feature: table.import-export
 intent: >-
   The table editor's Export as CSV and Export as Markdown write a new file beside the document
   through the host (Kit UI protocol `host/write` mode `export`): the engine answers the bytes
-  (`table.file.export`), the editor says it exported only when the host answers and names the file
+  (`file.export`), the editor says it exported only when the host answers and names the file
   the host wrote, and shows the host's error when it refuses. Before, the CSV download asked for a
   save dialog the kit's host does not offer, and no file was written in the desktop app.
 layer: gate

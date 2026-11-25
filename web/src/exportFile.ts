@@ -1,5 +1,5 @@
 /**
- * Export (CSV, Markdown): the engine answers one table's file as base64 (`table.file.export`) and
+ * Export (CSV, Markdown): the engine answers one table's file as base64 (`file.export`) and
  * the host writes it as a new file beside the document (`host/write` mode `export`, Kit UI
  * protocol). The editor runs in the host's page, where it cannot write files itself; only the
  * host's answer says the file was written, and the path it answers is the one the host chose (it
@@ -9,9 +9,9 @@
 /** The formats `kit.json` `exports` declares. */
 export type TableExportFormat = 'csv' | 'md'
 
-export const EXPORT_COMMAND = 'table.file.export'
+export const EXPORT_COMMAND = 'file.export'
 
-/** What `table.file.export` answers. */
+/** What `file.export` answers. */
 export type ExportAnswer = { format: string; extension: string; mime: string; name: string; tableId: number; bytes: number; data: string }
 
 /** What the export needs of the host connection. */

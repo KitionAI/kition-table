@@ -23,7 +23,7 @@ fn new_document(name: &str) -> (Headless<TableDocument>, String, HostFolder) {
     std::fs::create_dir_all(&root).unwrap();
     let folder = HostFolder::new(&std::fs::canonicalize(&root).unwrap()).unwrap();
     let mut kit = Headless::<TableDocument>::new(
-        KitInfo::from_manifest(MANIFEST, &["table.import.preview", "table.import.run"], kition_table_kit::EDITOR_STATE).unwrap(),
+        KitInfo::from_manifest(MANIFEST, &["file.previewImport", "file.runImport"], kition_table_kit::EDITOR_STATE).unwrap(),
     );
     kit.set_host(folder.host());
     let file = folder.file(&format!("{name}.ktable")).unwrap();
@@ -71,12 +71,12 @@ fn every_listed_command_has_a_description_and_a_typed_output() {
 fn the_answer_nests_the_routes_answer_in_result_as_the_output_says() {
     let (mut kit, id, _folder) = new_document("nesting");
     let listed = kit.commands(Some(&id)).unwrap();
-    let output = listed.iter().find(|command| command.id == "table.tables.list").unwrap().output.clone().unwrap();
+    let output = listed.iter().find(|command| command.id == "table.list").unwrap().output.clone().unwrap();
     let description = output["description"].as_str().unwrap_or_default();
     assert!(description.contains("`result`") && description.contains("`change`"), "the output says where the answer is: {description}");
     let result = &output["properties"]["result"];
     assert_eq!(result["properties"]["items"]["type"], "array");
-    let executed = kit.execute(&id, "table.tables.list", params(json!({})), Origin::Agent).unwrap();
+    let executed = kit.execute(&id, "table.list", params(json!({})), Origin::Agent).unwrap();
     let answer = executed.result.unwrap();
     assert_eq!(answer["change"], Value::Null, "a read changes nothing");
     assert_eq!(answer["result"]["total"], 1);
@@ -87,15 +87,15 @@ fn the_answer_nests_the_routes_answer_in_result_as_the_output_says() {
 fn an_unknown_field_type_is_invalid_params_naming_type_and_the_valid_values() {
     let (mut kit, id, _folder) = new_document("types");
     for (command, call, at) in [
-        ("table.fields.create", json!({ "tableId": 1, "title": "Email", "type": "no-such-type" }), "`type`"),
-        ("table.tables.create", json!({ "title": "Contacts", "fields": [{ "title": "Email", "type": "email" }] }), "`fields[0].type`"),
+        ("field.add", json!({ "tableId": 1, "title": "Email", "type": "no-such-type" }), "`type`"),
+        ("table.add", json!({ "title": "Contacts", "fields": [{ "title": "Email", "type": "email" }] }), "`fields[0].type`"),
     ] {
         let error = kit.execute(&id, command, params(call), Origin::System).unwrap_err();
         assert_eq!(error.reason(), Some(ErrorReason::InvalidParams), "{command}: {error:?}");
         let detail = error.data.as_ref().and_then(|data| data["detail"].as_str()).unwrap_or_default().to_owned();
         assert!(detail.contains(at) && detail.contains("\"single_select\"") && detail.contains("\"url\""), "{command}: {detail}");
     }
-    let tables = kit.execute(&id, "table.tables.list", params(json!({})), Origin::Agent).unwrap().result.unwrap();
+    let tables = kit.execute(&id, "table.list", params(json!({})), Origin::Agent).unwrap().result.unwrap();
     assert_eq!(tables["result"]["total"], 1, "nothing was made");
 }
 

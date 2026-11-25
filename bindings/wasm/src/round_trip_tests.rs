@@ -26,7 +26,7 @@ fn read(doc: &mut TableDocument, command: &str, params: Value) -> Value {
 
 /// The first table's id and its primary field's id and name.
 fn first_table(doc: &mut TableDocument) -> (i64, i64, String) {
-    let document = read(doc, "table.documents.get", json!({}));
+    let document = read(doc, "file.get", json!({}));
     let table = &document["tables"][0];
     let primary = table["primary_field_id"].as_i64().unwrap();
     let field = table["fields"].as_array().unwrap().iter().find(|field| field["id"].as_i64() == Some(primary)).unwrap();
@@ -35,7 +35,7 @@ fn first_table(doc: &mut TableDocument) -> (i64, i64, String) {
 
 /// The name of a table's primary field, the key its records' values use.
 fn primary_name(doc: &mut TableDocument, table_id: i64) -> String {
-    let document = read(doc, "table.documents.get", json!({}));
+    let document = read(doc, "file.get", json!({}));
     let table = document["tables"].as_array().unwrap().iter().find(|table| table["id"].as_i64() == Some(table_id)).unwrap().clone();
     let primary = table["primary_field_id"].as_i64().unwrap();
     table["fields"].as_array().unwrap().iter().find(|field| field["id"].as_i64() == Some(primary)).unwrap()["name"].as_str().unwrap().to_owned()
@@ -43,26 +43,26 @@ fn primary_name(doc: &mut TableDocument, table_id: i64) -> String {
 
 /// The whole document as the API reads it.
 fn view(doc: &mut TableDocument) -> Value {
-    let document = read(doc, "table.documents.get", json!({}));
+    let document = read(doc, "file.get", json!({}));
     let mut tables = Vec::new();
     for table in document["tables"].as_array().unwrap() {
         let id = table["id"].as_i64().unwrap();
-        let records = read(doc, "table.records.list", json!({ "tableId": id, "limit": 1000, "offset": 0 }));
+        let records = read(doc, "record.list", json!({ "tableId": id, "limit": 1000, "offset": 0 }));
         let mut views = Vec::new();
-        for view in read(doc, "table.views.list", json!({ "tableId": id })).as_array().cloned().unwrap_or_default() {
+        for view in read(doc, "tableView.list", json!({ "tableId": id })).as_array().cloned().unwrap_or_default() {
             let view_id = view["id"].as_i64().unwrap();
             let at = json!({ "tableId": id, "viewId": view_id });
             views.push(json!({
                 "view": view,
-                "filters": read(doc, "table.views.getFilterTree", at.clone()),
-                "sorts": read(doc, "table.views.getSorts", at.clone()),
-                "groups": read(doc, "table.views.getGroups", at.clone()),
-                "fields": read(doc, "table.views.listFields", at),
+                "filters": read(doc, "tableView.getFilterTree", at.clone()),
+                "sorts": read(doc, "tableView.getSorts", at.clone()),
+                "groups": read(doc, "tableView.getGroups", at.clone()),
+                "fields": read(doc, "tableView.listFields", at),
             }));
         }
         tables.push(json!({ "table": table, "records": records, "views": views }));
     }
-    json!({ "document": document, "tables": tables, "dashboards": read(doc, "table.dashboards.list", json!({})) })
+    json!({ "document": document, "tables": tables, "dashboards": read(doc, "dashboard.list", json!({})) })
 }
 
 /// Saves, reopens and compares; then saves the reopened file and compares once more.
@@ -81,19 +81,18 @@ fn round_trip(doc: &mut TableDocument) -> TableDocument {
 fn tables_and_fields_survive_save_and_reopen() {
     let mut doc = new_document();
     let (table, _, title) = first_table(&mut doc);
-    let people = run(&mut doc, "table.tables.create", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }))
-        ["id"]
+    let people = run(&mut doc, "table.add", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }))["id"]
         .as_i64()
         .unwrap();
-    run(&mut doc, "table.tables.update", json!({ "tableId": people, "title": "Persons", "description": "Who works on what" }));
-    let created = run(&mut doc, "table.fields.create", json!({ "tableId": table, "title": "Score", "type": "number" }));
+    run(&mut doc, "table.set", json!({ "tableId": people, "title": "Persons", "description": "Who works on what" }));
+    let created = run(&mut doc, "field.add", json!({ "tableId": table, "title": "Score", "type": "number" }));
     let (score, score_name) = (created["id"].as_i64().unwrap(), created["name"].as_str().unwrap().to_owned());
-    run(&mut doc, "table.fields.update", json!({ "tableId": table, "fieldId": score, "title": "Points" }));
-    let copy = run(&mut doc, "table.fields.duplicate", json!({ "tableId": table, "fieldId": score }))["id"].as_i64().unwrap();
-    run(&mut doc, "table.fields.delete", json!({ "tableId": table, "fieldId": copy }));
-    run(&mut doc, "table.fields.create", json!({ "tableId": table, "title": "Due", "type": "date" }));
-    run(&mut doc, "table.fields.create", json!({ "tableId": table, "title": "Done", "type": "checkbox" }));
-    run(&mut doc, "table.records.create", json!({ "tableId": table, "values": { title: "Write the plan 中文 🚀", score_name: 3 } }));
+    run(&mut doc, "field.set", json!({ "tableId": table, "fieldId": score, "title": "Points" }));
+    let copy = run(&mut doc, "field.duplicate", json!({ "tableId": table, "fieldId": score }))["id"].as_i64().unwrap();
+    run(&mut doc, "field.delete", json!({ "tableId": table, "fieldId": copy }));
+    run(&mut doc, "field.add", json!({ "tableId": table, "title": "Due", "type": "date" }));
+    run(&mut doc, "field.add", json!({ "tableId": table, "title": "Done", "type": "checkbox" }));
+    run(&mut doc, "record.add", json!({ "tableId": table, "values": { title: "Write the plan 中文 🚀", score_name: 3 } }));
     let edited = view(&mut doc);
     let names: Vec<_> =
         edited["document"]["tables"].as_array().unwrap().iter().map(|table| table["title"].as_str().unwrap_or_default().to_owned()).collect();
@@ -106,78 +105,74 @@ fn tables_and_fields_survive_save_and_reopen() {
 fn views_with_filters_sorts_groups_and_columns_survive_save_and_reopen() {
     let mut doc = new_document();
     let (table, primary, title) = first_table(&mut doc);
-    let created = run(&mut doc, "table.fields.create", json!({ "tableId": table, "title": "Score", "type": "number" }));
+    let created = run(&mut doc, "field.add", json!({ "tableId": table, "title": "Score", "type": "number" }));
     let (score, score_name) = (created["id"].as_i64().unwrap(), created["name"].as_str().unwrap().to_owned());
     for (name, points) in [("Ada", 3), ("Grace", 5), ("Linus", 1)] {
-        run(&mut doc, "table.records.create", json!({ "tableId": table, "values": { title.clone(): name, score_name.clone(): points } }));
+        run(&mut doc, "record.add", json!({ "tableId": table, "values": { title.clone(): name, score_name.clone(): points } }));
     }
-    let view_id = run(&mut doc, "table.views.create", json!({ "tableId": table, "title": "Board", "type": "grid" }))["id"].as_i64().unwrap();
-    run(&mut doc, "table.views.update", json!({ "tableId": table, "viewId": view_id, "title": "Top scores" }));
+    let view_id = run(&mut doc, "tableView.add", json!({ "tableId": table, "title": "Board", "type": "grid" }))["id"].as_i64().unwrap();
+    run(&mut doc, "tableView.set", json!({ "tableId": table, "viewId": view_id, "title": "Top scores" }));
     run(
         &mut doc,
-        "table.views.putFilterTree",
+        "tableView.setFilterTree",
         json!({ "tableId": table, "viewId": view_id, "tree": { "conjunction": "and", "children": [{ "condition": { "field_id": score, "operator": "greater_than", "value": 2 } }] } }),
     );
-    run(&mut doc, "table.views.putSorts", json!({ "tableId": table, "viewId": view_id, "items": [{ "field_id": score, "direction": "desc" }] }));
-    run(&mut doc, "table.views.putGroups", json!({ "tableId": table, "viewId": view_id, "items": [{ "field_id": primary, "direction": "asc" }] }));
-    run(&mut doc, "table.views.patchConfig", json!({ "tableId": table, "viewId": view_id, "row_height": "short", "frozen_column_count": 1 }));
-    run(&mut doc, "table.views.patchField", json!({ "tableId": table, "viewId": view_id, "fieldId": score, "visible": false, "width": 120 }));
+    run(&mut doc, "tableView.setSorts", json!({ "tableId": table, "viewId": view_id, "items": [{ "field_id": score, "direction": "desc" }] }));
+    run(&mut doc, "tableView.setGroups", json!({ "tableId": table, "viewId": view_id, "items": [{ "field_id": primary, "direction": "asc" }] }));
+    run(&mut doc, "tableView.setConfig", json!({ "tableId": table, "viewId": view_id, "row_height": "short", "frozen_column_count": 1 }));
+    run(&mut doc, "tableView.setField", json!({ "tableId": table, "viewId": view_id, "fieldId": score, "visible": false, "width": 120 }));
     let at = json!({ "tableId": table, "viewId": view_id });
-    let sorts = read(&mut doc, "table.views.getSorts", at.clone());
+    let sorts = read(&mut doc, "tableView.getSorts", at.clone());
     assert!(sorts.to_string().contains("desc"), "{sorts}");
     let mut back = round_trip(&mut doc);
-    assert_eq!(read(&mut back, "table.views.getSorts", at), sorts);
+    assert_eq!(read(&mut back, "tableView.getSorts", at), sorts);
 }
 
 #[test]
 fn record_links_survive_save_and_reopen() {
     let mut doc = new_document();
     let (table, _, title) = first_table(&mut doc);
-    let people = run(&mut doc, "table.tables.create", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }))
-        ["id"]
+    let people = run(&mut doc, "table.add", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }))["id"]
         .as_i64()
         .unwrap();
     let name = primary_name(&mut doc, people);
-    let ada = run(&mut doc, "table.records.create", json!({ "tableId": people, "values": { name.clone(): "Ada" } }));
-    let grace = run(&mut doc, "table.records.create", json!({ "tableId": people, "values": { name: "Grace" } }));
-    let owner = run(
-        &mut doc,
-        "table.fields.create",
-        json!({ "tableId": table, "title": "Owner", "type": "link_to_record", "options": { "target_table_id": people } }),
-    )["id"]
-        .as_i64()
-        .unwrap();
-    let task = run(&mut doc, "table.records.create", json!({ "tableId": table, "values": { title: "Ship" } }))["id"].as_i64().unwrap();
+    let ada = run(&mut doc, "record.add", json!({ "tableId": people, "values": { name.clone(): "Ada" } }));
+    let grace = run(&mut doc, "record.add", json!({ "tableId": people, "values": { name: "Grace" } }));
+    let owner =
+        run(&mut doc, "field.add", json!({ "tableId": table, "title": "Owner", "type": "link_to_record", "options": { "target_table_id": people } }))
+            ["id"]
+            .as_i64()
+            .unwrap();
+    let task = run(&mut doc, "record.add", json!({ "tableId": table, "values": { title: "Ship" } }))["id"].as_i64().unwrap();
     let keys = [ada["row_key"].as_str().unwrap(), grace["row_key"].as_str().unwrap()];
-    run(&mut doc, "table.links.replace", json!({ "tableId": table, "recordId": task, "field_id": owner, "target_row_keys": keys }));
+    run(&mut doc, "recordLink.replace", json!({ "tableId": table, "recordId": task, "field_id": owner, "target_row_keys": keys }));
     let at = json!({ "tableId": table, "recordId": task, "field_id": owner });
-    let links = read(&mut doc, "table.links.list", at.clone());
+    let links = read(&mut doc, "recordLink.list", at.clone());
     assert!(links.to_string().contains("Ada") && links.to_string().contains("Grace"), "{links}");
     let mut back = round_trip(&mut doc);
-    assert_eq!(read(&mut back, "table.links.list", at), links);
+    assert_eq!(read(&mut back, "recordLink.list", at), links);
 }
 
 #[test]
 fn csv_imports_survive_save_and_reopen() {
     let mut doc = new_document();
     let (table, _, title) = first_table(&mut doc);
-    run(&mut doc, "table.csv.import", json!({ "tableId": table, "content": format!("{title}\nFrom CSV\n\"Quoted, with a comma\"\n中文\n") }));
-    let people = run(&mut doc, "table.tables.create", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }))
-        ["id"]
+    run(&mut doc, "file.importCsv", json!({ "tableId": table, "content": format!("{title}\nFrom CSV\n\"Quoted, with a comma\"\n中文\n") }));
+    let people = run(&mut doc, "table.add", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }))["id"]
         .as_i64()
         .unwrap();
     let csv = base64::engine::general_purpose::STANDARD.encode("Name,Age\nAda,36\nGrace,45\n");
     run(
         &mut doc,
-        "table.import.run",
+        "file.runImport",
         json!({ "fileName": "people.csv", "content": csv, "write_mode": "append", "schema_mode": "auto", "target": { "kind": "existing_table", "table_id": people } }),
     );
-    let exported = read(&mut doc, "table.csv.export", json!({ "tableId": table }));
+    let exported = read(&mut doc, "file.exportCsv", json!({ "tableId": table }));
     assert!(exported.to_string().contains("Quoted, with a comma"), "{exported}");
-    let people_csv = read(&mut doc, "table.csv.export", json!({ "tableId": people }));
+    let people_csv = read(&mut doc, "file.exportCsv", json!({ "tableId": people }));
     assert!(people_csv.to_string().contains("Grace"), "{people_csv}");
     let mut back = round_trip(&mut doc);
-    assert_eq!(read(&mut back, "table.csv.export", json!({ "tableId": table })), exported);
+    assert_eq!(read(&mut back, "file.exportCsv", json!({ "tableId": table })), exported);
 }
 
 #[test]
@@ -186,35 +181,35 @@ fn dashboards_survive_save_and_reopen() {
     let (table, _, _) = first_table(&mut doc);
     run(
         &mut doc,
-        "table.dashboards.upsert",
+        "dashboard.set",
         json!({ "dashboardId": "d1", "title": "Overview", "order": 1, "source_table_id": table, "layout": [], "widgets": [{ "id": "w1", "type": "metric" }] }),
     );
     run(
         &mut doc,
-        "table.dashboards.upsert",
+        "dashboard.set",
         json!({ "dashboardId": "d2", "title": "Spare", "order": 2, "source_table_id": table, "layout": [], "widgets": [] }),
     );
-    run(&mut doc, "table.dashboards.delete", json!({ "dashboardId": "d2" }));
-    let dashboards = read(&mut doc, "table.dashboards.list", json!({}));
+    run(&mut doc, "dashboard.delete", json!({ "dashboardId": "d2" }));
+    let dashboards = read(&mut doc, "dashboard.list", json!({}));
     assert!(dashboards.to_string().contains("Overview") && !dashboards.to_string().contains("Spare"), "{dashboards}");
     let mut back = round_trip(&mut doc);
-    assert_eq!(read(&mut back, "table.dashboards.list", json!({})), dashboards);
+    assert_eq!(read(&mut back, "dashboard.list", json!({})), dashboards);
 }
 
 #[test]
 fn attachments_survive_save_and_reopen() {
     let mut doc = new_document();
     let (table, _, _) = first_table(&mut doc);
-    run(&mut doc, "table.fields.create", json!({ "tableId": table, "name": "files", "title": "Files", "type": "attachment" }));
+    run(&mut doc, "field.add", json!({ "tableId": table, "name": "files", "title": "Files", "type": "attachment" }));
     let data = base64::engine::general_purpose::STANDARD.encode(b"hello attachment");
-    let attachment = run(&mut doc, "table.attachments.put", json!({ "tableId": table, "name": "note.txt", "mimeType": "text/plain", "data": data }));
+    let attachment = run(&mut doc, "attachment.add", json!({ "tableId": table, "name": "note.txt", "mimeType": "text/plain", "data": data }));
     let hash = attachment["url"].as_str().unwrap().trim_start_matches("kition-blob:").to_owned();
-    run(&mut doc, "table.records.create", json!({ "tableId": table, "values": { "title": "With a file", "files": [attachment] } }));
+    run(&mut doc, "record.add", json!({ "tableId": table, "values": { "title": "With a file", "files": [attachment] } }));
     let loose = base64::engine::general_purpose::STANDARD.encode(b"a blob no record names");
-    let unnamed = run(&mut doc, "table.attachments.put", json!({ "tableId": table, "name": "loose.txt", "mimeType": "text/plain", "data": loose }));
+    let unnamed = run(&mut doc, "attachment.add", json!({ "tableId": table, "name": "loose.txt", "mimeType": "text/plain", "data": loose }));
     let unnamed = unnamed["url"].as_str().unwrap().trim_start_matches("kition-blob:").to_owned();
-    let stored = read(&mut doc, "table.attachments.read", json!({ "hash": hash }));
+    let stored = read(&mut doc, "attachment.get", json!({ "hash": hash }));
     let mut back = round_trip(&mut doc);
-    assert_eq!(read(&mut back, "table.attachments.read", json!({ "hash": hash })), stored, "the bytes a record names travel in the file");
+    assert_eq!(read(&mut back, "attachment.get", json!({ "hash": hash })), stored, "the bytes a record names travel in the file");
     assert!(back.file().blob(&unnamed).unwrap().is_none(), "a blob no record names does not");
 }

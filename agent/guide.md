@@ -50,13 +50,13 @@ draft.
   other run of characters made one `_`, `f_` before a leading digit, `field` when nothing is left
   (a title such as `电话`), then `_2`, `_3`, … when taken. Read derived names back from the answer.
 - **A `link_to_record` value** is a list of the linked records' row keys or record ids
-  (`{"members": [3, 4]}`), in [`table.records.create`](/kits/table/commands/table.records.create/),
-  [`table.records.update`](/kits/table/commands/table.records.update/) and `transact`; records read
+  (`{"members": [3, 4]}`), in [`record.add`](/kits/table/commands/record.add/),
+  [`record.set`](/kits/table/commands/record.set/) and `transact`; records read
   it back as `{row_key, display}` objects, and `null` or `[]` unlinks. A link field whose
   `symmetric_field_id` names the target table's link field back shows the links made from either
   side.
 - **Filters and sorts refer to fields by `field_id`**, not by name.
-- [`table.records.list`](/kits/table/commands/table.records.list/) pages with `offset` (the number
+- [`record.list`](/kits/table/commands/record.list/) pages with `offset` (the number
   of records to skip, counted from **0**) and `limit`; it answers `total`.
 - Leave `asOrigin` out of every call: it is for host features, not agents.
 - **Field types** are the identifiers `text`, `long_text`, `number`, `date`, `datetime`,
@@ -64,13 +64,13 @@ draft.
   `ai`, `rating`, `user`, `link_to_record`, `lookup`, `rollup`, `button`, `created_time`,
   `last_modified_time`, `created_by`, `last_modified_by` and `auto_number`; view types are `grid`,
   `kanban`, `calendar` and `gallery`. The `type` and `options` of
-  [`table.fields.create`](/kits/table/commands/table.fields.create/) and
-  [`table.tables.create`](/kits/table/commands/table.tables.create/) describe each type and the
+  [`field.add`](/kits/table/commands/field.add/) and
+  [`table.add`](/kits/table/commands/table.add/) describe each type and the
   options it reads (a select's `choices`, a link's `target_table_id`, …). There is no email or
   phone type: use `text`, or `url` for a link to open. Any other `type` is refused, naming the
   valid ones.
 - **Answers:** every command answers `{"result": …, "change": …}`: `result` is the request's own
-  answer (for [`table.tables.list`](/kits/table/commands/table.tables.list/),
+  answer (for [`table.list`](/kits/table/commands/table.list/),
   `{"total", "items"}`), and `change` what the call changed, or `null`. Each command's output
   schema describes both.
 
@@ -83,16 +83,16 @@ views, records and fields by id every time, with the ids earlier answers gave yo
   `{"view": 3}`) is the part every step acts in; a step's `at.part` overrides it for that step.
   Commands still take their own `tableId` (and `viewId`): give it, matching the part.
 - `on` names the **record** or the **field** a step acts on, by id (`[4]`). It goes into the
-  command's `recordId` (a record of the command's `tableId`: `table.records.update`, `.delete`,
-  `.history`, `table.links.*`) or `fieldId` (`table.fields.update`, `.delete`, `.duplicate`,
-  `.linkCandidates`, `table.views.patchField`), which `table_commands` with `detail` marks as the
+  command's `recordId` (a record of the command's `tableId`: `record.set`, `.delete`,
+  `.history`, `table.links.*`) or `fieldId` (`field.set`, `.delete`, `.duplicate`,
+  `.linkCandidates`, `tableView.setField`), which `table_commands` with `detail` marks as the
   command's `targets`; then do not give that parameter too. The command says whether `on` is a
   record or a field. A command without such a parameter takes no `on`, and an id `on` gives
   elsewhere is refused (a table file keeps no selection; an id that is both a record and a field
   of the part's table is refused as ambiguous).
-- No command reads what the editor shows. `table.preview.show` changes only the person's picture
+- No command reads what the editor shows. `preview.show` changes only the person's picture
   and is put back after the call; never use it to choose what a later step acts on.
-- Positions are not ids: `offset` in `table.records.list`, `rows` in a preview and `slide` (a
+- Positions are not ids: `offset` in `record.list`, `rows` in a preview and `slide` (a
   table's position) change when records or tables are added or moved.
 
 ## Previews of a named table or view
@@ -113,7 +113,7 @@ picture, and drawing it changes nothing.
   `changed` (each with `edits`: a field, `before` and `after`), `moved` and `deleted`, naming
   objects by the object model's ids: a record by its `row_key` (its `cells` keyed by the fields'
   object-model ids), a field, view or table by its object-model id. Match them with
-  `table.records.list` (each record's `row_key`) or `table_query`.
+  `record.list` (each record's `row_key`) or `table_query`.
 - **Pass the latest `revision` as `basis`.** Every answer of inspect, query, run and batch has a
   short `revision`. Pass the last one you were given as `basis` on your next call: the answer then
   says what others (people, other agents) changed since, in `others` (with `by`).
@@ -235,13 +235,13 @@ creation, inspect `required` fields and supply their values, for example
 
 It lists at most 20 records of a table and 100 in all. When a table's records are cut, `next` is
 the step that lists the rest: run it as it is with `table_run`.
-[`table.read`](/kits/table/commands/table.read/) `{"tableId": 1}` lists a table's records and
+[`file.read`](/kits/table/commands/file.read/) `{"tableId": 1}` lists a table's records and
 `{"viewId": 2}` the records a view shows (filtered and in its order), 50 at a time (`limit`, up to
 200); each answer's `next` goes on from where it stopped (`cursor`).
 
 ```json
 table_run {"path": "crm.ktable", "steps": [
-  {"command": "table.read", "params": {"viewId": 2, "limit": 100}}
+  {"command": "file.read", "params": {"viewId": 2, "limit": 100}}
 ]}
 ```
 
@@ -257,8 +257,8 @@ that makes a file for its own schema deletes it as a system write, so the person
 bring it back; ids are never reused, so its first own table is table 2:
 
 ```json
-{"command": "table.tables.delete", "params": {"tableId": 1, "asOrigin": "system:setup"}}
-{"command": "table.tables.create", "params": {"title": "Contacts", "fields": [
+{"command": "table.delete", "params": {"tableId": 1, "asOrigin": "system:setup"}}
+{"command": "table.add", "params": {"title": "Contacts", "fields": [
   {"title": "Name", "type": "text", "primary": true},
   {"title": "Email", "type": "text"},
   {"title": "Stage", "type": "single_select", "options": {"choices": ["Lead", "Customer"]}}
@@ -269,7 +269,7 @@ A file with no table at all is valid and saves.
 
 ## Workflow
 
-1. `table_inspect` to learn the ids, field names, types, views and records; `table.read` for
+1. `table_inspect` to learn the ids, field names, types, views and records; `file.read` for
    records it cut.
 2. `table_commands` with keywords. Use the exact id it returns and follow its parameter schema;
    never guess a command id.
@@ -290,8 +290,8 @@ The answer lists table 1 with fields `title` (text, primary), `status` (single s
 
 ```json
 table_run {"path": "crm.ktable", "steps": [
-  {"command": "table.records.create", "params": {"tableId": 1, "values": {"title": "Book the venue", "status": "To do"}}},
-  {"command": "table.records.update", "params": {"tableId": 1, "recordId": 1, "values": {"status": "In progress", "notes": "Draft shared on Monday"}}}
+  {"command": "record.add", "params": {"tableId": 1, "values": {"title": "Book the venue", "status": "To do"}}},
+  {"command": "record.set", "params": {"tableId": 1, "recordId": 1, "values": {"status": "In progress", "notes": "Draft shared on Monday"}}}
 ]}
 table_check {"path": "crm.ktable"}
 ```
@@ -303,9 +303,9 @@ check finds nothing wrong.
 
 ```json
 table_run {"path": "crm.ktable", "steps": [
-  {"command": "table.fields.create", "params": {"tableId": 1, "name": "priority", "title": "Priority", "type": "number"}},
-  {"command": "table.records.update", "params": {"tableId": 1, "recordId": 2, "values": {"priority": 2}}},
-  {"command": "table.views.create", "params": {"tableId": 1, "title": "Open work", "type": "grid"}}
+  {"command": "field.add", "params": {"tableId": 1, "name": "priority", "title": "Priority", "type": "number"}},
+  {"command": "record.set", "params": {"tableId": 1, "recordId": 2, "values": {"priority": 2}}},
+  {"command": "tableView.add", "params": {"tableId": 1, "title": "Open work", "type": "grid"}}
 ]}
 ```
 
@@ -313,9 +313,9 @@ The field is answered with `"id": 4`, the view with `"id": 2`. Show only what is
 
 ```json
 table_run {"path": "crm.ktable", "steps": [
-  {"command": "table.views.putFilterTree", "params": {"tableId": 1, "viewId": 2,
+  {"command": "tableView.setFilterTree", "params": {"tableId": 1, "viewId": 2,
     "tree": {"conjunction": "and", "children": [{"condition": {"field_id": 2, "operator": "neq", "value": "Done"}}]}}},
-  {"command": "table.views.putSorts", "params": {"tableId": 1, "viewId": 2, "items": [{"field_id": 1, "direction": "asc"}]}}
+  {"command": "tableView.setSorts", "params": {"tableId": 1, "viewId": 2, "items": [{"field_id": 1, "direction": "asc"}]}}
 ]}
 table_check {"path": "crm.ktable"}
 ```
@@ -331,9 +331,9 @@ is looking at:
 
 ```json
 table_run {"path": "trip.ktable", "basis": "ykl0", "target": {"table": 2}, "steps": [
-  {"command": "table.records.update", "on": [3], "params": {"tableId": 2, "values": {"packed": true}}},
-  {"command": "table.records.update", "on": [4], "params": {"tableId": 2, "values": {"packed": true}}},
-  {"command": "table.records.update", "at": {"part": {"table": 1}}, "on": [2], "params": {"tableId": 1, "values": {"status": "Done"}}}
+  {"command": "record.set", "on": [3], "params": {"tableId": 2, "values": {"packed": true}}},
+  {"command": "record.set", "on": [4], "params": {"tableId": 2, "values": {"packed": true}}},
+  {"command": "record.set", "at": {"part": {"table": 1}}, "on": [2], "params": {"tableId": 1, "values": {"status": "Done"}}}
 ]}
 ```
 
@@ -346,7 +346,7 @@ name the tables and records again.
 ```json
 table_inspect {"path": "trip.ktable", "target": {"view": 2}, "preview": true}
 table_run {"path": "trip.ktable", "basis": "ykl1", "steps": [
-  {"command": "table.fields.update", "on": [5], "params": {"tableId": 2, "title": "In the bag"}}
+  {"command": "field.set", "on": [5], "params": {"tableId": 2, "title": "In the bag"}}
 ]}
 ```
 
@@ -359,16 +359,16 @@ answers the field with `"id": 5` and its name unchanged (`packed`: values keep t
 - **Unknown keys:** a value key that names no field is refused, and nothing is written. When the
   key is a field's title, the error says so (`the field titled "Primary channel" is named
   primary_channel`): use that name, or read the names with
-  [`table.fields.list`](/kits/table/commands/table.fields.list/).
+  [`field.list`](/kits/table/commands/field.list/).
 - **Select options:** a single-select value must be one of the field's `options.choices`. Writing
   another value succeeds, and `table_check` then warns `table.select-option-missing`. Either add
-  the choice first ([`table.fields.update`](/kits/table/commands/table.fields.update/)
+  the choice first ([`field.set`](/kits/table/commands/field.set/)
   `{tableId, fieldId, options}`) or use an existing one.
 - **Formula fields** are computed: write their `formula`, never their values.
 - **Empty values:** a record's `values` holds only the fields that have a value; a missing key means
   empty.
 - **Nothing carries over between calls.** No call remembers the table, view or records of the one
-  before, or what a `table.preview.show` showed: name them by the ids earlier results gave.
+  before, or what a `preview.show` showed: name them by the ids earlier results gave.
 
 ## Checks
 

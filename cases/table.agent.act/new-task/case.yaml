@@ -44,6 +44,6 @@ solution:
     args:
       path: tasks.ktable
       steps:
-        - { command: table.records.create, params: { tableId: 1, values: { title: Book the venue, status: In progress, notes: Call on Monday } } }
+        - { command: record.add, params: { tableId: 1, values: { title: Book the venue, status: In progress, notes: Call on Monday } } }
 since: "2026-11-16"
 timeout_s: 600

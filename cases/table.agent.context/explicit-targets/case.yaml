@@ -2,7 +2,7 @@ format: 1
 id: table.agent.context/explicit-targets
 feature: table.agent.context
 intent: >-
-  An agent's command leaves the person's picture as it was, also when it fails; only table.preview.show keeps its effect.
+  An agent's command leaves the person's picture as it was, also when it fails; only preview.show keeps its effect.
 layer: gate
 source:
   kind: synthetic

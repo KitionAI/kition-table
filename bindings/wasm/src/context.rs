@@ -2,9 +2,9 @@
 //! Protocol section 7a): the editor state, taken and put back without an
 //! edit, set for one call from what the call says it acts in, and kept out of an agent's commands.
 //!
-//! A table file's only editor state is **what its picture shows** (`table.preview.show`): a
+//! A table file's only editor state is **what its picture shows** (`preview.show`): a
 //! table, a view, or a dashboard. No command reads it: every command names its table, view,
-//! field and record by id in its parameters, and `table.file.render` draws the view its call
+//! field and record by id in its parameters, and `file.render` draws the view its call
 //! names. There is no selection and no time.
 //!
 //! A call's **part** is a table or a view, by the id `table_inspect` lists: `{"table": 2}` or
@@ -30,7 +30,7 @@ use crate::TableDocument;
 pub const EDITOR_STATE: &[&str] = &[];
 
 /// The command whose work is moving the picture: it keeps its effect for an agent too.
-pub const MOVES_THE_EDITOR: &str = "table.preview.show";
+pub const MOVES_THE_EDITOR: &str = "preview.show";
 
 const LISTED: &str = "the tables' and views' ids are in table_inspect's `tables`";
 

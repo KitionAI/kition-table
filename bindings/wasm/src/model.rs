@@ -100,13 +100,13 @@ mod tests {
         let mut exchange = Exchange::new();
         let described = exchange.describe(&mut doc).unwrap();
         assert_eq!(described["capability"], "KitObjectModel 1.0");
-        assert!(described["commands"].as_array().unwrap().iter().any(|command| command["id"] == "table.records.create"));
+        assert!(described["commands"].as_array().unwrap().iter().any(|command| command["id"] == "record.add"));
 
         let table = first_table(&mut doc);
         let table_id = table["id"].as_i64().unwrap();
         let primary = table["fields"].as_array().unwrap().iter().find(|field| field["id"] == table["primary_field_id"]).unwrap()["name"].clone();
         let values = json!({ primary.as_str().unwrap(): "From a script" });
-        let command = json!({ "ops": [{ "op": "command", "id": "table.records.create", "params": { "tableId": table_id, "values": values } }] });
+        let command = json!({ "ops": [{ "op": "command", "id": "record.add", "params": { "tableId": table_id, "values": values } }] });
         assert_eq!(exchange.batch(&mut doc, &command, true).unwrap_err().code, ModelErrorCode::ReadOnly);
         exchange.batch(&mut doc, &command, false).unwrap();
         let page = doc.call("records.list", &json!({ "tableId": table_id })).unwrap();

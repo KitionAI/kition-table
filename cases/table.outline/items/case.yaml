@@ -2,7 +2,7 @@ format: 1
 id: table.outline/items
 feature: table.outline
 intent: >-
-  table.file.outline (kit.json outline.command, Kition platform K24) answers the file's tables,
+  file.outline (kit.json outline.command, Kition platform K24) answers the file's tables,
   then its dashboards, each in the document's order, as { id, title, kind, view } at the top level
   (items): kind is table or dashboard, and view is the
   place the editor opens the file at ({ path: tables/<id> } or { path: dashboards/<id> }). It takes

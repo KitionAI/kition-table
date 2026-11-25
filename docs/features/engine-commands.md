@@ -181,29 +181,29 @@ the field names (the keys of `values` in `records.create` and `records.update`);
 cells }`, the record id and one value per column (`null` when empty), a link's records as `{ id,
 display }` by record id, text over 200 characters cut and ending in `…`. `from` and `to` count the
 listed records from 1 among `total`; `next` is the step that lists the records after them
-(`{ "command": "table.read", "params": { …, "cursor" } }`), absent after the last.
+(`{ "command": "file.read", "params": { …, "cursor" } }`), absent after the last.
 
 `inspect()` answers each table as `{ id, name, title, label, primaryFieldId, recordCount, fields,
 views, records }` (`records` as `read` answers it, at most 20 a table and 100 in all), and the
 dashboards as `{ id, title, label, widgets, sourceTableId? }`. Hosts that relay `inspect()` over the
 Kit Protocol leave out every `title` key, so `label` carries each title to agents.
 
-## `table.file.outline`
+## `file.outline`
 
 The document's outline, and the manifest's `outline.command` (Kition platform K24): the parts of
 the file a host lists under it and opens the file at. It takes no parameters, reads only, and like
-`table.file.export` answers at the top level, not as `{ "result", "change" }`, since the host reads
+`file.export` answers at the top level, not as `{ "result", "change" }`, since the host reads
 `items` there: the tables, then the dashboards, each in the document's order, as
 `{ "id", "title", "kind", "view" }`. `kind` is `table` or `dashboard`; a table without a title goes
 by its name; `view` is the place as the editor takes it in `document.view` and `document/reveal`
 (`{ "path": "tables/<id>" }`, `{ "path": "dashboards/<id>" }`, `web/src/shown.ts`). A host needs
-nothing else to list a table file's parts: it does not read `table.tables.list` or
-`table.dashboards.list` for that.
+nothing else to list a table file's parts: it does not read `table.list` or
+`dashboard.list` for that.
 
-## `table.file.render`
+## `file.render`
 
 The agent's preview (KHP A39), and the manifest's `agent.render` (Kition platform K21): the
-document's picture, what `render` draws, as PNG. Like `table.file.export` it answers at the top
+document's picture, what `render` draws, as PNG. Like `file.export` it answers at the top
 level, not as `{ "result", "change" }`, since the kits server reads `png` there. The picture is
 what the editor shows (`crates/view/picture`): the tab bar (the tables and dashboards), the shown
 table's view bar (its views, and what the shown view filters, sorts and groups by), then the view:

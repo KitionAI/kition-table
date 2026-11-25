@@ -10,7 +10,7 @@ features:
     priority: P0
     status: has
     requirements: [AX13]
-    commands: [table.read]
+    commands: [file.read]
     paths: [bindings/wasm/src/inspect.rs, apps/kition-table/tests/inspect.rs]
     cases: [regressions/issue-inspect-content, table.agent.observe/done-follows]
     since: "2026-11-16"
@@ -36,7 +36,7 @@ features:
     dimension: [ai]
     priority: P0
     status: has
-    commands: [table.file.render, table.preview.show]
+    commands: [file.render, preview.show]
     paths: [bindings/wasm/src/context.rs, bindings/wasm/src/acts.rs, bindings/wasm/src/preview.rs, bindings/wasm/src/lib.rs, apps/kition-table/src/main.rs, kit.json]
     requirements: [AX13]
     cases: [table.agent.context/check-context, table.agent.context/editor-state-hidden, table.agent.context/explicit-targets, table.agent.context/failed-run, table.agent.context/headless-run, table.agent.context/named-preview, table.agent.context/on-and-part, table.agent.context/published-commands, table.agent.context/reads-declared, table.agent.context/refused-contexts, table.agent.context/render-explicit-view, table.agent.context/render-named-view, table.agent.context/tool-refusals, table.agent.context/two-tables-one-run]
@@ -154,7 +154,7 @@ features:
     dimension: [function, data-safety]
     priority: P0
     status: has
-    commands: [table.records.list, table.records.create, table.records.update, table.records.delete, table.records.history, table.records.bulkDelete, table.records.bulkCopy]
+    commands: [record.list, record.add, record.set, record.delete, record.history, record.bulkDelete, record.bulkCopy]
     paths: [bindings/wasm/src/model.rs, bindings/wasm/src/check.rs, bindings/wasm/examples/checks.rs, crates/engine/file/src/ids.rs, crates/engine/time/src/lib.rs, crates/engine/api/src/values.rs, crates/engine/file/src/kdm/store.rs, crates/engine/file/tests/storage_scale.rs, bindings/wasm/tests/open_scale.rs, crates/engine/file/src/kdm/commit.rs, crates/engine/file/src/kdm/project.rs, crates/engine/file/src/kdm/project/derive.rs, crates/engine/file/tests/bulk_writes.rs, crates/engine/file/examples/bulk_write.rs, crates/engine/api/tests/bulk_transact.rs]
     cases: [table.records/save-reopen, regressions/issue-7, regressions/issue-8, regressions/issue-grid-typing-and-drag, regressions/issue-rating-draws-stars, regressions/issue-table-100k-rows, regressions/issue-table-open-100k, regressions/issue-table-bulk-write, regressions/issue-table-bulk-write-cells, regressions/issue-table-bulk-transact]
     since: "2026-11-16"
@@ -174,7 +174,7 @@ features:
       the engine as base64, so on very large tables (tests/historyCost.mjs, printed by
       tests/perf.mjs on 100,000 x 50) the panel falls back to the session's history when the
       request cannot be made. Inside a session every change keeps its author and time.
-    commands: [table.records.history]
+    commands: [record.history]
     paths: [crates/engine/file/src/kdm/changes.rs, crates/engine/api/src/records.rs, web/src/dataSource.ts, web/src/App.tsx, web/src/editor/table/components/TableRecordDetailDrawer.tsx, bindings/wasm/tests/record_history.rs, web/tests/flow.mjs, web/tests/historyCost.mjs]
     cases: [table.records.history-kept/after-reload, table.records.history-kept/between-checkpoints]
     since: "2026-11-24"
@@ -183,9 +183,9 @@ features:
     dimension: [function]
     priority: P0
     status: has
-    commands: [table.documents.get, table.tables.list, table.tables.create, table.tables.update, table.tables.delete, table.fields.list, table.fields.create, table.fields.update, table.fields.delete, table.fields.duplicate, table.fields.linkCandidates]
+    commands: [file.get, table.list, table.add, table.set, table.delete, field.list, field.add, field.set, field.delete, field.duplicate, field.linkCandidates]
     paths: [bindings/wasm/examples/checks.rs, bindings/wasm/src/check.rs]
-    gap: "table.tables.delete and table.fields.linkCandidates are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
+    gap: "table.delete and field.linkCandidates are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
     cases: [table.schema/save-reopen, regressions/issue-2, regressions/issue-9]
     since: "2026-11-16"
   - id: table.views
@@ -193,8 +193,8 @@ features:
     dimension: [function]
     priority: P0
     status: has
-    commands: [table.views.list, table.views.create, table.views.update, table.views.delete, table.views.getFilterTree, table.views.putFilterTree, table.views.getSorts, table.views.putSorts, table.views.getGroups, table.views.putGroups, table.views.patchConfig, table.views.listFields, table.views.patchField]
-    gap: "table.views.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
+    commands: [tableView.list, tableView.add, tableView.set, tableView.delete, tableView.getFilterTree, tableView.setFilterTree, tableView.getSorts, tableView.setSorts, tableView.getGroups, tableView.setGroups, tableView.setConfig, tableView.listFields, tableView.setField]
+    gap: "tableView.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
     cases: [table.views/save-reopen, regressions/issue-view-save-race]
     since: "2026-11-16"
   - id: table.views.arrangement
@@ -210,8 +210,8 @@ features:
     dimension: [function]
     priority: P0
     status: has
-    commands: [table.links.list, table.links.replace, table.links.delete]
-    gap: "table.links.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
+    commands: [recordLink.list, recordLink.replace, recordLink.delete]
+    gap: "recordLink.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
     cases: [table.links/save-reopen, regressions/issue-5]
     since: "2026-11-16"
   - id: table.import-export
@@ -219,9 +219,9 @@ features:
     dimension: [conversion, function]
     priority: P1
     status: has
-    commands: [table.csv.import, table.csv.export, table.markdown.export, table.file.export, table.import.preview, table.import.run]
+    commands: [file.importCsv, file.exportCsv, file.exportMarkdown, file.export, file.previewImport, file.runImport]
     paths: [apps/kition-table/src/main.rs, bindings/wasm/src/export.rs, web/src/exportFile.ts]
-    gap: "table.markdown.export and table.import.preview are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
+    gap: "file.exportMarkdown and file.previewImport are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs."
     cases: [table.import-export/save-reopen, regressions/issue-6, regressions/issue-export-bytes, regressions/issue-export-through-host]
     since: "2026-11-16"
   - id: table.from-files
@@ -238,7 +238,7 @@ features:
     dimension: [function]
     priority: P1
     status: has
-    commands: [table.dashboards.list, table.dashboards.upsert, table.dashboards.delete]
+    commands: [dashboard.list, dashboard.set, dashboard.delete]
     paths: [bindings/wasm/src/check.rs, bindings/wasm/examples/checks.rs]
     cases: [table.dashboards/save-reopen]
     since: "2026-11-16"
@@ -247,7 +247,7 @@ features:
     dimension: [fidelity, ai]
     priority: P1
     status: has
-    commands: [table.file.render, table.preview.show]
+    commands: [file.render, preview.show]
     paths: [crates/view/fonts/**, crates/view/picture/**, bindings/wasm/src/preview.rs, bindings/wasm/tests/picture.rs, bindings/wasm/tests/preview.rs, bindings/wasm/tests/thumbnails.rs, apps/kition-table/src/main.rs, apps/kition-table/tests/render.rs, conformance/expected/**]
     cases: [regressions/issue-4, regressions/issue-render-command, regressions/issue-emoji-cuts-cell, regressions/issue-picture-filter-as-editor, regressions/issue-file-chip, table.picture/thumbnails, table.picture/gallery-and-formats]
     since: "2026-11-16"
@@ -256,7 +256,7 @@ features:
     dimension: [function, platform]
     priority: P1
     status: has
-    commands: [table.file.outline]
+    commands: [file.outline]
     paths: [bindings/wasm/src/outline.rs, bindings/wasm/tests/outline.rs, bindings/wasm/tests/outline_fallbacks.rs, kit.json, docs/features/engine-commands.md]
     cases: [table.outline/items, regressions/issue-outline-fallbacks]
     since: "2026-11-22"
@@ -265,7 +265,7 @@ features:
     dimension: [function, data-safety]
     priority: P1
     status: has
-    commands: [table.attachments.put, table.attachments.read]
+    commands: [attachment.add, attachment.get]
     paths: [web/src/editor/table/components/GalleryCover.tsx]
     cases: [table.attachments/save-reopen, table.attachments/gallery-covers]
     since: "2026-11-16"
@@ -274,7 +274,7 @@ features:
     dimension: [ai, function]
     priority: P1
     status: partial
-    commands: [table.ai.prepare, table.ai.apply]
+    commands: [ai.prepare, ai.apply]
     gap: "The engine has these commands; no case yet shows the area working end to end in the editor and surviving save and reopen."
     cases: [regressions/issue-ai-field-no-model-action]
     since: "2026-11-16"
@@ -283,7 +283,7 @@ features:
     dimension: [function, collab]
     priority: P1
     status: partial
-    commands: [edit.undo, edit.redo, table.transact, table.undo, table.redo, table.historyState, table.changes.since]
+    commands: [edit.undo, edit.redo, edit.transact, history.undo, history.redo, history.state, change.list]
     paths: [bindings/wasm/src/lib.rs, bindings/wasm/src/agent.rs]
     gap: "The engine has these commands; no case yet shows the area working end to end in the editor and surviving save and reopen."
     since: "2026-11-16"

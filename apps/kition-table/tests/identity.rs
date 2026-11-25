@@ -38,7 +38,7 @@ async fn launch(dir: &Path) -> HeadlessKit {
 
 fn put(doc: &mut TableDocument, name: &str, bytes: &[u8]) -> Value {
     let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-    doc.execute("table.attachments.put", json!({ "tableId": 1, "name": name, "mimeType": "text/plain", "data": data })).unwrap()["result"].clone()
+    doc.execute("attachment.add", json!({ "tableId": 1, "name": name, "mimeType": "text/plain", "data": data })).unwrap()["result"].clone()
 }
 
 /// The hash of the blob an attachment value names.
@@ -51,16 +51,16 @@ fn hash(attachment: &Value) -> String {
 /// holds no change row, no deleted row, no record history and not the deleted record's blob.
 fn table() -> (Vec<u8>, String, String) {
     let mut doc = TableDocument::create("Plan.ktable", 0, 0).unwrap();
-    doc.execute("table.fields.create", json!({ "tableId": 1, "name": "files", "title": "Files", "type": "attachment" })).unwrap();
+    doc.execute("field.add", json!({ "tableId": 1, "name": "files", "title": "Files", "type": "attachment" })).unwrap();
     let kept = put(&mut doc, "kept.txt", b"an attachment a record keeps");
     let gone = put(&mut doc, "gone.txt", b"an attachment only the deleted record named");
-    doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "Kept", "files": [kept] } })).unwrap();
-    doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "Also kept" } })).unwrap();
-    let made = doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": SECRET, "files": [gone] } })).unwrap();
+    doc.execute("record.add", json!({ "tableId": 1, "values": { "title": "Kept", "files": [kept] } })).unwrap();
+    doc.execute("record.add", json!({ "tableId": 1, "values": { "title": "Also kept" } })).unwrap();
+    let made = doc.execute("record.add", json!({ "tableId": 1, "values": { "title": SECRET, "files": [gone] } })).unwrap();
     let secret = made["result"]["id"].as_i64().unwrap_or_else(|| panic!("a record id: {made}"));
     let first = doc.saved_bytes().unwrap();
     let mut doc = TableDocument::open("Plan.ktable", &first).unwrap();
-    doc.execute("table.records.delete", json!({ "tableId": 1, "recordId": secret })).unwrap();
+    doc.execute("record.delete", json!({ "tableId": 1, "recordId": secret })).unwrap();
     (doc.saved_bytes().unwrap(), hash(&kept), hash(&gone))
 }
 
@@ -168,14 +168,14 @@ async fn a_table_tells_its_identity_and_forks_into_a_new_document_without_histor
     let fork_bytes = std::fs::read(&forked).unwrap();
     let mut opened = TableDocument::open("Fork.ktable", &fork_bytes).unwrap();
     assert_eq!(opened.doc_id(), fork_id);
-    let read = opened.execute("table.attachments.read", json!({ "hash": kept })).unwrap();
+    let read = opened.execute("attachment.get", json!({ "hash": kept })).unwrap();
     let read = read["result"]["data"].as_str().unwrap_or_default().to_owned();
     assert_eq!(base64::engine::general_purpose::STANDARD.decode(read).unwrap(), b"an attachment a record keeps");
-    opened.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "New" } })).unwrap();
+    opened.execute("record.add", json!({ "tableId": 1, "values": { "title": "New" } })).unwrap();
     let edited = opened.saved_bytes().unwrap();
     let mut reopened = TableDocument::open("Fork.ktable", &edited).unwrap();
     assert_eq!(reopened.doc_id(), fork_id);
-    let rows = reopened.execute("table.read", json!({ "tableId": 1 })).unwrap()["result"]["rows"].clone();
+    let rows = reopened.execute("file.read", json!({ "tableId": 1 })).unwrap()["result"]["rows"].clone();
     assert_eq!(rows.as_array().map(Vec::len), Some(3), "the two records kept and the new one: {rows}");
 
     // No history: the deleted record's text is in neither file.

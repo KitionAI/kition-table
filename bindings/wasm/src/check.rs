@@ -132,10 +132,7 @@ impl Checker<'_> {
                             ),
                         )
                         .on(field_target(table, field))
-                        .fix(
-                            "table.fields.update",
-                            Some(json!({ "tableId": table.id, "fieldId": field.id, "options": { "target_table_id": fallback } })),
-                        ),
+                        .fix("field.set", Some(json!({ "tableId": table.id, "fieldId": field.id, "options": { "target_table_id": fallback } }))),
                     );
                 }
                 "lookup" | "rollup" => self.lookup(table, field),
@@ -154,7 +151,7 @@ impl Checker<'_> {
                                 ),
                             )
                             .on(field_target(table, field))
-                            .fix("table.fields.update", Some(json!({ "tableId": table.id, "fieldId": field.id, "formula": field.formula }))),
+                            .fix("field.set", Some(json!({ "tableId": table.id, "fieldId": field.id, "formula": field.formula }))),
                         );
                     }
                 }
@@ -197,7 +194,7 @@ impl Checker<'_> {
                     ),
                 )
                 .on(field_target(table, field))
-                .fix("table.fields.delete", Some(json!({ "tableId": table.id, "fieldId": field.id }))),
+                .fix("field.delete", Some(json!({ "tableId": table.id, "fieldId": field.id }))),
             );
         }
     }
@@ -223,7 +220,7 @@ impl Checker<'_> {
                                 ),
                             )
                             .on(cell_target(table, record, field))
-                            .fix("table.fields.update", Some(json!({ "tableId": table.id, "fieldId": field.id, "formula": field.formula }))),
+                            .fix("field.set", Some(json!({ "tableId": table.id, "fieldId": field.id, "formula": field.formula }))),
                         );
                     }
                     continue;
@@ -246,10 +243,7 @@ impl Checker<'_> {
                             ),
                         )
                         .on(cell_target(table, record, field))
-                        .fix(
-                            "table.records.update",
-                            Some(json!({ "tableId": table.id, "recordId": record.id, "values": { field.name.clone(): fixed } })),
-                        ),
+                        .fix("record.set", Some(json!({ "tableId": table.id, "recordId": record.id, "values": { field.name.clone(): fixed } }))),
                     );
                     continue;
                 }
@@ -279,7 +273,7 @@ impl Checker<'_> {
                                 ),
                             )
                             .on(cell_target(table, record, field))
-                            .fix("table.fields.update", Some(json!({ "tableId": table.id, "fieldId": field.id, "options": options }))),
+                            .fix("field.set", Some(json!({ "tableId": table.id, "fieldId": field.id, "options": options }))),
                         );
                     }
                 }
@@ -297,7 +291,7 @@ impl Checker<'_> {
                             ),
                         )
                         .on(cell_target(table, record, field))
-                        .fix("table.records.update", Some(json!({ "tableId": table.id, "recordId": record.id }))),
+                        .fix("record.set", Some(json!({ "tableId": table.id, "recordId": record.id }))),
                     );
                 }
             }
@@ -319,7 +313,7 @@ impl Checker<'_> {
                                 ),
                             )
                             .on(cell_target(table, record, primary))
-                            .fix("table.records.update", Some(json!({ "tableId": table.id, "recordId": record.id }))),
+                            .fix("record.set", Some(json!({ "tableId": table.id, "recordId": record.id }))),
                         );
                     } else {
                         primaries.insert(key, record.id);
@@ -361,7 +355,7 @@ pub fn check(file: &TableFile) -> Vec<Diagnostic> {
                 body.insert("dashboardId".into(), json!(dashboard.id));
                 body.insert("source_table_id".into(), json!(first.id));
             }
-            found = found.fix("table.dashboards.upsert", Some(body));
+            found = found.fix("dashboard.set", Some(body));
         }
         checker.found.push(found);
     }

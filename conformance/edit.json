@@ -1,7 +1,7 @@
 {
   "steps": [
     {
-      "command": "table.records.create",
+      "command": "record.add",
       "params": {
         "tableId": 1,
         "values": {

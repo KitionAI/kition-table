@@ -19,7 +19,7 @@
 //! - The replica members (`version`, `exportChanges`, `importChanges`, `docId`, `hasReplica`) are
 //!   the file's own replica, so the document keeps its KDM identity across saves without the
 //!   host keeping a replica. Imported changes queue their `TableChange` for `takeImported`.
-//! - `render` is the document's picture (what the editor shows), and `table.file.render` (the
+//! - `render` is the document's picture (what the editor shows), and `file.render` (the
 //!   manifest's `agent.render`) the same of a diagnostic's target, a table, a view or a range of
 //!   its rows as PNG at a scale and size budget (KHP A39); the editor never draws with them.
 //! - `save` answers the document's content, not its history (kition-sdk data model 7.3 and 7.4;
@@ -1137,7 +1137,7 @@ impl KitDocument for TableDocument {
     }
 
     /// Runs `command`. An agent's command leaves what the picture shows as it was, also when it
-    /// fails; only `table.preview.show`, whose work is moving the picture, keeps its effect. A
+    /// fails; only `preview.show`, whose work is moving the picture, keeps its effect. A
     /// person's commands run as they always did.
     fn execute(&mut self, command: &str, params: Value) -> Result<Value, String> {
         let agent = kition_kit::dispatch::role() == Some(kition_kit::dispatch::Role::Agent);

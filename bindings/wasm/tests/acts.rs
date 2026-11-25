@@ -2,7 +2,7 @@
 //!
 //! - **reads**: the only editor state is what the picture shows (`TableDocument::shown`). A
 //!   command reads it when its dispatch (`run_command`'s branches, `run`'s arms) reads
-//!   `self.shown` or hands a `Shown` to the function it calls; `table.preview.show` only sets it.
+//!   `self.shown` or hands a `Shown` to the function it calls; `preview.show` only sets it.
 //! - **targets**: `kition-table-api`'s `handle` reads each request's ids (`p.id("recordId")`, …):
 //!   a request that reads a `recordId` acts on that record, else one that reads a `fieldId` on that
 //!   field; the kit's own commands that take such an id are listed in `acts::NOT_TARGETS`.
@@ -81,9 +81,9 @@ fn what_each_command_reads_and_the_parameter_on_fills_follow_from_the_code() {
         let id = command.id.as_str();
         let method = id.strip_prefix("table.").unwrap_or(id);
         let text = match id {
-            "table.file.render" => render.to_owned(),
-            "table.file.export" => branch("export::EXPORT_COMMAND"),
-            "table.file.outline" => branch("outline::OUTLINE_COMMAND"),
+            "file.render" => render.to_owned(),
+            "file.export" => branch("export::EXPORT_COMMAND"),
+            "file.outline" => branch("outline::OUTLINE_COMMAND"),
             "edit.undo" | "edit.redo" => run.get(if id == "edit.undo" { "undo" } else { "redo" }).cloned().unwrap_or_default(),
             _ => run.get(method).cloned().unwrap_or_default(),
         };
@@ -122,7 +122,7 @@ fn what_each_command_reads_and_the_parameter_on_fills_follow_from_the_code() {
     }
     assert!(problems.is_empty(), "{problems:#?}");
     assert_eq!(targets, 11, "6 commands on a record, 5 on a field");
-    // `table.preview.show` sets what the picture shows: the move the agent's own commands keep.
+    // `preview.show` sets what the picture shows: the move the agent's own commands keep.
     assert!(run["preview.show"].contains("self.shown = shown"), "{}", run["preview.show"]);
 }
 
@@ -132,15 +132,15 @@ fn what_each_command_reads_and_the_parameter_on_fills_follow_from_the_code() {
 fn five_commands_publish_their_required_parameters() {
     let fresh = || {
         let mut doc = TableDocument::create("Work.ktable", 0, 0).unwrap();
-        doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "First" } })).unwrap();
+        doc.execute("record.add", json!({ "tableId": 1, "values": { "title": "First" } })).unwrap();
         doc
     };
     let calls = [
-        ("table.records.update", json!({ "tableId": 1, "recordId": 1 })),
-        ("table.records.delete", json!({ "tableId": 1, "recordId": 1 })),
-        ("table.fields.create", json!({ "tableId": 1 })),
-        ("table.fields.update", json!({ "tableId": 1, "fieldId": 2 })),
-        ("table.views.create", json!({ "tableId": 1 })),
+        ("record.set", json!({ "tableId": 1, "recordId": 1 })),
+        ("record.delete", json!({ "tableId": 1, "recordId": 1 })),
+        ("field.add", json!({ "tableId": 1 })),
+        ("field.set", json!({ "tableId": 1, "fieldId": 2 })),
+        ("tableView.add", json!({ "tableId": 1 })),
     ];
     kition_kit::testing::check_required(fresh, &calls, |id| acts::REQUIRED_PUBLISHED.contains(&id)).unwrap();
 }

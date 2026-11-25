@@ -12,7 +12,7 @@ use kition_kit_server::{ErrorReason, RpcError};
 
 /// Commands whose params name no file of the host's: `import.run`'s `target` is a table, and its
 /// bytes come in the params.
-const SANDBOXED: &[&str] = &["table.import.preview", "table.import.run"];
+const SANDBOXED: &[&str] = &["file.previewImport", "file.runImport"];
 
 /// Where a `.ktable` file keeps the table document's replica (`document.identity` and
 /// `document.fork`, Kit Process Protocol section 5.6): `kition_kdm`'s snapshot and the change rows
@@ -39,7 +39,7 @@ impl EmbeddedReplica for TableFiles {
 }
 
 fn main() -> std::process::ExitCode {
-    // The picture's faces (renders and `table.file.render`), embedded at build time from a
+    // The picture's faces (renders and `file.render`), embedded at build time from a
     // kition-fonts checkout (feature `embed`), so previews have text wherever the executable runs.
     // Never the machine's own fonts.
     kition_table_fonts::register_embedded();

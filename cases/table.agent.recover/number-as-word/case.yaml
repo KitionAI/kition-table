@@ -38,6 +38,6 @@ solution:
     args:
       path: effort.ktable
       steps:
-        - { command: table.records.update, params: { tableId: 1, recordId: 1, values: { effort: 3 } } }
+        - { command: record.set, params: { tableId: 1, recordId: 1, values: { effort: 3 } } }
 since: "2026-11-16"
 timeout_s: 600

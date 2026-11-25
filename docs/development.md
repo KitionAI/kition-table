@@ -59,7 +59,7 @@ error names the setting).
 
 ## Fonts
 
-The picture (thumbnails, the agent's preview, `table.file.render`) draws text with the faces
+The picture (thumbnails, the agent's preview, `file.render`) draws text with the faces
 below. `scripts/fetch-fonts.sh <folder>` downloads each file, with its license, from its upstream
 source into `<folder>`, laid out as shown, and checks its SHA-256; then set `KITION_FONTS_DIR` to
 that folder (the default is a `kition-fonts` folder beside this repository: a checkout of
@@ -218,7 +218,7 @@ import its re-exported `KitDocument` contract; a host does not need to match a s
 ```rust,ignore
 use kition_table_kit::{KitDocument, Origin, TableDocument};
 let mut document = TableDocument::create("contacts.ktable", 0, 0)?;
-document.execute_as("table.tables.list", serde_json::json!({}), &Origin::system("system:host"))?;
+document.execute_as("table.list", serde_json::json!({}), &Origin::system("system:host"))?;
 let bytes = document.save(None)?;
 ```
 

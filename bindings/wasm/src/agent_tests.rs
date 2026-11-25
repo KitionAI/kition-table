@@ -127,23 +127,23 @@ fn every_command_has_a_valid_parameter_and_output_schema() {
 
 #[test]
 fn the_ids_and_bodies_come_from_the_request_types() {
-    let records = input_schema("table.records.update").unwrap();
+    let records = input_schema("record.set").unwrap();
     assert_eq!(records["tableId"]["required"], true);
     // An id parameter takes the local integer or the stable id a receipt shows (one id space).
     assert_eq!(records["recordId"]["oneOf"], json!([{ "type": "integer" }, { "type": "string" }]));
     assert_eq!(records["values"]["type"], "object");
     assert_eq!(records["values"]["additionalProperties"], true);
-    let transact = input_schema("table.transact").unwrap();
+    let transact = input_schema("edit.transact").unwrap();
     assert_eq!(transact["ops"]["required"], true);
     let op = &transact["ops"]["items"];
     let names: Vec<&str> = op["oneOf"].as_array().unwrap().iter().map(|branch| branch["properties"]["op"]["enum"][0].as_str().unwrap()).collect();
     assert_eq!(names, ["cells.set", "records.create", "records.delete", "records.move", "fields.move"]);
-    let filter = input_schema("table.views.putFilterTree").unwrap();
+    let filter = input_schema("tableView.setFilterTree").unwrap();
     assert_eq!(filter["tree"]["properties"]["conjunction"]["type"], "string");
-    assert_eq!(input_schema("table.links.list").unwrap()["field_id"]["required"], true);
-    assert_eq!(input_schema("table.attachments.read").unwrap()["hash"]["type"], "string");
-    assert!(input_schema("table.records.create").unwrap().get("asOrigin").is_some());
-    assert!(input_schema("table.records.list").unwrap().get("asOrigin").is_none(), "reads write nothing");
+    assert_eq!(input_schema("recordLink.list").unwrap()["field_id"]["required"], true);
+    assert_eq!(input_schema("attachment.get").unwrap()["hash"]["type"], "string");
+    assert!(input_schema("record.add").unwrap().get("asOrigin").is_some());
+    assert!(input_schema("record.list").unwrap().get("asOrigin").is_none(), "reads write nothing");
     assert_eq!(input_schema("edit.undo").unwrap()["scope"]["enum"], json!(["person", "agent"]), "whose step (M12a)");
     assert_eq!(input_schema("table.nope"), None);
 }
@@ -194,113 +194,109 @@ fn empty_params_answer_a_result_or_an_error_and_leave_the_file() {
 #[test]
 fn real_answers_and_errors_of_every_command_match_their_schemas() {
     let mut r = Runner { doc: TableDocument::create("Tasks.ktable", 640, 420).unwrap(), ran: BTreeSet::new() };
-    let document = r.ok("table.documents.get", json!({}));
+    let document = r.ok("file.get", json!({}));
     let table = document["tables"][0]["id"].as_i64().unwrap();
     let primary = document["tables"][0]["primary_field_id"].as_i64().unwrap();
     let title = document["tables"][0]["fields"].as_array().unwrap().iter().find(|field| field["id"].as_i64() == Some(primary)).unwrap()["name"]
         .as_str()
         .unwrap()
         .to_owned();
-    r.ok("table.tables.list", json!({}));
+    r.ok("table.list", json!({}));
 
-    let other = r.ok("table.tables.create", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }))["id"]
-        .as_i64()
-        .unwrap();
-    r.ok("table.tables.update", json!({ "tableId": other, "title": "Persons", "description": "Who" }));
-    r.ok("table.fields.list", json!({ "tableId": table }));
-    let score = r.ok("table.fields.create", json!({ "tableId": table, "title": "Score", "type": "number" }))["id"].as_i64().unwrap();
-    r.ok("table.fields.update", json!({ "tableId": table, "fieldId": score, "title": "Points" }));
-    let copy = r.ok("table.fields.duplicate", json!({ "tableId": table, "fieldId": score }))["id"].as_i64().unwrap();
-    r.ok("table.fields.delete", json!({ "tableId": table, "fieldId": copy }));
-    let _ = r.run("table.fields.linkCandidates", json!({ "tableId": table, "fieldId": primary, "q": "a", "limit": 5 }));
+    let other =
+        r.ok("table.add", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }))["id"].as_i64().unwrap();
+    r.ok("table.set", json!({ "tableId": other, "title": "Persons", "description": "Who" }));
+    r.ok("field.list", json!({ "tableId": table }));
+    let score = r.ok("field.add", json!({ "tableId": table, "title": "Score", "type": "number" }))["id"].as_i64().unwrap();
+    r.ok("field.set", json!({ "tableId": table, "fieldId": score, "title": "Points" }));
+    let copy = r.ok("field.duplicate", json!({ "tableId": table, "fieldId": score }))["id"].as_i64().unwrap();
+    r.ok("field.delete", json!({ "tableId": table, "fieldId": copy }));
+    let _ = r.run("field.linkCandidates", json!({ "tableId": table, "fieldId": primary, "q": "a", "limit": 5 }));
 
-    r.ok("table.views.list", json!({ "tableId": table }));
-    let view = r.ok("table.views.create", json!({ "tableId": table, "title": "Board", "type": "grid" }))["id"].as_i64().unwrap();
-    r.ok("table.views.update", json!({ "tableId": table, "viewId": view, "title": "Main" }));
-    r.ok("table.views.getFilterTree", json!({ "tableId": table, "viewId": view }));
+    r.ok("tableView.list", json!({ "tableId": table }));
+    let view = r.ok("tableView.add", json!({ "tableId": table, "title": "Board", "type": "grid" }))["id"].as_i64().unwrap();
+    r.ok("tableView.set", json!({ "tableId": table, "viewId": view, "title": "Main" }));
+    r.ok("tableView.getFilterTree", json!({ "tableId": table, "viewId": view }));
     r.ok(
-        "table.views.putFilterTree",
+        "tableView.setFilterTree",
         json!({ "tableId": table, "viewId": view, "tree": { "conjunction": "and", "children": [{ "condition": { "field_id": primary, "operator": "is_not_empty", "value": null } }] } }),
     );
-    r.ok("table.views.getSorts", json!({ "tableId": table, "viewId": view }));
-    r.ok("table.views.putSorts", json!({ "tableId": table, "viewId": view, "items": [{ "field_id": primary, "direction": "asc" }] }));
-    r.ok("table.views.getGroups", json!({ "tableId": table, "viewId": view }));
-    r.ok("table.views.putGroups", json!({ "tableId": table, "viewId": view, "items": [{ "field_id": primary, "direction": "desc" }] }));
-    r.ok("table.views.patchConfig", json!({ "tableId": table, "viewId": view, "row_height": "short", "frozen_column_count": 1 }));
-    r.ok("table.views.listFields", json!({ "tableId": table, "viewId": view }));
-    r.ok("table.views.patchField", json!({ "tableId": table, "viewId": view, "fieldId": score, "visible": false, "width": 120 }));
+    r.ok("tableView.getSorts", json!({ "tableId": table, "viewId": view }));
+    r.ok("tableView.setSorts", json!({ "tableId": table, "viewId": view, "items": [{ "field_id": primary, "direction": "asc" }] }));
+    r.ok("tableView.getGroups", json!({ "tableId": table, "viewId": view }));
+    r.ok("tableView.setGroups", json!({ "tableId": table, "viewId": view, "items": [{ "field_id": primary, "direction": "desc" }] }));
+    r.ok("tableView.setConfig", json!({ "tableId": table, "viewId": view, "row_height": "short", "frozen_column_count": 1 }));
+    r.ok("tableView.listFields", json!({ "tableId": table, "viewId": view }));
+    r.ok("tableView.setField", json!({ "tableId": table, "viewId": view, "fieldId": score, "visible": false, "width": 120 }));
 
-    let record = r.ok("table.records.create", json!({ "tableId": table, "values": { title.clone(): "Write the plan" } }));
+    let record = r.ok("record.add", json!({ "tableId": table, "values": { title.clone(): "Write the plan" } }));
     let (record_id, row_key) = (record["id"].as_i64().unwrap(), record["row_key"].as_str().unwrap().to_owned());
-    r.ok("table.records.update", json!({ "tableId": table, "recordId": record_id, "values": { title.clone(): "Ship it" } }));
-    r.ok("table.records.list", json!({ "tableId": table, "limit": 10, "offset": 0 }));
-    r.ok("table.records.history", json!({ "tableId": table, "recordId": record_id }));
-    r.ok("table.records.bulkCopy", json!({ "tableId": table, "row_keys": [row_key.clone()], "target_position": 0 }));
-    let _ = r.run("table.links.list", json!({ "tableId": table, "recordId": record_id, "field_id": primary }));
-    let _ = r.run("table.links.replace", json!({ "tableId": table, "recordId": record_id, "field_id": primary, "target_row_keys": [] }));
-    let _ = r.run("table.links.delete", json!({ "tableId": table, "recordId": record_id, "field_id": primary, "target_row_keys": [] }));
+    r.ok("record.set", json!({ "tableId": table, "recordId": record_id, "values": { title.clone(): "Ship it" } }));
+    r.ok("record.list", json!({ "tableId": table, "limit": 10, "offset": 0 }));
+    r.ok("record.history", json!({ "tableId": table, "recordId": record_id }));
+    r.ok("record.bulkCopy", json!({ "tableId": table, "row_keys": [row_key.clone()], "target_position": 0 }));
+    let _ = r.run("recordLink.list", json!({ "tableId": table, "recordId": record_id, "field_id": primary }));
+    let _ = r.run("recordLink.replace", json!({ "tableId": table, "recordId": record_id, "field_id": primary, "target_row_keys": [] }));
+    let _ = r.run("recordLink.delete", json!({ "tableId": table, "recordId": record_id, "field_id": primary, "target_row_keys": [] }));
 
-    r.ok("table.csv.import", json!({ "tableId": table, "content": format!("{title}\nFrom CSV\n") }));
-    r.ok("table.csv.export", json!({ "tableId": table }));
-    r.ok("table.markdown.export", json!({ "tableId": table }));
-    r.ok("table.file.export", json!({ "format": "csv", "tableId": table }));
-    r.ok("table.file.export", json!({ "format": "md" }));
-    assert!(r.run("table.file.export", json!({ "format": "csv", "tableId": 999 })).is_err());
+    r.ok("file.importCsv", json!({ "tableId": table, "content": format!("{title}\nFrom CSV\n") }));
+    r.ok("file.exportCsv", json!({ "tableId": table }));
+    r.ok("file.exportMarkdown", json!({ "tableId": table }));
+    r.ok("file.export", json!({ "format": "csv", "tableId": table }));
+    r.ok("file.export", json!({ "format": "md" }));
+    assert!(r.run("file.export", json!({ "format": "csv", "tableId": 999 })).is_err());
     r.ok(
-        "table.transact",
+        "edit.transact",
         json!({ "ops": [{ "op": "cells.set", "tableId": table, "records": [{ "rowKey": row_key, "values": { title.clone(): "Edited" } }] }] }),
     );
     r.ok(
-        "table.transact",
+        "edit.transact",
         json!({ "ops": [{ "op": "records.create", "tableId": table, "at": { "after": row_key }, "records": [{ title.clone(): "Next" }] }] }),
     );
-    r.ok("table.historyState", json!({}));
-    r.ok("table.undo", json!({}));
-    r.ok("table.redo", json!({}));
+    r.ok("history.state", json!({}));
+    r.ok("history.undo", json!({}));
+    r.ok("history.redo", json!({}));
     r.ok("edit.undo", json!({}));
     r.ok("edit.redo", json!({}));
 
-    r.ok("table.dashboards.upsert", json!({ "dashboardId": "d1", "title": "Overview", "order": 1, "source_table_id": table, "layout": [], "widgets": [{ "id": "w1", "type": "metric" }] }));
-    r.ok("table.dashboards.list", json!({}));
-    r.ok("table.dashboards.delete", json!({ "dashboardId": "d1" }));
+    r.ok("dashboard.set", json!({ "dashboardId": "d1", "title": "Overview", "order": 1, "source_table_id": table, "layout": [], "widgets": [{ "id": "w1", "type": "metric" }] }));
+    r.ok("dashboard.list", json!({}));
+    r.ok("dashboard.delete", json!({ "dashboardId": "d1" }));
 
     let data = base64::engine::general_purpose::STANDARD.encode(b"hello");
-    let attachment = r.ok("table.attachments.put", json!({ "tableId": table, "name": "note.txt", "mimeType": "text/plain", "data": data }));
+    let attachment = r.ok("attachment.add", json!({ "tableId": table, "name": "note.txt", "mimeType": "text/plain", "data": data }));
     let hash = attachment["url"].as_str().unwrap().trim_start_matches("kition-blob:").to_owned();
-    r.ok("table.attachments.read", json!({ "hash": hash }));
+    r.ok("attachment.get", json!({ "hash": hash }));
 
     let csv = base64::engine::general_purpose::STANDARD.encode("Name,Age\nAda,36\n");
-    let _ = r.run("table.import.preview", json!({ "fileName": "people.csv", "content": csv }));
+    let _ = r.run("file.previewImport", json!({ "fileName": "people.csv", "content": csv }));
     let _ = r.run(
-        "table.import.run",
+        "file.runImport",
         json!({ "fileName": "people.csv", "content": csv, "write_mode": "append", "schema_mode": "create", "target": { "kind": "existing_table", "table_id": other } }),
     );
-    let _ = r.run("table.ai.prepare", json!({ "tableId": table, "fieldId": primary, "recordId": record_id }));
-    let _ = r.run(
-        "table.ai.apply",
-        json!({ "tableId": table, "fieldId": primary, "recordId": record_id, "results": [{ "recordId": record_id, "text": "x" }] }),
-    );
-    r.ok("table.changes.since", json!({ "version": "" }));
-    r.ok("table.read", json!({ "tableId": table, "limit": 1 }));
-    assert!(r.run("table.read", json!({ "viewId": 999 })).is_err());
-    r.ok("table.file.render", json!({ "target": { "path": format!("tables/{table}") }, "scale": 2 }));
-    r.ok("table.file.outline", json!({}));
-    r.ok("table.preview.show", json!({ "tableId": table }));
-    assert!(r.run("table.preview.show", json!({ "viewId": 999 })).is_err());
+    let _ = r.run("ai.prepare", json!({ "tableId": table, "fieldId": primary, "recordId": record_id }));
+    let _ = r
+        .run("ai.apply", json!({ "tableId": table, "fieldId": primary, "recordId": record_id, "results": [{ "recordId": record_id, "text": "x" }] }));
+    r.ok("change.list", json!({ "version": "" }));
+    r.ok("file.read", json!({ "tableId": table, "limit": 1 }));
+    assert!(r.run("file.read", json!({ "viewId": 999 })).is_err());
+    r.ok("file.render", json!({ "target": { "path": format!("tables/{table}") }, "scale": 2 }));
+    r.ok("file.outline", json!({}));
+    r.ok("preview.show", json!({ "tableId": table }));
+    assert!(r.run("preview.show", json!({ "viewId": 999 })).is_err());
 
     // Errors: a missing table, a bad op, a missing record; each validates and leaves the file.
-    assert!(r.run("table.fields.list", json!({ "tableId": 999 })).is_err());
-    assert!(r.run("table.records.update", json!({ "tableId": table, "recordId": 999, "values": {} })).is_err());
-    assert!(r.run("table.transact", json!({ "ops": [] })).is_err());
-    assert!(r.run("table.changes.since", json!({ "version": "not base64!" })).is_err());
-    assert!(r.run("table.file.render", json!({ "target": { "path": "tables/999" } })).is_err());
+    assert!(r.run("field.list", json!({ "tableId": 999 })).is_err());
+    assert!(r.run("record.set", json!({ "tableId": table, "recordId": 999, "values": {} })).is_err());
+    assert!(r.run("edit.transact", json!({ "ops": [] })).is_err());
+    assert!(r.run("change.list", json!({ "version": "not base64!" })).is_err());
+    assert!(r.run("file.render", json!({ "target": { "path": "tables/999" } })).is_err());
 
-    let spare =
-        r.ok("table.records.create", json!({ "tableId": table, "values": { title.clone(): "Spare" } }))["row_key"].as_str().unwrap().to_owned();
-    r.ok("table.records.bulkDelete", json!({ "tableId": table, "row_keys": [spare] }));
-    r.ok("table.records.delete", json!({ "tableId": table, "recordId": record_id }));
-    r.ok("table.views.delete", json!({ "tableId": table, "viewId": view }));
-    r.ok("table.tables.delete", json!({ "tableId": other }));
+    let spare = r.ok("record.add", json!({ "tableId": table, "values": { title.clone(): "Spare" } }))["row_key"].as_str().unwrap().to_owned();
+    r.ok("record.bulkDelete", json!({ "tableId": table, "row_keys": [spare] }));
+    r.ok("record.delete", json!({ "tableId": table, "recordId": record_id }));
+    r.ok("tableView.delete", json!({ "tableId": table, "viewId": view }));
+    r.ok("table.delete", json!({ "tableId": other }));
 
     let all: BTreeSet<String> = r.doc.commands().into_iter().map(|command| command.id).collect();
     let missing: Vec<&String> = all.difference(&r.ran).collect();
@@ -312,40 +308,39 @@ fn real_answers_and_errors_of_every_command_match_their_schemas() {
 #[test]
 fn link_ai_and_import_answers_match_their_schemas_key_by_key() {
     let mut r = Runner { doc: TableDocument::create("Tasks.ktable", 640, 420).unwrap(), ran: BTreeSet::new() };
-    let people = r.ok("table.tables.create", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }));
+    let people = r.ok("table.add", json!({ "title": "People", "fields": [{ "title": "Name", "type": "text", "primary": true }] }));
     let people_id = people["id"].as_i64().unwrap();
-    let ada = r.ok("table.records.create", json!({ "tableId": people_id, "values": { "name": "Ada" } }))["row_key"].as_str().unwrap().to_owned();
-    let owner =
-        r.ok("table.fields.create", json!({ "tableId": 1, "title": "Owner", "type": "link_to_record", "options": { "target_table_id": people_id } }));
+    let ada = r.ok("record.add", json!({ "tableId": people_id, "values": { "name": "Ada" } }))["row_key"].as_str().unwrap().to_owned();
+    let owner = r.ok("field.add", json!({ "tableId": 1, "title": "Owner", "type": "link_to_record", "options": { "target_table_id": people_id } }));
     let owner_id = owner["id"].as_i64().unwrap();
-    let task = r.ok("table.records.create", json!({ "tableId": 1, "values": { "title": "Plan" } }))["id"].as_i64().unwrap();
-    r.ok("table.links.replace", json!({ "tableId": 1, "recordId": task, "field_id": owner_id, "target_row_keys": [ada] }));
-    r.ok("table.links.list", json!({ "tableId": 1, "recordId": task, "field_id": owner_id }));
-    r.ok("table.fields.linkCandidates", json!({ "tableId": 1, "fieldId": owner_id, "q": "A" }));
-    r.ok("table.links.delete", json!({ "tableId": 1, "recordId": task, "field_id": owner_id, "target_row_keys": [ada] }));
+    let task = r.ok("record.add", json!({ "tableId": 1, "values": { "title": "Plan" } }))["id"].as_i64().unwrap();
+    r.ok("recordLink.replace", json!({ "tableId": 1, "recordId": task, "field_id": owner_id, "target_row_keys": [ada] }));
+    r.ok("recordLink.list", json!({ "tableId": 1, "recordId": task, "field_id": owner_id }));
+    r.ok("field.linkCandidates", json!({ "tableId": 1, "fieldId": owner_id, "q": "A" }));
+    r.ok("recordLink.delete", json!({ "tableId": 1, "recordId": task, "field_id": owner_id, "target_row_keys": [ada] }));
 
     let summary = r.ok(
-        "table.fields.create",
+        "field.add",
         json!({ "tableId": 1, "title": "Summary", "type": "ai", "options": { "ai_config": { "type": "summarize", "source_field_id": 1 } } }),
     )["id"]
         .as_i64()
         .unwrap();
-    r.ok("table.ai.prepare", json!({ "tableId": 1, "fieldId": summary, "recordId": task }));
-    r.ok("table.ai.prepare", json!({ "tableId": 1, "fieldId": summary, "record_ids": [task] }));
-    r.ok("table.ai.apply", json!({ "tableId": 1, "fieldId": summary, "recordId": task, "results": [{ "recordId": task, "text": "A plan." }] }));
+    r.ok("ai.prepare", json!({ "tableId": 1, "fieldId": summary, "recordId": task }));
+    r.ok("ai.prepare", json!({ "tableId": 1, "fieldId": summary, "record_ids": [task] }));
+    r.ok("ai.apply", json!({ "tableId": 1, "fieldId": summary, "recordId": task, "results": [{ "recordId": task, "text": "A plan." }] }));
     r.ok(
-        "table.ai.apply",
+        "ai.apply",
         json!({ "tableId": 1, "fieldId": summary, "results": [{ "recordId": task, "text": "A plan." }, { "recordId": 999, "error": "no" }] }),
     );
 
     let csv = base64::engine::general_purpose::STANDARD.encode("Name,Age\nAda,36\nGrace,45\n");
-    r.ok("table.import.preview", json!({ "fileName": "people.csv", "content": csv }));
+    r.ok("file.previewImport", json!({ "fileName": "people.csv", "content": csv }));
     r.ok(
-        "table.import.run",
+        "file.runImport",
         json!({ "fileName": "people.csv", "content": csv, "write_mode": "append", "schema_mode": "auto", "target": { "kind": "new_table", "table_title": "Imported" } }),
     );
     r.ok(
-        "table.import.run",
+        "file.runImport",
         json!({ "fileName": "people.csv", "content": csv, "write_mode": "append", "schema_mode": "auto", "target": { "kind": "existing_table", "table_id": people_id } }),
     );
 }

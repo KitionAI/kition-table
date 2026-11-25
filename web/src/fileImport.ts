@@ -17,9 +17,9 @@ async function fileParams(file: File): Promise<FileParams> {
 }
 
 /**
- * CSV, TSV, and XLSX import in the page, through the engine: `table.import.preview` reads the file
+ * CSV, TSV, and XLSX import in the page, through the engine: `file.previewImport` reads the file
  * and infers its fields (the data-import contract's preview request, plus the file), and
- * `table.import.run` writes it into a table of the open document, or a new one, in one engine
+ * `file.runImport` writes it into a table of the open document, or a new one, in one engine
  * command (an Undo step), and answers the import's result. The file goes with both requests, so
  * the engine keeps nothing between them.
  */

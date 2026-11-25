@@ -451,7 +451,7 @@
       }
     },
     {
-      "command": "table.documents.get",
+      "command": "file.get",
       "tool": "table_table_documents_get",
       "title": "Read the document",
       "description": "Reads the document's title, every table with its fields and views, and its dashboards' ids and titles, without changing anything.",
@@ -908,7 +908,7 @@
       }
     },
     {
-      "command": "table.tables.list",
+      "command": "table.list",
       "tool": "table_table_tables_list",
       "title": "List tables",
       "description": "Lists every table with its id, name, title, fields (ids, names, types, options) and views; start here to learn the ids and field names other calls need.",
@@ -1300,7 +1300,7 @@
       }
     },
     {
-      "command": "table.tables.create",
+      "command": "table.add",
       "tool": "table_table_tables_create",
       "title": "Create a table",
       "description": "Creates a table from a title and optionally its fields (each with a type and options) and views; without fields it gets a primary text field Title, without views a grid view All. Answers the table with its ids.",
@@ -1362,7 +1362,7 @@
                     "last_modified_by",
                     "auto_number"
                   ],
-                  "description": "The field's type (default text). There is no email or phone type: use text, or url for a link to open.\ntext: One line of text (a string).\nlong_text: Text of several lines (a string); options.showAs shows it as text or rendered markdown.\nnumber: A number.\ndate: A calendar date written as YYYY-MM-DD; options.date_format is how the editor shows it.\ndatetime: A date and time as an ISO 8601 string; options.date_format is how the editor shows it.\nsingle_select: One of options.choices (a string).\nmulti_select: Some of options.choices (a list of strings).\ncheckbox: true or false.\nurl: A web address (a string).\nattachment: Files kept in the document: a list of the values table.attachments.put answers.\ndocument_link: A reference to another document (a string).\nformula: Computed from the field's `formula` expression, which names fields in braces ({price} * 2); read-only.\nai: Written by the host's model as options.ai_config says (table.ai.prepare, then table.ai.apply); read-only.\nrating: A whole number from 0 to options.max (default 5).\nuser: A person, {id, name, avatar?}, or a list of them.\nlink_to_record: Links to records of the table options.target_table_id names; set with table.links.replace, read as [{row_key, display}].\nlookup: Computed: the values of options.target_field_id in the records linked through options.link_field_id.\nrollup: Computed: options.aggregation over the records linked through options.link_field_id (their options.target_field_id values).\nbutton: A button labelled options.label that runs options.action; it holds no value.\ncreated_time: Reserved for when the record was created; this engine leaves it empty.\nlast_modified_time: Reserved for when the record last changed; this engine leaves it empty.\ncreated_by: Reserved for who created the record; this engine leaves it empty.\nlast_modified_by: Reserved for who last changed the record; this engine leaves it empty.\nauto_number: Reserved for a running number; this engine leaves it empty."
+                  "description": "The field's type (default text). There is no email or phone type: use text, or url for a link to open.\ntext: One line of text (a string).\nlong_text: Text of several lines (a string); options.showAs shows it as text or rendered markdown.\nnumber: A number.\ndate: A calendar date written as YYYY-MM-DD; options.date_format is how the editor shows it.\ndatetime: A date and time as an ISO 8601 string; options.date_format is how the editor shows it.\nsingle_select: One of options.choices (a string).\nmulti_select: Some of options.choices (a list of strings).\ncheckbox: true or false.\nurl: A web address (a string).\nattachment: Files kept in the document: a list of the values attachment.add answers.\ndocument_link: A reference to another document (a string).\nformula: Computed from the field's `formula` expression, which names fields in braces ({price} * 2); read-only.\nai: Written by the host's model as options.ai_config says (ai.prepare, then ai.apply); read-only.\nrating: A whole number from 0 to options.max (default 5).\nuser: A person, {id, name, avatar?}, or a list of them.\nlink_to_record: Links to records of the table options.target_table_id names; set with recordLink.replace, read as [{row_key, display}].\nlookup: Computed: the values of options.target_field_id in the records linked through options.link_field_id.\nrollup: Computed: options.aggregation over the records linked through options.link_field_id (their options.target_field_id values).\nbutton: A button labelled options.label that runs options.action; it holds no value.\ncreated_time: Reserved for when the record was created; this engine leaves it empty.\nlast_modified_time: Reserved for when the record last changed; this engine leaves it empty.\ncreated_by: Reserved for who created the record; this engine leaves it empty.\nlast_modified_by: Reserved for who last changed the record; this engine leaves it empty.\nauto_number: Reserved for a running number; this engine leaves it empty."
                 },
                 "primary": {
                   "type": "boolean",
@@ -1963,7 +1963,7 @@
       }
     },
     {
-      "command": "table.tables.update",
+      "command": "table.set",
       "tool": "table_table_tables_update",
       "title": "Update a table",
       "description": "Changes a table's title, description, metadata or primary field; its fields and records stay as they are.",
@@ -2382,7 +2382,7 @@
       }
     },
     {
-      "command": "table.tables.delete",
+      "command": "table.delete",
       "tool": "table_table_tables_delete",
       "title": "Delete a table",
       "description": "Deletes a table with its fields, records and views, and every link to or from its records.",
@@ -2547,7 +2547,7 @@
       }
     },
     {
-      "command": "table.fields.list",
+      "command": "field.list",
       "tool": "table_table_fields_list",
       "title": "List fields",
       "description": "Lists a table's fields (columns) in order, with their ids, names, types and options.",
@@ -2822,7 +2822,7 @@
       }
     },
     {
-      "command": "table.fields.create",
+      "command": "field.add",
       "tool": "table_table_fields_create",
       "title": "Create a field",
       "description": "Adds a field (column) to a table: its title, its type (text, number, single_select, date, link_to_record, formula, ai, ...) and the options that type reads; answers the field with its id and name.",
@@ -2877,7 +2877,7 @@
               "last_modified_by",
               "auto_number"
             ],
-            "description": "The field's type (default text). There is no email or phone type: use text, or url for a link to open.\ntext: One line of text (a string).\nlong_text: Text of several lines (a string); options.showAs shows it as text or rendered markdown.\nnumber: A number.\ndate: A calendar date written as YYYY-MM-DD; options.date_format is how the editor shows it.\ndatetime: A date and time as an ISO 8601 string; options.date_format is how the editor shows it.\nsingle_select: One of options.choices (a string).\nmulti_select: Some of options.choices (a list of strings).\ncheckbox: true or false.\nurl: A web address (a string).\nattachment: Files kept in the document: a list of the values table.attachments.put answers.\ndocument_link: A reference to another document (a string).\nformula: Computed from the field's `formula` expression, which names fields in braces ({price} * 2); read-only.\nai: Written by the host's model as options.ai_config says (table.ai.prepare, then table.ai.apply); read-only.\nrating: A whole number from 0 to options.max (default 5).\nuser: A person, {id, name, avatar?}, or a list of them.\nlink_to_record: Links to records of the table options.target_table_id names; set with table.links.replace, read as [{row_key, display}].\nlookup: Computed: the values of options.target_field_id in the records linked through options.link_field_id.\nrollup: Computed: options.aggregation over the records linked through options.link_field_id (their options.target_field_id values).\nbutton: A button labelled options.label that runs options.action; it holds no value.\ncreated_time: Reserved for when the record was created; this engine leaves it empty.\nlast_modified_time: Reserved for when the record last changed; this engine leaves it empty.\ncreated_by: Reserved for who created the record; this engine leaves it empty.\nlast_modified_by: Reserved for who last changed the record; this engine leaves it empty.\nauto_number: Reserved for a running number; this engine leaves it empty."
+            "description": "The field's type (default text). There is no email or phone type: use text, or url for a link to open.\ntext: One line of text (a string).\nlong_text: Text of several lines (a string); options.showAs shows it as text or rendered markdown.\nnumber: A number.\ndate: A calendar date written as YYYY-MM-DD; options.date_format is how the editor shows it.\ndatetime: A date and time as an ISO 8601 string; options.date_format is how the editor shows it.\nsingle_select: One of options.choices (a string).\nmulti_select: Some of options.choices (a list of strings).\ncheckbox: true or false.\nurl: A web address (a string).\nattachment: Files kept in the document: a list of the values attachment.add answers.\ndocument_link: A reference to another document (a string).\nformula: Computed from the field's `formula` expression, which names fields in braces ({price} * 2); read-only.\nai: Written by the host's model as options.ai_config says (ai.prepare, then ai.apply); read-only.\nrating: A whole number from 0 to options.max (default 5).\nuser: A person, {id, name, avatar?}, or a list of them.\nlink_to_record: Links to records of the table options.target_table_id names; set with recordLink.replace, read as [{row_key, display}].\nlookup: Computed: the values of options.target_field_id in the records linked through options.link_field_id.\nrollup: Computed: options.aggregation over the records linked through options.link_field_id (their options.target_field_id values).\nbutton: A button labelled options.label that runs options.action; it holds no value.\ncreated_time: Reserved for when the record was created; this engine leaves it empty.\nlast_modified_time: Reserved for when the record last changed; this engine leaves it empty.\ncreated_by: Reserved for who created the record; this engine leaves it empty.\nlast_modified_by: Reserved for who last changed the record; this engine leaves it empty.\nauto_number: Reserved for a running number; this engine leaves it empty."
           },
           "required": {
             "type": "boolean"
@@ -3318,7 +3318,7 @@
       }
     },
     {
-      "command": "table.fields.update",
+      "command": "field.set",
       "tool": "table_table_fields_update",
       "title": "Update a field",
       "description": "Changes a field's title, type, options, formula, AI prompt, flags or primary status; values already stored stay as they are when the type changes.",
@@ -3380,7 +3380,7 @@
               "last_modified_by",
               "auto_number"
             ],
-            "description": "The field's type (default text). There is no email or phone type: use text, or url for a link to open.\ntext: One line of text (a string).\nlong_text: Text of several lines (a string); options.showAs shows it as text or rendered markdown.\nnumber: A number.\ndate: A calendar date written as YYYY-MM-DD; options.date_format is how the editor shows it.\ndatetime: A date and time as an ISO 8601 string; options.date_format is how the editor shows it.\nsingle_select: One of options.choices (a string).\nmulti_select: Some of options.choices (a list of strings).\ncheckbox: true or false.\nurl: A web address (a string).\nattachment: Files kept in the document: a list of the values table.attachments.put answers.\ndocument_link: A reference to another document (a string).\nformula: Computed from the field's `formula` expression, which names fields in braces ({price} * 2); read-only.\nai: Written by the host's model as options.ai_config says (table.ai.prepare, then table.ai.apply); read-only.\nrating: A whole number from 0 to options.max (default 5).\nuser: A person, {id, name, avatar?}, or a list of them.\nlink_to_record: Links to records of the table options.target_table_id names; set with table.links.replace, read as [{row_key, display}].\nlookup: Computed: the values of options.target_field_id in the records linked through options.link_field_id.\nrollup: Computed: options.aggregation over the records linked through options.link_field_id (their options.target_field_id values).\nbutton: A button labelled options.label that runs options.action; it holds no value.\ncreated_time: Reserved for when the record was created; this engine leaves it empty.\nlast_modified_time: Reserved for when the record last changed; this engine leaves it empty.\ncreated_by: Reserved for who created the record; this engine leaves it empty.\nlast_modified_by: Reserved for who last changed the record; this engine leaves it empty.\nauto_number: Reserved for a running number; this engine leaves it empty."
+            "description": "The field's type (default text). There is no email or phone type: use text, or url for a link to open.\ntext: One line of text (a string).\nlong_text: Text of several lines (a string); options.showAs shows it as text or rendered markdown.\nnumber: A number.\ndate: A calendar date written as YYYY-MM-DD; options.date_format is how the editor shows it.\ndatetime: A date and time as an ISO 8601 string; options.date_format is how the editor shows it.\nsingle_select: One of options.choices (a string).\nmulti_select: Some of options.choices (a list of strings).\ncheckbox: true or false.\nurl: A web address (a string).\nattachment: Files kept in the document: a list of the values attachment.add answers.\ndocument_link: A reference to another document (a string).\nformula: Computed from the field's `formula` expression, which names fields in braces ({price} * 2); read-only.\nai: Written by the host's model as options.ai_config says (ai.prepare, then ai.apply); read-only.\nrating: A whole number from 0 to options.max (default 5).\nuser: A person, {id, name, avatar?}, or a list of them.\nlink_to_record: Links to records of the table options.target_table_id names; set with recordLink.replace, read as [{row_key, display}].\nlookup: Computed: the values of options.target_field_id in the records linked through options.link_field_id.\nrollup: Computed: options.aggregation over the records linked through options.link_field_id (their options.target_field_id values).\nbutton: A button labelled options.label that runs options.action; it holds no value.\ncreated_time: Reserved for when the record was created; this engine leaves it empty.\nlast_modified_time: Reserved for when the record last changed; this engine leaves it empty.\ncreated_by: Reserved for who created the record; this engine leaves it empty.\nlast_modified_by: Reserved for who last changed the record; this engine leaves it empty.\nauto_number: Reserved for a running number; this engine leaves it empty."
           },
           "required": {
             "type": "boolean"
@@ -3819,7 +3819,7 @@
       }
     },
     {
-      "command": "table.fields.delete",
+      "command": "field.delete",
       "tool": "table_table_fields_delete",
       "title": "Delete a field",
       "description": "Deletes a field and its values from every record.",
@@ -3996,7 +3996,7 @@
       }
     },
     {
-      "command": "table.fields.duplicate",
+      "command": "field.duplicate",
       "tool": "table_table_fields_duplicate",
       "title": "Duplicate a field",
       "description": "Adds a copy of a field's definition (type, options, formula) next to it, titled with \"copy\"; the copy starts with no values.",
@@ -4273,7 +4273,7 @@
       }
     },
     {
-      "command": "table.fields.linkCandidates",
+      "command": "field.linkCandidates",
       "tool": "table_table_fields_linkCandidates",
       "title": "Find records to link",
       "description": "Searches the records a link_to_record field can link to (in its target table) by their display text, for choosing link values; changes nothing.",
@@ -4468,7 +4468,7 @@
       }
     },
     {
-      "command": "table.views.list",
+      "command": "tableView.list",
       "tool": "table_table_views_list",
       "title": "List views",
       "description": "Lists a table's views (grid, kanban, calendar, gallery) with their ids, types and configuration.",
@@ -4694,7 +4694,7 @@
       }
     },
     {
-      "command": "table.views.create",
+      "command": "tableView.add",
       "tool": "table_table_views_create",
       "title": "Create a view",
       "description": "Creates a view of a table with a title, a type (grid, kanban, calendar or gallery) and a configuration; answers the view with its id.",
@@ -4925,7 +4925,7 @@
       }
     },
     {
-      "command": "table.views.update",
+      "command": "tableView.set",
       "tool": "table_table_views_update",
       "title": "Update a view",
       "description": "Renames a view, changes its type, or replaces its configuration.",
@@ -5169,7 +5169,7 @@
       }
     },
     {
-      "command": "table.views.delete",
+      "command": "tableView.delete",
       "tool": "table_table_views_delete",
       "title": "Delete a view",
       "description": "Deletes a view; the table's data is not affected.",
@@ -5346,7 +5346,7 @@
       }
     },
     {
-      "command": "table.views.getFilterTree",
+      "command": "tableView.getFilterTree",
       "tool": "table_table_views_getFilterTree",
       "title": "Read a view's filter",
       "description": "Reads a view's filter as a tree of and/or groups of field conditions (null when it has none).",
@@ -5612,7 +5612,7 @@
       }
     },
     {
-      "command": "table.views.putFilterTree",
+      "command": "tableView.setFilterTree",
       "tool": "table_table_views_putFilterTree",
       "title": "Set a view's filter",
       "description": "Replaces a view's filter conditions with a tree of and/or groups of field conditions.",
@@ -5937,7 +5937,7 @@
       }
     },
     {
-      "command": "table.views.getSorts",
+      "command": "tableView.getSorts",
       "tool": "table_table_views_getSorts",
       "title": "Read a view's sorts",
       "description": "Reads a view's sort order: the fields and directions, first to last.",
@@ -6128,7 +6128,7 @@
       }
     },
     {
-      "command": "table.views.putSorts",
+      "command": "tableView.setSorts",
       "tool": "table_table_views_putSorts",
       "title": "Set a view's sorts",
       "description": "Replaces a view's sort order with a list of fields and directions.",
@@ -6347,7 +6347,7 @@
       }
     },
     {
-      "command": "table.views.getGroups",
+      "command": "tableView.getGroups",
       "tool": "table_table_views_getGroups",
       "title": "Read a view's groups",
       "description": "Reads how a view groups its records: the fields and directions.",
@@ -6538,7 +6538,7 @@
       }
     },
     {
-      "command": "table.views.putGroups",
+      "command": "tableView.setGroups",
       "tool": "table_table_views_putGroups",
       "title": "Set a view's groups",
       "description": "Replaces how a view groups its records with a list of fields and directions.",
@@ -6757,7 +6757,7 @@
       }
     },
     {
-      "command": "table.views.patchConfig",
+      "command": "tableView.setConfig",
       "tool": "table_table_views_patchConfig",
       "title": "Change a view's row height or frozen columns",
       "description": "Changes a view's row height or frozen column count, keeping the rest of its configuration; answers the whole configuration.",
@@ -6941,7 +6941,7 @@
       }
     },
     {
-      "command": "table.views.listFields",
+      "command": "tableView.listFields",
       "tool": "table_table_views_listFields",
       "title": "List a view's field settings",
       "description": "Lists the per-field settings a view stores (visibility, width, position, frozen); fields without settings show with the defaults.",
@@ -7144,7 +7144,7 @@
       }
     },
     {
-      "command": "table.views.patchField",
+      "command": "tableView.setField",
       "tool": "table_table_views_patchField",
       "title": "Show, hide, resize or move a field in a view",
       "description": "Shows, hides, resizes, moves or freezes one field in one view.",
@@ -7365,7 +7365,7 @@
       }
     },
     {
-      "command": "table.records.list",
+      "command": "record.list",
       "tool": "table_table_records_list",
       "title": "List records",
       "description": "Reads a table's records (rows) with their values keyed by field name, a page at a time (limit, offset), with the total.",
@@ -7593,7 +7593,7 @@
       }
     },
     {
-      "command": "table.records.create",
+      "command": "record.add",
       "tool": "table_table_records_create",
       "title": "Create a record",
       "description": "Adds one record to a table with values keyed by field name (not title); a key that names no field is refused and nothing is written. Answers the record with its id and row_key.",
@@ -7812,7 +7812,7 @@
       }
     },
     {
-      "command": "table.records.update",
+      "command": "record.set",
       "tool": "table_table_records_update",
       "title": "Update a record",
       "description": "Changes values of one record, keyed by field name (null clears one); fields not named keep their values, and a key that names no field is refused, changing nothing.",
@@ -8043,7 +8043,7 @@
       }
     },
     {
-      "command": "table.records.delete",
+      "command": "record.delete",
       "tool": "table_table_records_delete",
       "title": "Delete a record",
       "description": "Deletes one record and its links.",
@@ -8220,7 +8220,7 @@
       }
     },
     {
-      "command": "table.records.history",
+      "command": "record.history",
       "tool": "table_table_records_history",
       "title": "Read a record's history",
       "description": "Reads one record's change history, newest first: its creation and each field update, with the values before and after, who made it and when.",
@@ -8499,7 +8499,7 @@
       }
     },
     {
-      "command": "table.records.bulkDelete",
+      "command": "record.bulkDelete",
       "tool": "table_table_records_bulkDelete",
       "title": "Delete many records",
       "description": "Deletes many records at once by row_key, as one step; answers how many went and which keys named no record.",
@@ -8689,7 +8689,7 @@
       }
     },
     {
-      "command": "table.records.bulkCopy",
+      "command": "record.bulkCopy",
       "tool": "table_table_records_bulkCopy",
       "title": "Copy records",
       "description": "Copies records by row_key into the same table at a position, as one step; answers the copies' row keys.",
@@ -8879,7 +8879,7 @@
       }
     },
     {
-      "command": "table.links.list",
+      "command": "recordLink.list",
       "tool": "table_table_links_list",
       "title": "List a record's links",
       "description": "Reads the records one record links to through a link_to_record field, as row keys and display text.",
@@ -9078,7 +9078,7 @@
       }
     },
     {
-      "command": "table.links.replace",
+      "command": "recordLink.replace",
       "tool": "table_table_links_replace",
       "title": "Set a record's links",
       "description": "Sets the records one record links to through a link_to_record field, replacing its current links.",
@@ -9292,7 +9292,7 @@
       }
     },
     {
-      "command": "table.links.delete",
+      "command": "recordLink.delete",
       "tool": "table_table_links_delete",
       "title": "Remove a record's links",
       "description": "Removes some of one record's links in a link_to_record field, by the linked records' row keys.",
@@ -9492,7 +9492,7 @@
       }
     },
     {
-      "command": "table.csv.import",
+      "command": "file.importCsv",
       "tool": "table_table_csv_import",
       "title": "Import CSV text into a table",
       "description": "Adds one record per row of CSV text to an existing table; the header row names fields by title or name, and other columns are left out.",
@@ -9660,7 +9660,7 @@
       }
     },
     {
-      "command": "table.csv.export",
+      "command": "file.exportCsv",
       "tool": "table_table_csv_export",
       "title": "Export a table as CSV text",
       "description": "Answers a table as CSV text with a file name, without changing anything.",
@@ -9825,7 +9825,7 @@
       }
     },
     {
-      "command": "table.markdown.export",
+      "command": "file.exportMarkdown",
       "tool": "table_table_markdown_export",
       "title": "Export a table as a Markdown table",
       "description": "Answers a table as a Markdown table, without changing anything.",
@@ -9986,7 +9986,7 @@
       }
     },
     {
-      "command": "table.transact",
+      "command": "edit.transact",
       "tool": "table_table_transact",
       "title": "Run record and field operations as one step",
       "description": "Runs several record and field operations (set cells, create, delete or move records, move fields) as one atomic step that undoes together; a values key that names no field refuses the whole call.",
@@ -10490,7 +10490,7 @@
       }
     },
     {
-      "command": "table.undo",
+      "command": "history.undo",
       "tool": "table_table_undo",
       "title": "Undo a step",
       "description": "Takes back the last step of one scope (person or agent; by default the caller's own) and answers what it changed, as edit.undo does.",
@@ -10714,7 +10714,7 @@
       }
     },
     {
-      "command": "table.redo",
+      "command": "history.redo",
       "tool": "table_table_redo",
       "title": "Redo a step",
       "description": "Puts back the last undone step of one scope (by default the caller's own) and answers what it changed, as edit.redo does.",
@@ -10938,7 +10938,7 @@
       }
     },
     {
-      "command": "table.historyState",
+      "command": "history.state",
       "tool": "table_table_historyState",
       "title": "Read whether undo and redo are possible",
       "description": "Reads whether there is a step to undo and a step to redo.",
@@ -11088,7 +11088,7 @@
       }
     },
     {
-      "command": "table.dashboards.list",
+      "command": "dashboard.list",
       "tool": "table_table_dashboards_list",
       "title": "List dashboards",
       "description": "Lists the dashboards with their ids, titles, layout and widgets.",
@@ -11273,7 +11273,7 @@
       }
     },
     {
-      "command": "table.dashboards.upsert",
+      "command": "dashboard.set",
       "tool": "table_table_dashboards_upsert",
       "title": "Create or replace a dashboard",
       "description": "Creates or replaces a dashboard by its id: its title, source table, layout and widgets (charts, numbers, lists over tables).",
@@ -11492,7 +11492,7 @@
       }
     },
     {
-      "command": "table.dashboards.delete",
+      "command": "dashboard.delete",
       "tool": "table_table_dashboards_delete",
       "title": "Delete a dashboard",
       "description": "Deletes a dashboard; tables are not affected.",
@@ -11657,7 +11657,7 @@
       }
     },
     {
-      "command": "table.attachments.put",
+      "command": "attachment.add",
       "tool": "table_table_attachments_put",
       "title": "Store an attachment",
       "description": "Stores a file's bytes (base64) in the document; answers the attachment value (url, name, type, size) to put in an attachment field's list.",
@@ -11851,7 +11851,7 @@
       }
     },
     {
-      "command": "table.attachments.read",
+      "command": "attachment.get",
       "tool": "table_table_attachments_read",
       "title": "Read an attachment",
       "description": "Reads an attachment's bytes (base64), name and type by its blob hash.",
@@ -12021,7 +12021,7 @@
       }
     },
     {
-      "command": "table.import.preview",
+      "command": "file.previewImport",
       "tool": "table_table_import_preview",
       "title": "Preview a file import",
       "description": "Parses a CSV, TSV or spreadsheet file given as base64 and answers its sheets, detected columns and types and sample rows, without changing anything.",
@@ -12352,7 +12352,7 @@
       }
     },
     {
-      "command": "table.import.run",
+      "command": "file.runImport",
       "tool": "table_table_import_run",
       "title": "Import a file into a table",
       "description": "Imports a file given as base64 into a new or existing table, with write mode, schema mode, unique key and field overrides.",
@@ -12674,7 +12674,7 @@
       }
     },
     {
-      "command": "table.ai.prepare",
+      "command": "ai.prepare",
       "tool": "table_table_ai_prepare",
       "title": "Prepare an AI field run",
       "description": "Builds the prompts an AI field's run needs for one record or several, for the host to send to a model; changes nothing.",
@@ -12757,7 +12757,7 @@
           "result": {
             "type": "object",
             "additionalProperties": true,
-            "description": "The model requests of the run, for the host to generate and answer with table.ai.apply.",
+            "description": "The model requests of the run, for the host to generate and answer with ai.apply.",
             "properties": {
               "fieldId": {
                 "type": "integer",
@@ -12956,7 +12956,7 @@
       }
     },
     {
-      "command": "table.ai.apply",
+      "command": "ai.apply",
       "tool": "table_table_ai_apply",
       "title": "Write an AI field's results",
       "description": "Writes what the host's model generated (text, images or errors per record) into an AI field.",
@@ -13500,7 +13500,7 @@
       }
     },
     {
-      "command": "table.changes.since",
+      "command": "change.list",
       "tool": "table_table_changes_since",
       "title": "List the records changed since a version",
       "description": "Reads the records created, updated and deleted since a version, with who made each change.",
@@ -13738,7 +13738,7 @@
       }
     },
     {
-      "command": "table.read",
+      "command": "file.read",
       "tool": "table_table_read",
       "title": "Read a table's or a view's records",
       "description": "Reads the records of one table, or of one view (only those its filter keeps, in its order), with their ids and values under the field names, a page at a time; changes nothing.",
@@ -13748,7 +13748,7 @@
         "additionalProperties": false,
         "properties": {
           "tableId": {
-            "description": "The table whose records to list, in order (a table's id, as inspect and table.tables.list answer it).",
+            "description": "The table whose records to list, in order (a table's id, as inspect and table.list answer it).",
             "oneOf": [
               {
                 "type": "integer"
@@ -13759,7 +13759,7 @@
             ]
           },
           "viewId": {
-            "description": "Instead of tableId: the view whose records to list, only those its filter keeps, in its order (a view's id, as inspect and table.views.list answer it).",
+            "description": "Instead of tableId: the view whose records to list, only those its filter keeps, in its order (a view's id, as inspect and tableView.list answer it).",
             "oneOf": [
               {
                 "type": "integer"
@@ -13801,7 +13801,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "description": "A field's name: the key of its values in table.records.create and table.records.update."
+                  "description": "A field's name: the key of its values in record.add and record.set."
                 }
               },
               "rows": {
@@ -13847,7 +13847,7 @@
                 "properties": {
                   "command": {
                     "type": "string",
-                    "description": "table.read."
+                    "description": "file.read."
                   },
                   "params": {
                     "type": "object",
@@ -13978,7 +13978,7 @@
       }
     },
     {
-      "command": "table.preview.show",
+      "command": "preview.show",
       "tool": "table_table_preview_show",
       "title": "Show a table, view or dashboard in the picture",
       "description": "Picks what the document's picture (its renders and previews) shows: a table with its first view, a view, or a dashboard; without parameters, what the editor opens (the first table's first view).",
@@ -14210,7 +14210,7 @@
       }
     },
     {
-      "command": "table.file.render",
+      "command": "file.render",
       "tool": "table_table_file_render",
       "title": "Render a preview image",
       "description": "Draws the table, a view, some of its rows, a field, one record's cell or a dashboard as the editor shows them, as a PNG at a scale up to 2, such as the target a diagnostic names; changes nothing.",
@@ -14352,7 +14352,7 @@
       }
     },
     {
-      "command": "table.file.outline",
+      "command": "file.outline",
       "tool": "table_table_file_outline",
       "title": "List the file's tables and dashboards as its outline",
       "description": "Lists the file's tables and dashboards as its outline, each with its id, its title, what it is and the place the editor opens the file at; changes nothing.",
@@ -14437,7 +14437,7 @@
       }
     },
     {
-      "command": "table.file.export",
+      "command": "file.export",
       "tool": "table_table_file_export",
       "title": "Export a table as a CSV or Markdown file",
       "description": "Answers one table as a CSV or Markdown file's bytes (base64, in data) for the host to write as a new file, without changing anything.",

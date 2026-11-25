@@ -72,48 +72,47 @@ struct Role {
 ///   `$TagB`), and the long texts of `$R1`'s and `$R2`'s notes (`$N1`, `$N2`).
 fn fixture() -> (TableDocument, Vec<Role>) {
     let mut doc = TableDocument::create("Read.ktable", 0, 0).unwrap();
-    let p = run(&mut doc, "table.tables.create", json!({"title":"People","fields":[{"title":"Name","type":"text","primary":true}]}));
+    let p = run(&mut doc, "table.add", json!({"title":"People","fields":[{"title":"Name","type":"text","primary":true}]}));
     let pid = int(&p);
-    let owner = run(&mut doc, "table.fields.create", json!({"tableId":1,"title":"Owner","type":"link_to_record","options":{"target_table_id":pid}}));
+    let owner = run(&mut doc, "field.add", json!({"tableId":1,"title":"Owner","type":"link_to_record","options":{"target_table_id":pid}}));
     let ptasks = run(
         &mut doc,
-        "table.fields.create",
+        "field.add",
         json!({"tableId":pid,"title":"Tasks","type":"link_to_record","options":{"target_table_id":1,"symmetric_field_id":int(&owner)}}),
     );
-    let est = run(&mut doc, "table.fields.create", json!({"tableId":1,"title":"Est","type":"number"}));
-    let tags = run(&mut doc, "table.fields.create", json!({"tableId":1,"title":"Tags","type":"multi_select","options":{"choices":["a","b"]}}));
+    let est = run(&mut doc, "field.add", json!({"tableId":1,"title":"Est","type":"number"}));
+    let tags = run(&mut doc, "field.add", json!({"tableId":1,"title":"Tags","type":"multi_select","options":{"choices":["a","b"]}}));
     let look = run(
         &mut doc,
-        "table.fields.create",
+        "field.add",
         json!({"tableId":1,"title":"Look","type":"lookup","options":{"link_field_id":int(&owner),"target_field_id":p["fields"][0]["id"]}}),
     );
-    let calc = run(&mut doc, "table.fields.create", json!({"tableId":1,"title":"Calc","type":"formula","formula":"{est} * 2"}));
+    let calc = run(&mut doc, "field.add", json!({"tableId":1,"title":"Calc","type":"formula","formula":"{est} * 2"}));
     let summary = run(
         &mut doc,
-        "table.fields.create",
+        "field.add",
         json!({"tableId":1,"title":"Summary","type":"ai","options":{"ai_config":{"type":"summarize","source_field_id":3}}}),
     );
-    let p1 = run(&mut doc, "table.records.create", json!({"tableId":pid,"values":{"name":"Ada"}}));
-    let p2 = run(&mut doc, "table.records.create", json!({"tableId":pid,"values":{"name":"Grace"}}));
+    let p1 = run(&mut doc, "record.add", json!({"tableId":pid,"values":{"name":"Ada"}}));
+    let p2 = run(&mut doc, "record.add", json!({"tableId":pid,"values":{"name":"Grace"}}));
     let r1 = run(
         &mut doc,
-        "table.records.create",
+        "record.add",
         json!({"tableId":1,"values":{"title":"One","status":"To do","notes":"N1","est":1,"tags":["a"],"owner":[tool(&p1)]}}),
     );
-    let r2 =
-        run(&mut doc, "table.records.create", json!({"tableId":1,"values":{"title":"Two","status":"Done","notes":"N2","est":2,"owner":[tool(&p2)]}}));
-    let r3 = run(&mut doc, "table.records.create", json!({"tableId":1,"values":{"title":"Three"}}));
-    let k = run(&mut doc, "table.views.create", json!({"tableId":1,"title":"Board","type":"kanban"}));
-    run(&mut doc, "table.views.putGroups", json!({"tableId":1,"viewId":int(&k),"items":[{"field_id":2,"direction":"asc"}]}));
-    run(&mut doc, "table.views.putSorts", json!({"tableId":1,"viewId":1,"items":[{"field_id":int(&est),"direction":"desc"}]}));
+    let r2 = run(&mut doc, "record.add", json!({"tableId":1,"values":{"title":"Two","status":"Done","notes":"N2","est":2,"owner":[tool(&p2)]}}));
+    let r3 = run(&mut doc, "record.add", json!({"tableId":1,"values":{"title":"Three"}}));
+    let k = run(&mut doc, "tableView.add", json!({"tableId":1,"title":"Board","type":"kanban"}));
+    run(&mut doc, "tableView.setGroups", json!({"tableId":1,"viewId":int(&k),"items":[{"field_id":2,"direction":"asc"}]}));
+    run(&mut doc, "tableView.setSorts", json!({"tableId":1,"viewId":1,"items":[{"field_id":int(&est),"direction":"desc"}]}));
     run(
         &mut doc,
-        "table.views.putFilterTree",
+        "tableView.setFilterTree",
         json!({"tableId":1,"viewId":1,"tree":{"conjunction":"and","children":[{"condition":{"field_id":2,"operator":"is","value":"To do"}}]}}),
     );
     run(
         &mut doc,
-        "table.dashboards.upsert",
+        "dashboard.set",
         json!({"dashboardId":"d1","title":"Overview","order":1,"source_table_id":1,"layout":[],"widgets":[{"id":"w1","type":"metric"}]}),
     );
     let bytes = doc.saved_bytes().unwrap();
@@ -376,25 +375,25 @@ const ROWS: &[Row] = &[
     // tables' names; appended to `Base.tables` (no index read). Inline fields' options name other
     // tables by id: existence (the cycle check only refuses).
     // pinned (spelling): name membership of the candidates, `~tableNames:plan`, for every table's `name`.
-    r("table.tables.create", r#"{"title":"Plan"}"#, &[("$Base", "~tableNames:plan", "-")]),
+    r("table.add", r#"{"title":"Plan"}"#, &[("$Base", "~tableNames:plan", "-")]),
     // pinned (spelling and the integer rule): as above; `@P` is a local address, its window.
     rw(
-        "table.tables.create",
+        "table.add",
         r#"{"title":"Plan","fields":[{"title":"Who","type":"link_to_record","options":{"target_table_id":"@P"}}]}"#,
         &[("$Base", "~tableNames:plan", "-"), ("$P", "-", "-")],
         &["$Base.tables[1..2]"],
     ),
     // tables.update: each supplied property is replaced; a primary field must be one of the
     // table's fields (its owner) and replaces `primaryField`.
-    r("table.tables.update", r#"{"tableId":"$T","title":"Tasks"}"#, &[("$T", "title", "-")]),
-    r("table.tables.update", r#"{"tableId":"$T","description":"D"}"#, &[("$T", "description", "-")]),
-    r("table.tables.update", r#"{"tableId":"$T","meta":{"k":1}}"#, &[("$T", "meta", "-")]),
-    r("table.tables.update", r#"{"tableId":"$T","primary_field_id":"$Notes"}"#, &[("$T", "primaryField", "-"), ("$Notes", "~owner", "-")]),
+    r("table.set", r#"{"tableId":"$T","title":"Tasks"}"#, &[("$T", "title", "-")]),
+    r("table.set", r#"{"tableId":"$T","description":"D"}"#, &[("$T", "description", "-")]),
+    r("table.set", r#"{"tableId":"$T","meta":{"k":1}}"#, &[("$T", "meta", "-")]),
+    r("table.set", r#"{"tableId":"$T","primary_field_id":"$Notes"}"#, &[("$T", "primaryField", "-"), ("$Notes", "~owner", "-")]),
     // tables.delete: the table and everything it holds go, wherever they are.
     // pinned: what it holds (each field, view and record, every field) and the links into its
     // records and of its fields (`~linkCells`), which go with it.
     r(
-        "table.tables.delete",
+        "table.delete",
         r#"{"tableId":"$P"}"#,
         &[
             ("$P", "*", "-"),
@@ -410,17 +409,17 @@ const ROWS: &[Row] = &[
     // field names; `order` is a place in `Table.fields`; options name objects by id (existence;
     // the cycle check only refuses).
     // pinned (spelling): name membership `~names:score` for every field's `name`.
-    r("table.fields.create", r#"{"tableId":"$T","title":"Score","type":"number"}"#, &[("$T", "~names:score", "-")]),
-    rw("table.fields.create", r#"{"tableId":"$T","title":"Score","type":"number","order":2}"#, &[("$T", "~names:score", "-")], &["$T.fields[1..1]"]),
+    r("field.add", r#"{"tableId":"$T","title":"Score","type":"number"}"#, &[("$T", "~names:score", "-")]),
+    rw("field.add", r#"{"tableId":"$T","title":"Score","type":"number","order":2}"#, &[("$T", "~names:score", "-")], &["$T.fields[1..1]"]),
     r(
-        "table.fields.create",
+        "field.add",
         r#"{"tableId":"$T","title":"Who","type":"link_to_record","options":{"target_table_id":"$P"}}"#,
         &[("$T", "~names:who", "-"), ("$P", "-", "-")],
     ),
     // pinned: `~owner` of a field an option names by id (where it is: which table), as for
     // every field, view and record a parameter names.
     r(
-        "table.fields.create",
+        "field.add",
         r#"{"tableId":"$T","title":"Who","type":"lookup","options":{"link_field_id":"$Owner","target_field_id":"$Name"}}"#,
         &[("$T", "~names:who", "-"), ("$Owner", "~owner", "-"), ("$Name", "~owner", "-")],
     ),
@@ -430,39 +429,35 @@ const ROWS: &[Row] = &[
     // the choices: each choice is kept, renamed or left out by its name. A formula names fields
     // by name. `is_primary` replaces the table's primaryField. pinned: `~owner` of the addressed
     // field.
-    r("table.fields.update", r#"{"tableId":"$T","fieldId":"$Notes","title":"Remarks"}"#, &[("$T", "-", "-"), ("$Notes", "title,~owner", "-")]),
-    r("table.fields.update", r#"{"tableId":"$T","fieldId":"$Est","type":"text"}"#, &[("$T", "-", "-"), ("$Est", "type,~owner", "-")]),
+    r("field.set", r#"{"tableId":"$T","fieldId":"$Notes","title":"Remarks"}"#, &[("$T", "-", "-"), ("$Notes", "title,~owner", "-")]),
+    r("field.set", r#"{"tableId":"$T","fieldId":"$Est","type":"text"}"#, &[("$T", "-", "-"), ("$Est", "type,~owner", "-")]),
     r(
-        "table.fields.update",
+        "field.set",
         r#"{"tableId":"$T","fieldId":"$Status","options":{"choices":["To do","Done","Later"]}}"#,
         &[("$T", "-", "-"), ("$Status", "choices,options,~owner", "-"), ("$ToDo", "name", "-"), ("$InProgress", "name", "-"), ("$Done", "name", "-")],
     ),
     r(
-        "table.fields.update",
+        "field.set",
         r#"{"tableId":"$T","fieldId":"$Owner","options":{"target_table_id":"$T"}}"#,
         &[("$T", "-", "-"), ("$Owner", "options,~owner", "-")],
     ),
-    r("table.fields.update", r#"{"tableId":"$T","fieldId":"$Notes","required":true}"#, &[("$T", "-", "-"), ("$Notes", "required,~owner", "-")]),
-    r("table.fields.update", r#"{"tableId":"$T","fieldId":"$Notes","readonly":true}"#, &[("$T", "-", "-"), ("$Notes", "readonly,~owner", "-")]),
-    r("table.fields.update", r#"{"tableId":"$T","fieldId":"$Notes","is_primary":true}"#, &[("$T", "primaryField", "-"), ("$Notes", "~owner", "-")]),
+    r("field.set", r#"{"tableId":"$T","fieldId":"$Notes","required":true}"#, &[("$T", "-", "-"), ("$Notes", "required,~owner", "-")]),
+    r("field.set", r#"{"tableId":"$T","fieldId":"$Notes","readonly":true}"#, &[("$T", "-", "-"), ("$Notes", "readonly,~owner", "-")]),
+    r("field.set", r#"{"tableId":"$T","fieldId":"$Notes","is_primary":true}"#, &[("$T", "primaryField", "-"), ("$Notes", "~owner", "-")]),
     // pinned (spelling): `~names:est` for `$Est`'s `name`, and the existence of the field the
     // name names now (which the name's membership already holds).
     r(
-        "table.fields.update",
+        "field.set",
         r#"{"tableId":"$T","fieldId":"$Calc","formula":"{est} + 1"}"#,
         &[("$T", "~names:est", "-"), ("$Calc", "formula,~owner", "-"), ("$Est", "-", "-")],
     ),
-    r(
-        "table.fields.update",
-        r#"{"tableId":"$T","fieldId":"$Summary","ai_prompt":"Shorter"}"#,
-        &[("$T", "-", "-"), ("$Summary", "aiPrompt,~owner", "-")],
-    ),
-    r("table.fields.update", r#"{"tableId":"$T","fieldId":"$Notes","meta":{"k":1}}"#, &[("$T", "-", "-"), ("$Notes", "meta,~owner", "-")]),
+    r("field.set", r#"{"tableId":"$T","fieldId":"$Summary","ai_prompt":"Shorter"}"#, &[("$T", "-", "-"), ("$Summary", "aiPrompt,~owner", "-")]),
+    r("field.set", r#"{"tableId":"$T","fieldId":"$Notes","meta":{"k":1}}"#, &[("$T", "-", "-"), ("$Notes", "meta,~owner", "-")]),
     // fields.delete: the field goes with its column, wherever it is: every record's cell of it,
     // and its links. pinned: rows added since (`~rowIds`) and the field's links (`~linkCells`),
     // which go with the column; a link field's stored cells.
     r(
-        "table.fields.delete",
+        "field.delete",
         r#"{"tableId":"$T","fieldId":"$Notes"}"#,
         &[
             ("$T", "-", "-"),
@@ -474,69 +469,69 @@ const ROWS: &[Row] = &[
         ],
     ),
     r(
-        "table.fields.delete",
+        "field.delete",
         r#"{"tableId":"$T","fieldId":"$Owner"}"#,
         &[("$T", "-", "-"), ("$Owner", "*", "-"), ("records($T)", "cells.$Owner", "-"), ("$Base", "~linkCells:*.$Owner,~rowIds:$T", "-")],
     ),
     // fields.duplicate: the source's settings, its index (the copy goes right after it), and
     // the generated name's candidates. pinned: the source whole (its `name` cannot change by a
     // command) and its place; `~names:est_copy`.
-    r("table.fields.duplicate", r#"{"tableId":"$T","fieldId":"$Est"}"#, &[("$T", "~names:est_copy", "-"), ("$Est", "*", "*")]),
+    r("field.duplicate", r#"{"tableId":"$T","fieldId":"$Est"}"#, &[("$T", "~names:est_copy", "-"), ("$Est", "*", "*")]),
     // views.create: appended to the table's views; config stored as given (a field it names by
     // id: existence and owner).
-    r("table.views.create", r#"{"tableId":"$T","title":"Mine","type":"grid"}"#, &[("$T", "-", "-")]),
+    r("tableView.add", r#"{"tableId":"$T","title":"Mine","type":"grid"}"#, &[("$T", "-", "-")]),
     r(
-        "table.views.create",
+        "tableView.add",
         r#"{"tableId":"$T","title":"Mine","type":"grid","config":{"sorts":[{"field_id":"$Est","direction":"asc"}]}}"#,
         &[("$T", "-", "-"), ("$Est", "~owner", "-")],
     ),
     // views.update: title and type replaced; a config replaces the whole config (sorts and groups
     // are carried from the value at write time). pinned: `~owner`.
-    r("table.views.update", r#"{"tableId":"$T","viewId":"$V","title":"Mine"}"#, &[("$T", "-", "-"), ("$V", "title,~owner", "-")]),
-    r("table.views.update", r#"{"tableId":"$T","viewId":"$V","type":"gallery"}"#, &[("$T", "-", "-"), ("$V", "type,~owner", "-")]),
-    r("table.views.update", r#"{"tableId":"$T","viewId":"$V","config":{"row_height":"tall"}}"#, &[("$T", "-", "-"), ("$V", "config,~owner", "-")]),
+    r("tableView.set", r#"{"tableId":"$T","viewId":"$V","title":"Mine"}"#, &[("$T", "-", "-"), ("$V", "title,~owner", "-")]),
+    r("tableView.set", r#"{"tableId":"$T","viewId":"$V","type":"gallery"}"#, &[("$T", "-", "-"), ("$V", "type,~owner", "-")]),
+    r("tableView.set", r#"{"tableId":"$T","viewId":"$V","config":{"row_height":"tall"}}"#, &[("$T", "-", "-"), ("$V", "config,~owner", "-")]),
     // views.delete: the view goes, wherever it is.
-    r("table.views.delete", r#"{"tableId":"$T","viewId":"$K"}"#, &[("$T", "-", "-"), ("$K", "*", "-")]),
+    r("tableView.delete", r#"{"tableId":"$T","viewId":"$K"}"#, &[("$T", "-", "-"), ("$K", "*", "-")]),
     // putFilterTree / putSorts / putGroups: the view by id alone; the one setting replaced; each
     // condition's or item's field, whose name is written beside it when it is the view table's.
     // pinned: the table's existence (the view goes with it: equivalent) and `~owner`.
     r(
-        "table.views.putFilterTree",
+        "tableView.setFilterTree",
         r#"{"tableId":"$T","viewId":"$V","tree":{"conjunction":"and","children":[{"condition":{"field_id":"$Status","operator":"is","value":"Done"}}]}}"#,
         &[("$T", "-", "-"), ("$V", "~filterTree,~owner", "-"), ("$Status", "name,~owner", "-")],
     ),
-    r("table.views.putFilterTree", r#"{"tableId":"$T","viewId":"$V","tree":null}"#, &[("$T", "-", "-"), ("$V", "~filterTree,~owner", "-")]),
+    r("tableView.setFilterTree", r#"{"tableId":"$T","viewId":"$V","tree":null}"#, &[("$T", "-", "-"), ("$V", "~filterTree,~owner", "-")]),
     r(
-        "table.views.putSorts",
+        "tableView.setSorts",
         r#"{"tableId":"$T","viewId":"$V","items":[{"field_id":"$Est","direction":"asc"}]}"#,
         &[("$T", "-", "-"), ("$V", "~sorts,~owner", "-"), ("$Est", "name,~owner", "-")],
     ),
     r(
-        "table.views.putGroups",
+        "tableView.setGroups",
         r#"{"tableId":"$T","viewId":"$K","items":[{"field_id":"$Status","direction":"desc"}]}"#,
         &[("$T", "-", "-"), ("$K", "~groups,~owner", "-"), ("$Status", "name,~owner", "-")],
     ),
     // patchConfig: the view of the table; each of the three settings given. pinned: `~owner`.
-    r("table.views.patchConfig", r#"{"tableId":"$T","viewId":"$V","row_height":"tall"}"#, &[("$T", "-", "-"), ("$V", "~rowHeight,~owner", "-")]),
+    r("tableView.setConfig", r#"{"tableId":"$T","viewId":"$V","row_height":"tall"}"#, &[("$T", "-", "-"), ("$V", "~rowHeight,~owner", "-")]),
     r(
-        "table.views.patchConfig",
+        "tableView.setConfig",
         r#"{"tableId":"$T","viewId":"$V","frozen_column_count":2}"#,
         &[("$T", "-", "-"), ("$V", "~frozenColumnCount,~owner", "-")],
     ),
     // patchField: the view by id, the field by id; the one entry written. pinned: `~owner`, the
     // table, and the layout entry's key (`.position`).
     r(
-        "table.views.patchField",
+        "tableView.setField",
         r#"{"tableId":"$T","viewId":"$V","fieldId":"$Est","width":200}"#,
         &[("$T", "-", "-"), ("$V", "widths.$Est,~owner", "-"), ("$Est", "~owner", "-")],
     ),
     r(
-        "table.views.patchField",
+        "tableView.setField",
         r#"{"tableId":"$T","viewId":"$V","fieldId":"$Est","visible":false}"#,
         &[("$T", "-", "-"), ("$V", "hidden.$Est,~owner", "-"), ("$Est", "~owner", "-")],
     ),
     r(
-        "table.views.patchField",
+        "tableView.setField",
         r#"{"tableId":"$T","viewId":"$V","fieldId":"$Est","position":2}"#,
         &[("$T", "-", "-"), ("$V", "layout.$Est,~owner", "-"), ("$Est", "~owner", "-")],
     ),
@@ -547,14 +542,14 @@ const ROWS: &[Row] = &[
     // links in it). Required flags only refuse; readonly is not read.
     // pinned (spelling): `~names:*`, the label's choice (`$Done`), `~mirrors`, `~linkCells`,
     // `~owner`; the field's `type` (computed values are dropped).
-    r("table.records.create", r#"{"tableId":"$T","values":{"title":"Four"}}"#, &[("$T", "~names:title", "-"), ("$Title", "name,type", "-")]),
+    r("record.add", r#"{"tableId":"$T","values":{"title":"Four"}}"#, &[("$T", "~names:title", "-"), ("$Title", "name,type", "-")]),
     r(
-        "table.records.create",
+        "record.add",
         r#"{"tableId":"$T","values":{"title":"Four","status":"Done"}}"#,
         &[("$T", "~names:status,~names:title", "-"), ("$Title", "name,type", "-"), ("$Status", "name,type", "-"), ("$Done", "name", "-")],
     ),
     r(
-        "table.records.create",
+        "record.add",
         r#"{"tableId":"$T","values":{"title":"Four","owner":["$P1"]}}"#,
         &[
             ("$T", "~names:owner,~names:title", "-"),
@@ -570,18 +565,13 @@ const ROWS: &[Row] = &[
     // (and the partner's links of the old and new targets). pinned as for records.create, and a
     // link field's stored cell.
     r(
-        "table.records.update",
+        "record.set",
         r#"{"tableId":"$T","recordId":"$R1","values":{"notes":"x"}}"#,
         &[("$T", "~names:notes", "-"), ("$R1", "cells.$Notes,~owner", "-"), ("$Notes", "name,type", "-"), ("$N1", "text", "-")],
     ),
-    rw(
-        "table.records.update",
-        r#"{"tableId":"$T","recordId":"$R3","order":1}"#,
-        &[("$T", "-", "-"), ("$R3", "~owner", "records")],
-        &["$T.records[0..0]"],
-    ),
+    rw("record.set", r#"{"tableId":"$T","recordId":"$R3","order":1}"#, &[("$T", "-", "-"), ("$R3", "~owner", "records")], &["$T.records[0..0]"]),
     r(
-        "table.records.update",
+        "record.set",
         r#"{"tableId":"$T","recordId":"$R1","values":{"owner":["$P2"]}}"#,
         &[
             ("$T", "~names:owner", "-"),
@@ -595,12 +585,12 @@ const ROWS: &[Row] = &[
     // records.delete / bulkDelete: the records go, wherever they are, with their links (pinned:
     // `~linkCells` of the record).
     r(
-        "table.records.delete",
+        "record.delete",
         r#"{"tableId":"$T","recordId":"$R2"}"#,
         &[("$T", "-", "-"), ("$R2", "*", "-"), ("$N2", "text", "-"), ("$Base", "~linkCells:$R2", "-")],
     ),
     r(
-        "table.records.bulkDelete",
+        "record.bulkDelete",
         r#"{"tableId":"$T","row_keys":["$R2","$R3"]}"#,
         &[("$T", "-", "-"), ("$R2", "*", "-"), ("$N2", "text", "-"), ("$R3", "*", "-"), ("$Base", "~linkCells:$R2,~linkCells:$R3", "-")],
     ),
@@ -608,12 +598,12 @@ const ROWS: &[Row] = &[
     // texts;
     // `target_position` is a place among the records. pinned: `~owner`.
     r(
-        "table.records.bulkCopy",
+        "record.bulkCopy",
         r#"{"tableId":"$T","row_keys":["$R1"]}"#,
         &[("$T", "-", "-"), ("$R1", "cells,~owner", "-"), ("$N1", "text", "-"), ("fields($T)", "type", "-")],
     ),
     rw(
-        "table.records.bulkCopy",
+        "record.bulkCopy",
         r#"{"tableId":"$T","row_keys":["$R1"],"target_position":1}"#,
         &[("$T", "-", "-"), ("$R1", "cells,~owner", "-"), ("$N1", "text", "-"), ("fields($T)", "type", "-")],
         &["$T.records[0..0]"],
@@ -622,7 +612,7 @@ const ROWS: &[Row] = &[
     // and options; each target a record of the target table; the partner (its options and type,
     // the targets' links in it). pinned (spelling) `~linkCells`, `~mirrors`, `~owner`.
     r(
-        "table.links.replace",
+        "recordLink.replace",
         r#"{"tableId":"$T","recordId":"$R1","field_id":"$Owner","target_row_keys":["$P2"]}"#,
         &[
             ("$T", "-", "-"),
@@ -634,7 +624,7 @@ const ROWS: &[Row] = &[
         ],
     ),
     r(
-        "table.links.delete",
+        "recordLink.delete",
         r#"{"tableId":"$T","recordId":"$R1","field_id":"$Owner","target_row_keys":["$P1"]}"#,
         &[
             ("$T", "-", "-"),
@@ -649,31 +639,31 @@ const ROWS: &[Row] = &[
     // pinned: the integer rule for `tableId` and `fieldIds` (local addresses: their windows), and
     // an anchor held by its own place instead of the gap before it (equivalent).
     rw(
-        "table.transact",
+        "edit.transact",
         r#"{"ops":[{"op":"cells.set","tableId":"@T","records":[{"rowKey":"$R1","values":{"notes":"x"}}]}]}"#,
         &[("$T", "~names:notes", "-"), ("$R1", "cells.$Notes,~owner", "-"), ("$Notes", "name,type", "-"), ("$N1", "text", "-")],
         &["$Base.tables[0..1]"],
     ),
     rw(
-        "table.transact",
+        "edit.transact",
         r#"{"ops":[{"op":"records.create","tableId":"@T","at":{"before":"$R2"},"records":[{"title":"Four"}]}]}"#,
         &[("$T", "~names:title", "-"), ("$Title", "name,type", "-"), ("$R2", "~owner", "records")],
         &["$Base.tables[0..1]"],
     ),
     rw(
-        "table.transact",
+        "edit.transact",
         r#"{"ops":[{"op":"records.delete","tableId":"@T","rowKeys":["$R3"]}]}"#,
         &[("$T", "-", "-"), ("$R3", "*", "-"), ("$Base", "~linkCells:$R3", "-")],
         &["$Base.tables[0..1]"],
     ),
     rw(
-        "table.transact",
+        "edit.transact",
         r#"{"ops":[{"op":"records.move","tableId":"@T","rowKeys":["$R3"],"before":"$R1"}]}"#,
         &[("$T", "-", "-"), ("$R3", "~owner", "records"), ("$R1", "~owner", "records")],
         &["$Base.tables[0..1]"],
     ),
     rw(
-        "table.transact",
+        "edit.transact",
         r#"{"ops":[{"op":"fields.move","tableId":"@T","fieldIds":["@Est"],"toIndex":0}]}"#,
         &[("$T", "-", "-"), ("$Est", "~owner", "fields")],
         &["$Base.tables[0..1]", "$T.fields[0..0]", "$T.fields[4..5]"],
@@ -683,7 +673,7 @@ const ROWS: &[Row] = &[
     // appended. Required flags only refuse.
     // pinned: every field's name and title and their order (`~lists`), `~names`.
     r(
-        "table.csv.import",
+        "file.importCsv",
         r#"{"tableId":"$T","content":"title,notes\nA,B\n"}"#,
         &[
             ("$T", "~names:calc,~names:est,~names:look,~names:notes,~names:owner,~names:status,~names:summary,~names:tags,~names:title", "-"),
@@ -698,7 +688,7 @@ const ROWS: &[Row] = &[
     // reads the key cells and rewrites matching records' cells; a new table's name is generated
     // among the table names. pinned as for csv.import, and the upsert's exact cells.
     r(
-        "table.import.run",
+        "file.runImport",
         r#"{"fileName":"a.csv","content":"dGl0bGUsbm90ZXMKQSxCCg==","write_mode":"append","schema_mode":"auto","target":{"kind":"existing_table","table_id":"$T"}}"#,
         &[
             ("$T", "~names:calc,~names:est,~names:look,~names:notes,~names:owner,~names:status,~names:summary,~names:tags,~names:title", "-"),
@@ -708,7 +698,7 @@ const ROWS: &[Row] = &[
         ],
     ),
     r(
-        "table.import.run",
+        "file.runImport",
         r#"{"fileName":"a.csv","content":"dGl0bGUsbm90ZXMKQSxCCg==","write_mode":"replace","schema_mode":"auto","target":{"kind":"existing_table","table_id":"$T"}}"#,
         &[
             ("$T", "~names:calc,~names:est,~names:look,~names:notes,~names:owner,~names:status,~names:summary,~names:tags,~names:title", "-"),
@@ -721,7 +711,7 @@ const ROWS: &[Row] = &[
         ],
     ),
     r(
-        "table.import.run",
+        "file.runImport",
         r#"{"fileName":"a.csv","content":"dGl0bGUsbm90ZXMKT25lLEIK","write_mode":"upsert","unique_by":["title"],"schema_mode":"auto","target":{"kind":"existing_table","table_id":"$T"}}"#,
         &[
             ("$T", "~names:calc,~names:est,~names:look,~names:notes,~names:owner,~names:status,~names:summary,~names:tags,~names:title", "-"),
@@ -735,7 +725,7 @@ const ROWS: &[Row] = &[
         ],
     ),
     r(
-        "table.import.run",
+        "file.runImport",
         r#"{"fileName":"a.csv","content":"dGl0bGUsbm90ZXMKQSxCCg==","write_mode":"append","schema_mode":"auto","target":{"kind":"new_table","table_title":"Imported"}}"#,
         &[("$Base", "~tableNames:imported", "-")],
     ),
@@ -743,7 +733,7 @@ const ROWS: &[Row] = &[
     // and the source cell the result was generated from; the AI cell is replaced.
     // pinned: the source's `title` (in the prompt), `~names`, `~owner`, and `@R1`'s window (integer rule).
     rw(
-        "table.ai.apply",
+        "ai.apply",
         r#"{"tableId":"$T","fieldId":"$Summary","recordId":"$R1","results":[{"recordId":"@R1","text":"S"}]}"#,
         &[
             ("$T", "~names:notes", "-"),
@@ -755,35 +745,31 @@ const ROWS: &[Row] = &[
         &["$T.records[0..1]"],
     ),
     // attachments.put: a blob only; the table must exist.
-    r("table.attachments.put", r#"{"tableId":"$T","name":"a.txt","mimeType":"text/plain","data":"aGk="}"#, &[("$T", "-", "-")]),
+    r("attachment.add", r#"{"tableId":"$T","name":"a.txt","mimeType":"text/plain","data":"aGk="}"#, &[("$T", "-", "-")]),
     // undo / redo: the session's own steps; they name no object.
-    r("table.undo", r#"{}"#, &[]),
-    r("table.redo", r#"{}"#, &[]),
+    r("history.undo", r#"{}"#, &[]),
+    r("history.redo", r#"{}"#, &[]),
     r("edit.undo", r#"{}"#, &[]),
     r("edit.redo", r#"{}"#, &[]),
     // dashboards.upsert replaces name, config and widgets wherever the dashboard is; the source
     // table exists. dashboards.delete: the dashboard goes.
     r(
-        "table.dashboards.upsert",
+        "dashboard.set",
         r#"{"dashboardId":"$D","title":"O2","order":1,"source_table_id":"$T","layout":[],"widgets":[]}"#,
         &[("$D", "*", "-"), ("$T", "-", "-")],
     ),
-    r(
-        "table.dashboards.upsert",
-        r#"{"dashboardId":"d2","title":"New","order":2,"source_table_id":"$T","layout":[],"widgets":[]}"#,
-        &[("$T", "-", "-")],
-    ),
-    r("table.dashboards.delete", r#"{"dashboardId":"$D"}"#, &[("$D", "*", "-")]),
+    r("dashboard.set", r#"{"dashboardId":"d2","title":"New","order":2,"source_table_id":"$T","layout":[],"widgets":[]}"#, &[("$T", "-", "-")]),
+    r("dashboard.delete", r#"{"dashboardId":"$D"}"#, &[("$D", "*", "-")]),
     // Further code paths, written after the first comparison (when the full suite showed widget
     // references), before their own: a widget is stored as given, so a field it names by id need
     // only be there, and one it names by name is the table's name.
     r(
-        "table.dashboards.upsert",
+        "dashboard.set",
         r#"{"dashboardId":"$D","title":"O2","order":1,"source_table_id":"$T","layout":[],"widgets":[{"id":"w","type":"metric","query":{"field_id":"$Est"}}]}"#,
         &[("$D", "*", "-"), ("$T", "-", "-"), ("$Est", "~owner", "-")],
     ),
     r(
-        "table.dashboards.upsert",
+        "dashboard.set",
         r#"{"dashboardId":"$D","title":"O2","order":1,"source_table_id":"$T","layout":[],"widgets":[{"id":"w","type":"metric","query":{"field_name":"est"}}]}"#,
         &[("$D", "*", "-"), ("$T", "~names:est", "-"), ("$Est", "-", "-")],
     ),
@@ -977,11 +963,11 @@ fn a_view_setting_lands_only_on_a_view_of_the_table_it_names() {
     let other = with_roles(&json!("@PV"), &roles);
     let est = with_roles(&json!("@Est"), &roles);
     for (command, params) in [
-        ("table.views.putSorts", json!({"tableId":1,"viewId":other,"items":[{"field_id":est,"direction":"asc"}]})),
-        ("table.views.putGroups", json!({"tableId":1,"viewId":other,"items":[{"field_id":est,"direction":"asc"}]})),
-        ("table.views.putFilterTree", json!({"tableId":1,"viewId":other,"tree":null})),
-        ("table.views.patchField", json!({"tableId":1,"viewId":other,"fieldId":est,"width":300})),
-        ("table.views.patchField", json!({"tableId":1,"viewId":1,"fieldId":with_roles(&json!("@Name"), &roles),"width":300})),
+        ("tableView.setSorts", json!({"tableId":1,"viewId":other,"items":[{"field_id":est,"direction":"asc"}]})),
+        ("tableView.setGroups", json!({"tableId":1,"viewId":other,"items":[{"field_id":est,"direction":"asc"}]})),
+        ("tableView.setFilterTree", json!({"tableId":1,"viewId":other,"tree":null})),
+        ("tableView.setField", json!({"tableId":1,"viewId":other,"fieldId":est,"width":300})),
+        ("tableView.setField", json!({"tableId":1,"viewId":1,"fieldId":with_roles(&json!("@Name"), &roles),"width":300})),
     ] {
         let before = doc.saved_bytes().unwrap();
         assert!(doc.execute(command, params.clone()).is_err(), "{command} {params} wrote another table's view");

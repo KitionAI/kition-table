@@ -43,13 +43,13 @@ expected:
       objects.1.fields.cells.01a169aa-ff23-7691-b372-5f1f53a79ace: Done
 solution:
   - tool: table_run
-    args: { path: tasks.ktable, steps: [{ command: table.views.create, params: { tableId: 1, title: Open work, type: grid } }] }
+    args: { path: tasks.ktable, steps: [{ command: tableView.add, params: { tableId: 1, title: Open work, type: grid } }] }
   - tool: table_run
     args:
       path: tasks.ktable
       steps:
-        - command: table.views.putFilterTree
+        - command: tableView.setFilterTree
           params: { tableId: 1, viewId: 2, tree: { conjunction: and, children: [{ condition: { field_id: 2, operator: neq, value: Done } }] } }
-        - { command: table.views.putSorts, params: { tableId: 1, viewId: 2, items: [{ field_id: 1, direction: asc }] } }
+        - { command: tableView.setSorts, params: { tableId: 1, viewId: 2, items: [{ field_id: 1, direction: asc }] } }
 since: "2026-11-16"
 timeout_s: 600

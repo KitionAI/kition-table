@@ -284,7 +284,7 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
         })
         // The engine wrote outside a command: a read through the session brings its state (the
         // revision, unsaved) up to date.
-        await engine.run('table.historyState', {}, 'all')
+        await engine.run('history.state', {}, 'all')
         seen = engine.revision()
         changed()
       },

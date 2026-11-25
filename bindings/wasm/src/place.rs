@@ -558,14 +558,14 @@ fn owners(file: &TableFile, command: &KitCommand, params: &Value, selected: &mut
 
 pub fn places(command: &str) -> &'static [&'static str] {
     match command {
-        "table.tables.create" => &["title", "name"],
-        "table.import.run" => &["target.table_title"],
-        "table.records.update" => &["order", "values"],
-        "table.records.create" => &["values"],
-        "table.fields.create" => &["order"],
-        "table.records.bulkCopy" => &["target_position"],
-        "table.views.patchField" => &["position", "frozen", "width", "visible"],
-        "table.transact" => &["ops"],
+        "table.add" => &["title", "name"],
+        "file.runImport" => &["target.table_title"],
+        "record.set" => &["order", "values"],
+        "record.add" => &["values"],
+        "field.add" => &["order"],
+        "record.bulkCopy" => &["target_position"],
+        "tableView.setField" => &["position", "frozen", "width", "visible"],
+        "edit.transact" => &["ops"],
         _ => &[],
     }
 }

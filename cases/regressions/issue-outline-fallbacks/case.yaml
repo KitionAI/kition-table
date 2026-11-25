@@ -2,7 +2,7 @@ format: 1
 id: regressions/issue-outline-fallbacks
 feature: table.outline
 intent: >-
-  Every item of table.file.outline has a title a host can show: a table without a title goes by
+  Every item of file.outline has a title a host can show: a table without a title goes by
   its name, and a dashboard without a name by its id (before, it answered an empty title). A
   deleted table is not listed, and a file with no tables lists its dashboards alone, or nothing.
 layer: gate

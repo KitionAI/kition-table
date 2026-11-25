@@ -206,8 +206,8 @@ fn loose_params(method: &str) -> Option<Value> {
             "version": { "type": "string", "description": "Base64 of a version a previous answer gave; empty for every change." },
         }),
         "read" => json!({
-            "tableId": { "type": "integer", "description": "The table whose records to list, in order (a table's id, as inspect and table.tables.list answer it)." },
-            "viewId": { "type": "integer", "description": "Instead of tableId: the view whose records to list, only those its filter keeps, in its order (a view's id, as inspect and table.views.list answer it)." },
+            "tableId": { "type": "integer", "description": "The table whose records to list, in order (a table's id, as inspect and table.list answer it)." },
+            "viewId": { "type": "integer", "description": "Instead of tableId: the view whose records to list, only those its filter keeps, in its order (a view's id, as inspect and tableView.list answer it)." },
             "limit": { "type": "integer", "description": "How many records to list, 1 to 200; default 50." },
             "cursor": { "type": "string", "description": "Where to go on: the cursor in a previous answer's next (the number of records before the page, counted from 0, as a string); default the first record." },
         }),
@@ -305,13 +305,13 @@ const FIELD_TYPE_NOTES: &[(&str, &str)] = &[
     ("multi_select", "Some of options.choices (a list of strings)."),
     ("checkbox", "true or false."),
     ("url", "A web address (a string)."),
-    ("attachment", "Files kept in the document: a list of the values table.attachments.put answers."),
+    ("attachment", "Files kept in the document: a list of the values attachment.add answers."),
     ("document_link", "A reference to another document (a string)."),
     ("formula", "Computed from the field's `formula` expression, which names fields in braces ({price} * 2); read-only."),
-    ("ai", "Written by the host's model as options.ai_config says (table.ai.prepare, then table.ai.apply); read-only."),
+    ("ai", "Written by the host's model as options.ai_config says (ai.prepare, then ai.apply); read-only."),
     ("rating", "A whole number from 0 to options.max (default 5)."),
     ("user", "A person, {id, name, avatar?}, or a list of them."),
-    ("link_to_record", "Links to records of the table options.target_table_id names; set with table.links.replace, read as [{row_key, display}]."),
+    ("link_to_record", "Links to records of the table options.target_table_id names; set with recordLink.replace, read as [{row_key, display}]."),
     ("lookup", "Computed: the values of options.target_field_id in the records linked through options.link_field_id."),
     ("rollup", "Computed: options.aggregation over the records linked through options.link_field_id (their options.target_field_id values)."),
     ("button", "A button labelled options.label that runs options.action; it holds no value."),
@@ -1038,7 +1038,7 @@ fn result_spec(method: &str) -> Value {
         "import.preview" => import_preview(),
         "import.run" => import_result(),
         "ai.prepare" => shape(
-            "The model requests of the run, for the host to generate and answer with table.ai.apply.",
+            "The model requests of the run, for the host to generate and answer with ai.apply.",
             json!({
                 "fieldId": int("The AI field's id."),
                 "output": { "type": "string", "enum": ["text", "image"], "description": "What the model makes." },
@@ -1082,7 +1082,7 @@ fn result_spec(method: &str) -> Value {
             json!({
                 "tableId": int("The table's id."),
                 "viewId": int("The view's id, when a view was read."),
-                "columns": list(text("A field's name: the key of its values in table.records.create and table.records.update.")),
+                "columns": list(text("A field's name: the key of its values in record.add and record.set.")),
                 "rows": list(shape("A record.", json!({
                     "id": int("The record's local projection address (recordId)."),
                     "tool_id": text("The stable UUID accepted by recordId and used by receipts and conflicts."),
@@ -1092,7 +1092,7 @@ fn result_spec(method: &str) -> Value {
                 "to": int("The last listed record's position, counted from 1."),
                 "total": int("How many records the table has, or the view shows."),
                 "next": shape("The step that lists the records after these; absent after the last.", json!({
-                    "command": text("table.read."),
+                    "command": text("file.read."),
                     "params": map("Its params: the same tableId or viewId, and the cursor to go on from."),
                 })),
             }),

@@ -58,7 +58,7 @@ pub fn declare(commands: &mut [KitCommand]) {
                 }
                 // These structured parameters are intentionally open JSON. Mark the actual references,
                 // never the entire object: counts, values and coordinates are not ids.
-                if command.id == "table.transact" {
+                if command.id == "edit.transact" {
                     for (path, types) in [
                         ("ops[].tableId", &["Table"][..]),
                         ("ops[].fieldIds", &["Field"][..]),
@@ -71,10 +71,10 @@ pub fn declare(commands: &mut [KitCommand]) {
                         found.push((path.to_owned(), types));
                     }
                 }
-                if matches!(command.id.as_str(), "table.ai.apply" | "table.ai.prepare") {
+                if matches!(command.id.as_str(), "ai.apply" | "ai.prepare") {
                     found.push(("config.source_field_id".into(), &["Field"]));
                 }
-                if command.id == "table.import.run" {
+                if command.id == "file.runImport" {
                     for (path, types) in [
                         ("field_overrides[].options.target_table_id", &["Table"][..]),
                         ("field_overrides[].options.link_field_id", &["Field"][..]),
@@ -92,9 +92,9 @@ pub fn declare(commands: &mut [KitCommand]) {
                 let objects =
                     Box::leak(types.iter().filter_map(|(p, _)| (Some(*p) != command.targets).then_some(*p)).collect::<Vec<_>>().into_boxed_slice());
                 let names: Names = match command.id.as_str() {
-                    "table.fields.create" | "table.fields.update" => &[("options.ai_config.source_field_name", "name")],
-                    "table.ai.apply" | "table.ai.prepare" => &[("config.source_field_name", "name")],
-                    "table.import.run" => &[("field_overrides[].options.ai_config.source_field_name", "name")],
+                    "field.add" | "field.set" => &[("options.ai_config.source_field_name", "name")],
+                    "ai.apply" | "ai.prepare" => &[("config.source_field_name", "name")],
+                    "file.runImport" => &[("field_overrides[].options.ai_config.source_field_name", "name")],
                     _ => &[],
                 };
                 let types: Types = if names.is_empty() {

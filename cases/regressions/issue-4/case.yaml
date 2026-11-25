@@ -2,7 +2,7 @@ format: 1
 id: regressions/issue-4
 feature: table.picture
 intent: >-
-  The document's picture (render, render_area, table.file.render) is what the editor shows: the tab
+  The document's picture (render, render_area, file.render) is what the editor shows: the tab
   bar of tables and dashboards, the shown table's view bar, and the view with every field and record
   it shows (filtered, sorted and grouped as the view says, column widths from the view): field type
   icons and titles and the values drawn as text by type in the faces the host registers, or a kanban

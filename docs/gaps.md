@@ -14,12 +14,12 @@ land work, then this list. The comparison with the target application is in
 
 ## Differences on working features
 
-- `table.dashboards`: table.file.render is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
+- `table.dashboards`: file.render is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
 - `table.from-files`: the model is scripted in every test; in the browser flow the host runs no models, so the dialog is tested with the plain design and no AI fill. The files' blobs stay in the file after a failed or canceled run, and after Undo: the engine stores blobs outside the document and cannot release one.
-- `table.import-export`: table.markdown.export and table.import.preview are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
-- `table.links`: table.links.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
-- `table.schema`: table.tables.delete and table.fields.linkCandidates are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
-- `table.views`: table.views.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
+- `table.import-export`: file.exportMarkdown and file.previewImport are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
+- `table.links`: recordLink.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
+- `table.schema`: table.delete and field.linkCandidates are covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
+- `table.views`: tableView.delete is covered by the command tests, not by the round trip in bindings/wasm/src/round_trip_tests.rs.
 
 ## Known engine gaps
 

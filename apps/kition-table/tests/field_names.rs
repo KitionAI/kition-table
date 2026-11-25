@@ -1,5 +1,5 @@
-//! An explicit table or field `name` is kept as given, or refused: `table.tables.create`
-//! (`name`, `fields[i].name`) and `table.fields.create` (`name`) answer `invalid_params` with one
+//! An explicit table or field `name` is kept as given, or refused: `table.add`
+//! (`name`, `fields[i].name`) and `field.add` (`name`) answer `invalid_params` with one
 //! `data.errors` entry per name the engine would have rewritten, one not in internal-name form or
 //! already taken, and the call changes nothing. Names derived from titles are as before.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
@@ -52,7 +52,7 @@ fn refused(kit: &mut Headless<TableDocument>, id: &str, command: &str, call: Val
 }
 
 fn table_count(kit: &mut Headless<TableDocument>, id: &str) -> usize {
-    let answer = run(kit, id, "table.tables.list", json!({}));
+    let answer = run(kit, id, "table.list", json!({}));
     answer["result"]["items"].as_array().map(Vec::len).unwrap_or_else(|| panic!("tables.list: {answer}"))
 }
 
@@ -68,7 +68,7 @@ fn tables_create_refuses_names_it_would_rewrite_and_writes_nothing() {
         { "title": "Phone", "name": "电话x" },
         { "title": "Dup", "name": "name" },
     ]);
-    let errors = refused(&mut kit, &id, "table.tables.create", json!({ "name": "c", "fields": fields }));
+    let errors = refused(&mut kit, &id, "table.add", json!({ "name": "c", "fields": fields }));
     assert_eq!(
         errors,
         [
@@ -80,12 +80,12 @@ fn tables_create_refuses_names_it_would_rewrite_and_writes_nothing() {
 
     // An explicit name a derived one took first is refused too: the host names both.
     let clash = json!([{ "title": "Name" }, { "title": "Full name", "name": "name" }]);
-    assert_eq!(refused(&mut kit, &id, "table.tables.create", json!({ "title": "People", "fields": clash }))[0].0, "/fields/1/name");
+    assert_eq!(refused(&mut kit, &id, "table.add", json!({ "title": "People", "fields": clash }))[0].0, "/fields/1/name");
     // The table's own name: in form, and not another table's.
-    assert_eq!(refused(&mut kit, &id, "table.tables.create", json!({ "name": "Contacts" }))[0].0, "/name");
-    run(&mut kit, &id, "table.tables.create", json!({ "title": "Contacts", "name": "contacts" }));
+    assert_eq!(refused(&mut kit, &id, "table.add", json!({ "name": "Contacts" }))[0].0, "/name");
+    run(&mut kit, &id, "table.add", json!({ "title": "Contacts", "name": "contacts" }));
     assert_eq!(
-        refused(&mut kit, &id, "table.tables.create", json!({ "title": "Contacts", "name": "contacts" }))[0].1,
+        refused(&mut kit, &id, "table.add", json!({ "title": "Contacts", "name": "contacts" }))[0].1,
         "`name` \"contacts\" is taken by a table of this document"
     );
 
@@ -97,7 +97,7 @@ fn tables_create_refuses_names_it_would_rewrite_and_writes_nothing() {
         { "title": "Phone", "name": "phone_number" },
         { "title": "Name" },
     ]);
-    let table = run(&mut kit, &id, "table.tables.create", json!({ "title": "People", "fields": fields }));
+    let table = run(&mut kit, &id, "table.add", json!({ "title": "People", "fields": fields }));
     let names: Vec<&str> = table["result"]["fields"].as_array().unwrap().iter().map(|field| field["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["name", "field", "n_code_field_2", "phone_number", "name_2"]);
 }
@@ -105,20 +105,19 @@ fn tables_create_refuses_names_it_would_rewrite_and_writes_nothing() {
 #[test]
 fn fields_create_refuses_a_name_in_use_or_out_of_form() {
     let (mut kit, id, _folder) = document("field");
-    let table =
-        run(&mut kit, &id, "table.tables.create", json!({ "title": "Contacts", "fields": [{ "title": "Email", "name": "email", "primary": true }] }));
+    let table = run(&mut kit, &id, "table.add", json!({ "title": "Contacts", "fields": [{ "title": "Email", "name": "email", "primary": true }] }));
     let table_id = table["result"]["id"].clone();
     let fields = |kit: &mut Headless<TableDocument>| {
-        let answer = run(kit, &id, "table.fields.list", json!({ "tableId": table_id }));
+        let answer = run(kit, &id, "field.list", json!({ "tableId": table_id }));
         answer["result"]["items"].as_array().or_else(|| answer["result"].as_array()).map(Vec::len).unwrap_or_else(|| panic!("fields.list: {answer}"))
     };
     let before = fields(&mut kit);
     assert_eq!(
-        refused(&mut kit, &id, "table.fields.create", json!({ "tableId": table_id, "title": "Mail", "name": "email" })),
+        refused(&mut kit, &id, "field.add", json!({ "tableId": table_id, "title": "Mail", "name": "email" })),
         [("/name".to_owned(), "`name` \"email\" is taken by a field of this table".to_owned())]
     );
-    assert_eq!(refused(&mut kit, &id, "table.fields.create", json!({ "tableId": table_id, "title": "Phone", "name": "Phone" }))[0].0, "/name");
+    assert_eq!(refused(&mut kit, &id, "field.add", json!({ "tableId": table_id, "title": "Phone", "name": "Phone" }))[0].0, "/name");
     assert_eq!(fields(&mut kit), before, "nothing was written");
-    let created = run(&mut kit, &id, "table.fields.create", json!({ "tableId": table_id, "title": "Phone", "name": "phone" }));
+    let created = run(&mut kit, &id, "field.add", json!({ "tableId": table_id, "title": "Phone", "name": "phone" }));
     assert_eq!(created["result"]["name"], "phone");
 }

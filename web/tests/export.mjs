@@ -1,5 +1,5 @@
 // Export in a real browser, through the development host: node tests/export.mjs [chromium|webkit]
-// The engine answers the table's file (`table.file.export`, base64) and the host writes it as a new
+// The engine answers the table's file (`file.export`, base64) and the host writes it as a new
 // file beside the document (`host/write` mode `export`): the editor says it exported only when the
 // host answers, names the file the host wrote, and shows the host's error when it refuses. The
 // agent's export command answers the same bytes. Build the engine first (pnpm engine).
@@ -134,7 +134,7 @@ try {
 
   // The agent's export (kit.json `agent.export`): the open editor runs the engine's command, which
   // answers the file for the host to write.
-  const agent = await page.evaluate(async () => (await window.devHost.connection().ai.run([{ command: 'table.file.export', params: { format: 'csv' } }], false)).completed[0].result)
+  const agent = await page.evaluate(async () => (await window.devHost.connection().ai.run([{ command: 'file.export', params: { format: 'csv' } }], false)).completed[0].result)
   const agentText = agent?.data ? Buffer.from(agent.data, 'base64').toString('utf8') : ''
   step('the agent\'s export command answers the CSV bytes', agent?.extension === 'csv' && agentText === csvText, JSON.stringify(agent).slice(0, 160))
   const dirty = await page.evaluate(() => window.devHost.changes.filter((state) => state.dirty).length)

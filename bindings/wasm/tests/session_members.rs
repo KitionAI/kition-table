@@ -17,7 +17,7 @@ fn run(doc: &mut TableDocument, command: &str, params: Value) -> Value {
 }
 
 fn titles(doc: &mut TableDocument) -> Vec<String> {
-    let page = run(doc, "table.records.list", json!({ "tableId": 1 }));
+    let page = run(doc, "record.list", json!({ "tableId": 1 }));
     let mut titles: Vec<String> =
         page["items"].as_array().unwrap().iter().map(|record| record["values"]["title"].as_str().unwrap_or_default().to_owned()).collect();
     titles.sort();
@@ -25,7 +25,7 @@ fn titles(doc: &mut TableDocument) -> Vec<String> {
 }
 
 fn add(doc: &mut TableDocument, title: &str) -> Value {
-    run(doc, "table.records.create", json!({ "tableId": 1, "values": { "title": title } }))
+    run(doc, "record.add", json!({ "tableId": 1, "values": { "title": title } }))
 }
 
 /// A document with one record ("Kept"), opened from its file.
@@ -48,14 +48,13 @@ fn model_describe_answers_the_object_model_with_the_commands() {
     let mut doc = document();
     let described = doc.model_describe().unwrap();
     assert_eq!(described["capability"], "KitObjectModel 1.0");
-    assert!(described["commands"].as_array().unwrap().iter().any(|command| command["id"] == "table.records.create"), "{described}");
+    assert!(described["commands"].as_array().unwrap().iter().any(|command| command["id"] == "record.add"), "{described}");
 }
 
 #[test]
 fn model_batch_runs_commands_and_model_edits_in_the_engine() {
     let mut doc = document();
-    let batch =
-        json!({ "ops": [{ "op": "command", "id": "table.records.create", "params": { "tableId": 1, "values": { "title": "From a batch" } } }] });
+    let batch = json!({ "ops": [{ "op": "command", "id": "record.add", "params": { "tableId": 1, "values": { "title": "From a batch" } } }] });
     doc.model_batch(&batch).unwrap();
     assert_eq!(titles(&mut doc), ["From a batch", "Kept"], "the batch's command reached the table");
     let refused = doc.model_batch(&json!({ "ops": [{ "op": "set", "target": "no-such-object", "field": "title", "value": "x" }] })).unwrap_err();
@@ -103,8 +102,8 @@ fn model_reply_reads_only_the_objects_it_names_and_matches_the_full_read() {
 
 /// What the editor reads of the table: its fields and its records (ids, keys and values).
 fn engine_view(doc: &mut TableDocument) -> Value {
-    let fields = run(doc, "table.fields.list", json!({ "tableId": 1 }));
-    let records = run(doc, "table.records.list", json!({ "tableId": 1 }));
+    let fields = run(doc, "field.list", json!({ "tableId": 1 }));
+    let records = run(doc, "record.list", json!({ "tableId": 1 }));
     let records: Vec<Value> = records["items"]
         .as_array()
         .unwrap()
@@ -173,8 +172,8 @@ fn a_draft_merges_in_as_one_undo_step_and_the_table_follows() {
     add(&mut draft, "From the draft");
     let changes = draft.export_changes(&base).unwrap();
     // The document moved on meanwhile, elsewhere than the draft: the kept record renamed.
-    let kept = run(&mut doc, "table.records.list", json!({ "tableId": 1 }))["items"][0]["id"].clone();
-    run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "title": "Meanwhile" } }));
+    let kept = run(&mut doc, "record.list", json!({ "tableId": 1 }))["items"][0]["id"].clone();
+    run(&mut doc, "record.set", json!({ "tableId": 1, "recordId": kept, "values": { "title": "Meanwhile" } }));
     let version = doc.version();
     let preview = doc.compare_changes(&changes).unwrap();
     assert_eq!(doc.version(), version, "comparing changes nothing");
@@ -207,13 +206,13 @@ fn compare_changes_tells_what_a_merge_would_change() {
 fn a_restored_state_keeps_the_ids_and_undoes_as_one_step() {
     let mut doc = document();
     let checkpoint = doc.snapshot().unwrap();
-    let kept = run(&mut doc, "table.records.list", json!({ "tableId": 1 }))["items"][0]["row_key"].clone();
+    let kept = run(&mut doc, "record.list", json!({ "tableId": 1 }))["items"][0]["row_key"].clone();
     add(&mut doc, "After the checkpoint");
     let origin = Origin::person("ann");
     let damage = doc.restore_state(&checkpoint, &origin).unwrap();
     assert_eq!(damage["kind"], "full");
     assert_eq!(titles(&mut doc), ["Kept"], "the table follows the restore");
-    assert_eq!(run(&mut doc, "table.records.list", json!({ "tableId": 1 }))["items"][0]["row_key"], kept, "under its id");
+    assert_eq!(run(&mut doc, "record.list", json!({ "tableId": 1 }))["items"][0]["row_key"], kept, "under its id");
     assert!(doc.dirty());
     let at = doc.version();
     assert_eq!(doc.restore_state(&checkpoint, &origin).unwrap()["kind"], "none", "the same state again changes nothing");

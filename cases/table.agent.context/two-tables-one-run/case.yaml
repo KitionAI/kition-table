@@ -40,8 +40,8 @@ solution:
       path: trip.ktable
       target: { table: 2 }
       steps:
-        - { command: table.records.update, on: [3], params: { tableId: 2, values: { packed: true } } }
-        - { command: table.records.update, on: [4], params: { tableId: 2, values: { packed: true } } }
-        - { command: table.records.update, at: { part: { table: 1 } }, on: [2], params: { tableId: 1, values: { status: Done } } }
+        - { command: record.set, on: [3], params: { tableId: 2, values: { packed: true } } }
+        - { command: record.set, on: [4], params: { tableId: 2, values: { packed: true } } }
+        - { command: record.set, at: { part: { table: 1 } }, on: [2], params: { tableId: 1, values: { status: Done } } }
 since: "2026-11-16"
 timeout_s: 600

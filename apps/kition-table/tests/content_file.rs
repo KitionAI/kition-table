@@ -24,8 +24,8 @@ async fn an_agent_run_saves_sealed_content() {
     let kits = KitManager::new(Some(dir.path().to_owned()), vec![(definition, executable)]);
     let options = CallOptions { guard: Guard::Off, ..Default::default() };
     let steps = json!([
-        { "command": "table.records.create", "params": { "tableId": 1, "values": { "title": OVERWRITTEN } } },
-        { "command": "table.records.update", "params": { "tableId": 1, "recordId": 1, "values": { "title": "From the agent" } } }
+        { "command": "record.add", "params": { "tableId": 1, "values": { "title": OVERWRITTEN } } },
+        { "command": "record.set", "params": { "tableId": 1, "recordId": 1, "values": { "title": "From the agent" } } }
     ]);
     tools::call_as(&kits, "table_run", &json!({ "path": "Work.ktable", "steps": steps, "check": false }), options, "agent").await.unwrap().unwrap();
     kits.shutdown().await;

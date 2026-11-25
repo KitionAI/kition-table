@@ -3,7 +3,7 @@ id: regressions/issue-render-command
 feature: table.picture
 intent: >-
   The headless kit's preview follows the render contract (Kition platform K21, KHP A39, A24):
-  kit.json declares agent.render table.file.render, which takes scale (up to 2), maxSize, target
+  kit.json declares agent.render file.render, which takes scale (up to 2), maxSize, target
   (a diagnostic's path or sheet, a table, a view, and a range of its rows) and slide, and answers a
   top-level base64 png, drawn with the faces the executable embeds, equal to conformance/expected.
   Before, table.preview.render answered {change, result: {png}}, took focus, and was not declared,

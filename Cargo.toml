@@ -47,7 +47,7 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 csv = "1"
 # The content row of a saved `.ktable` holds `content.json` DEFLATE-compressed (raw, fixed level).
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
-# The preview's PNG (`table.file.render`), the version kition-headless already brings.
+# The preview's PNG (`file.render`), the version kition-headless already brings.
 png = "0.17"
 # The headless picture's attachment thumbnails (with png): JPEG and WebP decoders.
 zune-jpeg = "0.5"

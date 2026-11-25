@@ -38,7 +38,7 @@ fn every_creates_entry_makes_a_clean_document() {
 
 /// The basic fixture's tables: id, field titles, and record count.
 fn tables(doc: &mut TableDocument) -> Vec<(i64, Vec<String>, usize)> {
-    let document = doc.execute("table.documents.get", json!({})).unwrap()["result"].clone();
+    let document = doc.execute("file.get", json!({})).unwrap()["result"].clone();
     document["tables"]
         .as_array()
         .unwrap()
@@ -46,7 +46,7 @@ fn tables(doc: &mut TableDocument) -> Vec<(i64, Vec<String>, usize)> {
         .map(|table| {
             let id = table["id"].as_i64().unwrap();
             let titles = table["fields"].as_array().unwrap().iter().map(|field| field["title"].as_str().unwrap().to_owned()).collect();
-            let records = doc.execute("table.records.list", json!({ "tableId": id })).unwrap()["result"]["total"].as_u64().unwrap() as usize;
+            let records = doc.execute("record.list", json!({ "tableId": id })).unwrap()["result"]["total"].as_u64().unwrap() as usize;
             (id, titles, records)
         })
         .collect()
@@ -75,8 +75,7 @@ fn every_exports_entry_writes_a_file_a_reader_reads_back() {
             match extension {
                 "csv" => {
                     let encoded = base64::engine::general_purpose::STANDARD.encode(&content);
-                    let read =
-                        doc.execute("table.import.preview", json!({ "fileName": "export.csv", "content": encoded })).unwrap()["result"].clone();
+                    let read = doc.execute("file.previewImport", json!({ "fileName": "export.csv", "content": encoded })).unwrap()["result"].clone();
                     let names: Vec<String> =
                         read["fields"].as_array().unwrap().iter().map(|field| field["title"].as_str().unwrap().to_owned()).collect();
                     assert_eq!(names, titles, "{read}");

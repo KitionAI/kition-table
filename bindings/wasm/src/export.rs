@@ -1,4 +1,4 @@
-//! `table.file.export`: one table as a CSV or Markdown file's bytes, base64, for the host to write
+//! `file.export`: one table as a CSV or Markdown file's bytes, base64, for the host to write
 //! as a new file (Kit UI protocol `host/write` mode `export`, KHP A41). The editor's Export and the
 //! agent's `table_export` (`kit.json` `agent.export`) run it; the engine writes no file and the
 //! document does not change. It answers the file at the top level (`data`), not as a data-document
@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use crate::error;
 
 /// The command id.
-pub const EXPORT_COMMAND: &str = "table.file.export";
+pub const EXPORT_COMMAND: &str = "file.export";
 
 /// The formats it writes: extension and MIME type, as `kit.json` `exports` declares them.
 pub const EXPORT_FORMATS: &[(&str, &str)] = &[("csv", "text/csv"), ("md", "text/markdown")];
