@@ -237,6 +237,8 @@ fn main() -> Result<(), String> {
     doc.call("views.patchConfig", json!({ "tableId": table_id, "viewId": tall, "row_height": "extra_tall", "frozen_column_count": 1 }))?;
 
     let bytes = doc.0.saved_bytes()?;
+    let content = doc.0.file().replica().content_snapshot().map_err(|error| error.to_string())?.len();
+    eprintln!("the file: {:.1} MB; its content.json: {:.1} MB before DEFLATE", bytes.len() as f64 / 1e6, content as f64 / 1e6);
     if let Some(dir) = std::path::Path::new(&out).parent() {
         std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
     }

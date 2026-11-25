@@ -14,7 +14,6 @@ use kition_table_file::{
     CellEdit, CreateOptions, FieldPatch, FieldSpec, FilterRule, FilterTree, FilterTreeChild, MergeOutcome, TableFile, TableOp, TablePatch, TableSpec,
     ViewFieldPatch, ViewPatch, ViewSort, ViewSpec,
 };
-use rusqlite::Connection;
 use serde_json::{Map, Value, json};
 
 fn ok<T, E: std::fmt::Display>(result: Result<T, E>) -> T {

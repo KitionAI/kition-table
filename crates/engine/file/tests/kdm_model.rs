@@ -1154,15 +1154,15 @@ fn run_incremental_matches_full(seed: u64, steps: usize) {
         target.take_changed();
         let before = ok(index.before(&target));
         match rng.below(8) {
-            0..=3 => {
+            0..=2 => {
                 random_op(&mut target, &mut rng, &base);
             }
-            4 => {
+            3 => {
                 imported(&mut target, |peer| random_op(peer, &mut rng, &base));
             }
-            5 => {
+            4 | 5 => {
                 random_op(&mut draft, &mut rng, &base);
-                if rng.below(2) == 0 {
+                if rng.below(4) == 0 {
                     let changes = ok(draft.export_changes(&draft_base));
                     // A refused merge (`stale`) changes nothing.
                     let _ = target.merge_changes(&changes, &person());
