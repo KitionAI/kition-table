@@ -205,6 +205,18 @@ impl History {
         self.saved = None;
     }
 
+    /// Drops `count` steps of the undo list (`undo`) or the redo list that the replica passed
+    /// over (their objects gone since), so the two lists stay in step.
+    fn pass(&mut self, undo: bool, count: usize) {
+        for _ in 0..count {
+            if undo {
+                self.undo.pop()
+            } else {
+                self.redo.pop()
+            };
+        }
+    }
+
     fn undone(&mut self) {
         self.redo.push(self.step);
         self.step = self.undo.pop().unwrap_or_else(|| self.fresh());
@@ -486,6 +498,10 @@ impl TableDocument {
         // change the person's undo does not revert.
         let persons =
             if undo_or_redo { undo_scope(params, self.file.undo_scope()) == UndoScope::Person } else { self.file.undo_scope() == UndoScope::Person };
+        let passed = self.file.take_passed_steps();
+        if undo_or_redo && persons {
+            self.history.pass(method == "undo", passed);
+        }
         match method {
             "undo" if done && persons => self.history.undone(),
             "redo" if done && persons => self.history.redone(),

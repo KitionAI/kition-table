@@ -72,6 +72,8 @@ pub struct TableFile {
     pub(crate) stale: bool,
     /// Why this handle refuses writes, when it does.
     pub(crate) read_only: Option<String>,
+    /// The steps the last undo or redo passed over ([`TableFile::take_passed_steps`]).
+    pub(crate) passed: usize,
     /// The earliest version the replica's change log reaches: the version it was loaded or
     /// adopted at (a replica holds the changes of its own session only).
     pub(crate) floor: Version,
@@ -308,6 +310,7 @@ impl TableFile {
             last_change: None,
             stale: false,
             read_only: None,
+            passed: 0,
         })
     }
 

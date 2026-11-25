@@ -1522,7 +1522,7 @@ fn undo_of_a_delete_restores_the_same_rows() {
     let before = projected_ids(&t.file);
     write(&mut t.replica, |tx| model::delete_records(tx, &tasks, &[task]));
     project_into(&t.file, &mut t.replica, "", 11);
-    assert!(ok(t.replica.undo()));
+    assert!(ok(t.replica.undo()).is_done());
     project_into(&t.file, &mut t.replica, "", 12);
     assert_eq!(projected_ids(&t.file).get(&format!("kition_records:{}", t.task)), before.get(&format!("kition_records:{}", t.task)));
     let values = record_values(&t.file, "tasks", &t.task);

@@ -20,7 +20,8 @@
     "test:grid:interaction": "node tests/gridInteraction.mjs chromium && node tests/gridInteraction.mjs webkit",
     "test:grid:editing": "node tests/gridEditing.mjs chromium && node tests/gridEditing.mjs webkit",
     "test:grid:fonts": "node tests/lazyFonts.mjs chromium && node tests/lazyFonts.mjs webkit",
-    "test:perf": "node tests/perf.mjs chromium"
+    "test:perf": "node tests/perf.mjs chromium",
+    "test:contract": "node ../../kition-sdk/tools/check-manifest.mjs ../kit.json --module public/engine"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -29,7 +30,7 @@
     "@codemirror/search": "^6.7.0",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.43.0",
-    "@kition/sdk": "npm:@kitionstage/sdk@0.5.2-stage.23",
+    "@kition/sdk": "npm:@kitionstage/sdk@0.5.2-stage.25",
     "@kition/tessera": "npm:@kitionstage/tessera@0.1.1-stage.2",
     "clsx": "^2.1.1",
     "i18next": "^26.3.1",

@@ -377,7 +377,9 @@ impl TableFile {
         self.writable()?;
         let label = self.origin.clone().with_label("undo").encode();
         // An undo can bring back what others changed meanwhile (a name since taken): repaired.
-        self.write(&label, true, |replica| Ok(replica.undo_in(scope)?)).map(|(done, change, _)| (done, change))
+        let (outcome, change, _) = self.write(&label, true, |replica| Ok(replica.undo_in(scope)?))?;
+        self.passed = outcome.passed.len();
+        Ok((outcome.is_done(), change))
     }
 
     /// Redoes the last undone step; `false` when there was none.
@@ -389,7 +391,16 @@ impl TableFile {
     pub fn redo_in(&mut self, scope: UndoScope) -> Result<(bool, TableChange)> {
         self.writable()?;
         let label = self.origin.clone().with_label("redo").encode();
-        self.write(&label, true, |replica| Ok(replica.redo_in(scope)?)).map(|(done, change, _)| (done, change))
+        let (outcome, change, _) = self.write(&label, true, |replica| Ok(replica.redo_in(scope)?))?;
+        self.passed = outcome.passed.len();
+        Ok((outcome.is_done(), change))
+    }
+
+    /// How many steps the last undo or redo passed over (their objects gone since, so nothing to
+    /// take back) besides the one it took back, once: an editor that keeps its own list of steps
+    /// drops as many to stay in step with the replica's.
+    pub fn take_passed_steps(&mut self) -> usize {
+        std::mem::take(&mut self.passed)
     }
 
     /// Whether this handle's scope has a step to undo.

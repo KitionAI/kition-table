@@ -118,6 +118,14 @@ features:
     paths: [crates/engine/file/src/content.rs, crates/engine/file/src/kdm/store.rs, bindings/wasm/src/lib.rs, bindings/wasm/tests/content_file.rs, apps/kition-table/tests/content_file.rs, crates/engine/file/tests/samples.rs]
     cases: [table.file.content-only/no-history]
     since: "2026-11-23"
+  - id: table.collab.drafts
+    title: "The engine merges and compares drafts, restores a checkpoint's state, answers receipts and the object model itself (engine contract 2, rule K3a)"
+    dimension: [collab, function]
+    priority: P1
+    status: has
+    paths: [bindings/wasm/src/web.rs, bindings/wasm/src/lib.rs, bindings/wasm/src/model.rs, crates/engine/file/src/kdm/commit.rs, bindings/wasm/tests/session_members.rs, web/package.json]
+    cases: [table.collab.drafts/engine-members]
+    since: "2026-11-25"
   - id: table.collab.live
     title: Two or more people edit one table at the same time, live
     dimension: [collab, function]

@@ -1,0 +1,23 @@
+format: 1
+id: table.collab.drafts/engine-members
+feature: table.collab.drafts
+intent: >-
+  The engine answers the session members of engine contract 2 itself (rule K3a), with no
+  TypeScript fallback in the editor: the object model (modelDescribe, modelBatch), the receipt
+  (changesSince), an agent's reply (modelReply), a draft's comparison and merge (compareChanges,
+  mergeChanges: the table follows, the edit made meanwhile stays, one undo takes the draft back, a
+  refused merge changes nothing) and a checkpoint's restore (restoreState: the objects under their
+  ids, one undo step, another document's state refused). The built module exports all seven
+  (kition-sdk check-manifest --module).
+layer: gate
+source:
+  kind: synthetic
+  from: kition-sdk engine contract K3a, plan 2026-11-24 section 4
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: session_members }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-25"
