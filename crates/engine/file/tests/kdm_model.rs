@@ -1144,6 +1144,10 @@ fn random_op(replica: &mut Replica, rng: &mut Rng, base: &ObjectId) -> Option<&'
 /// in as one `import` change by object id, unrepaired. Here it gave one field of a table another
 /// field's name, which no write of the model makes.
 fn outside_write(replica: &mut Replica, rng: &mut Rng, base: &ObjectId) {
+    // The person's undo may have taken back the base itself.
+    if !replica.exists(base) {
+        return;
+    }
     // Lists keep the items of deleted objects until a repair drops them: only live ones.
     let live = |replica: &Replica, ids: Vec<ObjectId>| -> Vec<ObjectId> { ids.into_iter().filter(|id| replica.exists(id)).collect() };
     let Some(table) = pick(rng, &live(replica, ok(replica.list(base, "tables")))) else { return };
