@@ -1,11 +1,10 @@
-//! The `kit.table` model on the KDM: typed writes, reads, convergence, and repair.
+//! The `kit.table` model on the KDM: typed writes, reads, imports, and repair.
 
 #![allow(clippy::disallowed_methods, reason = "native timing tests read the clock")]
 
-use std::collections::BTreeSet;
 use std::fmt::Display;
 
-use kition_kdm::testing::{Network, Rng};
+use kition_kdm::testing::Rng;
 use kition_kdm::{ActorId, DocId, ObjectId, Origin, Replica, Tx};
 use kition_table_file::kdm::model::{self, Anchor, BaseSpec, TableIds};
 use kition_table_file::kdm::options::{IdKind, options_from_kdm, options_to_kdm};
@@ -798,32 +797,6 @@ fn readers_and_positions_use_the_first_of_repeated_entries() {
 }
 
 #[test]
-fn single_target_links_keep_the_lowest_id() {
-    let (mut net, _, ids) = shared(2, 8);
-    let link = write(replica(&mut net, 0), |tx| {
-        model::create_field(tx, &ids.table, &FieldSpec { options: json!({ "allow_multiple": false }), ..field("Owner", "link_to_record") })
-    });
-    let rows = records(replica(&mut net, 0), &ids.table, vec![json!({}), json!({}), json!({})]);
-    ok(net.sync_all());
-    let (from, a, b) = (nth(&rows, 0), nth(&rows, 1), nth(&rows, 2));
-    let too_many = model::transact(replica(&mut net, 0), &person(), |tx| model::replace_links(tx, &from, &link, &[a.clone(), b.clone()]));
-    assert!(matches!(too_many, Err(TableFileError::Invalid(_))));
-    write(replica(&mut net, 0), |tx| model::replace_links(tx, &from, &link, std::slice::from_ref(&a)));
-    write(replica(&mut net, 1), |tx| model::replace_links(tx, &from, &link, std::slice::from_ref(&b)));
-    ok(net.sync_all());
-    let lowest = replica(&mut net, 0).objects_of_type("Link").into_iter().next().unwrap_or_else(|| panic!("a link"));
-    let expected = ok(replica(&mut net, 0).get(&lowest, "to"));
-    // Readers already show one target; repair deletes the other link.
-    assert_eq!(ok(ModelView::new(replica(&mut net, 0)).links_from(&from, &link)).len(), 1);
-    converge(&mut net);
-    for replica in &net.replicas {
-        assert_eq!(replica.objects_of_type("Link"), vec![lowest.clone()]);
-        let targets = ok(ModelView::new(replica).links_from(&from, &link));
-        assert_eq!(targets.iter().map(|id| json!(id.as_str())).collect::<Vec<_>>(), vec![expected.clone()]);
-    }
-}
-
-#[test]
 fn links_group_by_field() {
     let mut replica = new_replica();
     let base = base_in(&mut replica);
@@ -929,242 +902,28 @@ fn relational_ids_and_foreign_records_are_refused() {
 }
 
 // ---------------------------------------------------------------------------
-// Two replicas.
+// Changes from another replica of the same session.
 
-fn network(count: usize, seed: u64) -> Network {
-    ok(Network::new(schema(), count, seed))
+/// A replica with one base and one simple table.
+fn shared() -> (Replica, ObjectId, TableIds) {
+    let mut replica = new_replica();
+    let base = base_in(&mut replica);
+    let ids = simple_table(&mut replica, &base, "T");
+    (replica, base, ids)
 }
 
-fn replica(net: &mut Network, index: usize) -> &mut Replica {
-    net.replicas.get_mut(index).unwrap_or_else(|| panic!("replica {index}"))
-}
-
-/// A network whose replicas share one base with one simple table.
-fn shared(count: usize, seed: u64) -> (Network, ObjectId, TableIds) {
-    let mut net = network(count, seed);
-    let base = base_in(replica(&mut net, 0));
-    let ids = simple_table(replica(&mut net, 0), &base, "T");
-    ok(net.sync_all());
-    (net, base, ids)
-}
-
-fn converge(net: &mut Network) {
-    ok(net.sync_all());
-    for index in 0..net.replicas.len() {
-        repair_now(replica(net, index));
-    }
-    if let Err(diff) = net.converged() {
-        panic!("replicas differ after repair: {diff}");
-    }
-    ok(net.sync_all());
-    if let Err(diff) = net.converged() {
-        panic!("replicas differ after syncing the repairs: {diff}");
-    }
-}
-
-#[test]
-fn concurrent_edits_of_different_cells_both_survive() {
-    let (mut net, _, ids) = shared(2, 1);
-    let (name, notes) = (nth(&ids.fields, 0), nth(&ids.fields, 1));
-    let record = nth(&records(replica(&mut net, 0), &ids.table, vec![json!({})]), 0);
-    ok(net.sync_all());
-    write(replica(&mut net, 0), |tx| model::set_cells(tx, &ids.table, &record, &object(json!({ name.as_str(): "zero" }))));
-    write(replica(&mut net, 1), |tx| model::set_cells(tx, &ids.table, &record, &object(json!({ notes.as_str(): "one" }))));
-    converge(&mut net);
-    for replica in &net.replicas {
-        assert_eq!(ok(ModelView::new(replica).cells(&record)), object(json!({ name.as_str(): "zero", notes.as_str(): "one" })));
-    }
-}
-
-#[test]
-fn concurrent_link_adds_both_survive() {
-    let (mut net, _, ids) = shared(2, 2);
-    let link = write(replica(&mut net, 0), |tx| model::create_field(tx, &ids.table, &field("Rel", "link_to_record")));
-    let rows = records(replica(&mut net, 0), &ids.table, vec![json!({}), json!({}), json!({})]);
-    ok(net.sync_all());
-    let (from, a, b) = (nth(&rows, 0), nth(&rows, 1), nth(&rows, 2));
-    write(replica(&mut net, 0), |tx| model::replace_links(tx, &from, &link, std::slice::from_ref(&a)));
-    write(replica(&mut net, 1), |tx| model::replace_links(tx, &from, &link, std::slice::from_ref(&b)));
-    converge(&mut net);
-    for replica in &net.replicas {
-        let mut targets = ok(ModelView::new(replica).links_from(&from, &link));
-        targets.sort();
-        let mut expected = vec![a.clone(), b.clone()];
-        expected.sort();
-        assert_eq!(targets, expected);
-    }
-}
-
-#[test]
-fn concurrent_identical_links_dedupe_to_the_lowest_id() {
-    let (mut net, _, ids) = shared(2, 7);
-    let link = write(replica(&mut net, 0), |tx| model::create_field(tx, &ids.table, &field("Rel", "link_to_record")));
-    let rows = records(replica(&mut net, 0), &ids.table, vec![json!({}), json!({})]);
-    ok(net.sync_all());
-    let (from, to) = (nth(&rows, 0), nth(&rows, 1));
-    for index in 0..2 {
-        write(replica(&mut net, index), |tx| model::replace_links(tx, &from, &link, std::slice::from_ref(&to)));
-    }
-    ok(net.sync_all());
-    let both = replica(&mut net, 0).objects_of_type("Link");
-    assert_eq!(both.len(), 2);
-    assert_eq!(ok(ModelView::new(replica(&mut net, 0)).links()).len(), 1, "readers show one");
-    converge(&mut net);
-    for replica in &net.replicas {
-        assert_eq!(replica.objects_of_type("Link"), vec![nth(&both, 0)]);
-    }
-}
-
-#[test]
-fn concurrent_fields_with_one_name_get_unique_names_after_repair() {
-    let (mut net, _, ids) = shared(2, 3);
-    let mut created = Vec::new();
-    for index in 0..2 {
-        created.push(write(replica(&mut net, index), |tx| model::create_field(tx, &ids.table, &field("Status", "text"))));
-    }
-    ok(net.sync_all());
-    let fields = ok(ModelView::new(replica(&mut net, 0)).fields(&ids.table));
-    assert_eq!(fields.iter().filter(|field| field.name == "status").count(), 2);
-    converge(&mut net);
-    created.sort();
-    for replica in &net.replicas {
-        let read = ModelView::new(replica);
-        assert_eq!(ok(read.field(&nth(&created, 0))).name, "status");
-        assert_eq!(ok(read.field(&nth(&created, 1))).name, "status_2");
-    }
-}
-
-#[test]
-fn a_record_moved_and_deleted_concurrently_is_deleted() {
-    let (mut net, _, ids) = shared(2, 4);
-    let rows = records(replica(&mut net, 0), &ids.table, vec![json!({}), json!({}), json!({})]);
-    ok(net.sync_all());
-    let (a, b, c) = (nth(&rows, 0), nth(&rows, 1), nth(&rows, 2));
-    write(replica(&mut net, 0), |tx| model::move_records(tx, &ids.table, std::slice::from_ref(&a), None));
-    write(replica(&mut net, 1), |tx| model::delete_records(tx, &ids.table, std::slice::from_ref(&a)));
-    converge(&mut net);
-    for replica in &net.replicas {
-        assert_eq!(ok(ModelView::new(replica).record_ids(&ids.table)), vec![b.clone(), c.clone()]);
-        assert_eq!(ok(replica.list(&ids.table, "records")).len(), 2);
-        assert!(!replica.exists(&a));
-    }
-}
-
-#[test]
-fn concurrent_widths_of_different_fields_both_survive() {
-    let (mut net, _, ids) = shared(2, 5);
-    let grid = nth(&ids.views, 0);
-    let (name, notes) = (nth(&ids.fields, 0), nth(&ids.fields, 1));
-    write(replica(&mut net, 0), |tx| model::set_view_width(tx, &grid, &name, 300));
-    write(replica(&mut net, 1), |tx| model::set_view_width(tx, &grid, &notes, 90));
-    converge(&mut net);
-    for replica in &net.replicas {
-        let view = ok(ModelView::new(replica).view(&grid));
-        assert_eq!(view.widths.get(&name), Some(&300));
-        assert_eq!(view.widths.get(&notes), Some(&90));
-    }
-}
-
-#[test]
-fn a_link_to_a_record_deleted_concurrently_is_removed() {
-    let (mut net, _, ids) = shared(2, 6);
-    let link = write(replica(&mut net, 0), |tx| model::create_field(tx, &ids.table, &field("Rel", "link_to_record")));
-    let rows = records(replica(&mut net, 0), &ids.table, vec![json!({}), json!({})]);
-    ok(net.sync_all());
-    let (from, to) = (nth(&rows, 0), nth(&rows, 1));
-    write(replica(&mut net, 0), |tx| model::replace_links(tx, &from, &link, std::slice::from_ref(&to)));
-    repair_now(replica(&mut net, 0));
-    write(replica(&mut net, 1), |tx| model::delete_records(tx, &ids.table, std::slice::from_ref(&to)));
-    repair_now(replica(&mut net, 1));
-    converge(&mut net);
-    for replica in &net.replicas {
-        assert!(ok(ModelView::new(replica).links()).is_empty());
-        assert!(ok(replica.state_json()).to_string().contains(from.as_str()));
-    }
-}
-
-#[test]
-fn replicas_repairing_different_states_converge() {
-    let (mut net, _, ids) = shared(2, 9);
-    let a = write(replica(&mut net, 0), |tx| model::create_field(tx, &ids.table, &field("Status", "text")));
-    let b = write(replica(&mut net, 1), |tx| model::create_field(tx, &ids.table, &field("Status", "text")));
-    // Replica 0 sees both and repairs; replica 1 goes on alone and names a third field
-    // `status_2`, which replica 0's repair also gave one of the first two.
-    ok(net.deliver(1, 0));
-    assert!(repair_now(replica(&mut net, 0)));
-    let c = write(replica(&mut net, 1), |tx| model::create_field(tx, &ids.table, &field("Status", "text")));
-    assert!(!repair_now(replica(&mut net, 1)));
-    converge(&mut net);
-    let mut ids_sorted = vec![a.clone(), b.clone()];
-    ids_sorted.sort();
-    for replica in &net.replicas {
-        let read = ModelView::new(replica);
-        let fields = ok(read.fields(&ids.table));
-        let names: BTreeSet<&str> = fields.iter().map(|field| field.name.as_str()).collect();
-        assert_eq!(names.len(), fields.len());
-        assert_eq!(ok(read.field(&nth(&ids_sorted, 0))).name, "status");
-        for id in [&a, &b, &c] {
-            assert!(ok(read.field(id)).name.starts_with("status"));
-        }
-    }
-}
-
-#[test]
-fn records_anchored_on_a_record_deleted_concurrently_survive() {
-    let (mut net, _, ids) = shared(2, 10);
-    let rows = records(replica(&mut net, 0), &ids.table, vec![json!({}), json!({}), json!({})]);
-    ok(net.sync_all());
-    let (a, b, c) = (nth(&rows, 0), nth(&rows, 1), nth(&rows, 2));
-    write(replica(&mut net, 0), |tx| model::delete_records(tx, &ids.table, std::slice::from_ref(&b)));
-    let created = write(replica(&mut net, 1), |tx| model::create_records(tx, &ids.table, Some(&Anchor::Before(b.clone())), &[Map::new()], 1, ""));
-    converge(&mut net);
-    for replica in &net.replicas {
-        assert_eq!(ok(ModelView::new(replica).record_ids(&ids.table)), vec![a.clone(), nth(&created, 0), c.clone()]);
-    }
-}
-
-#[test]
-fn a_cell_written_while_its_field_is_deleted_is_hidden() {
-    let (mut net, _, ids) = shared(2, 11);
-    let (name, notes) = (nth(&ids.fields, 0), nth(&ids.fields, 1));
-    let record = nth(&records(replica(&mut net, 0), &ids.table, vec![json!({})]), 0);
-    ok(net.sync_all());
-    write(replica(&mut net, 0), |tx| model::delete_field(tx, &ids.table, &notes));
-    write(replica(&mut net, 1), |tx| model::set_cells(tx, &ids.table, &record, &object(json!({ name.as_str(): "kept", notes.as_str(): "late" }))));
-    converge(&mut net);
-    for replica in &net.replicas {
-        let read = ModelView::new(replica);
-        assert_eq!(ok(read.fields(&ids.table)).len(), 1);
-        assert_eq!(ok(read.cells(&record)), object(json!({ name.as_str(): "kept" })));
-    }
-}
-
-#[test]
-fn a_table_deleted_while_another_replica_adds_to_it_leaves_no_orphans() {
-    let (mut net, base, ids) = shared(2, 12);
-    let other = simple_table(replica(&mut net, 0), &base, "Other");
-    let link = write(replica(&mut net, 0), |tx| model::create_field(tx, &other.table, &field("Rel", "link_to_record")));
-    let source = nth(&records(replica(&mut net, 0), &other.table, vec![json!({})]), 0);
-    ok(net.sync_all());
-    write(replica(&mut net, 0), |tx| model::delete_table(tx, &base, &ids.table));
-    let (added, field_id) = write(replica(&mut net, 1), |tx| {
-        let added = model::create_records(tx, &ids.table, None, &[Map::new(), Map::new()], 1, "")?;
-        let field_id = model::create_field(tx, &ids.table, &field("Late", "text"))?;
-        model::replace_links(tx, &source, &link, &added)?;
-        Ok((added, field_id))
-    });
-    converge(&mut net);
-    for replica in &net.replicas {
-        for id in added.iter().chain(std::iter::once(&field_id)) {
-            assert!(!replica.exists(id), "{id} is collected");
-        }
-        assert!(replica.objects_of_type("Link").is_empty());
-        assert_eq!(ok(ModelView::new(replica).tables()), vec![other.table.clone()]);
-    }
+/// `edit` made on a fork of `replica` (another replica of the document, as the editor's page or a
+/// draft is) and imported into it, in order.
+fn imported<R>(replica: &mut Replica, edit: impl FnOnce(&mut Replica) -> R) -> R {
+    let mut peer = ok(replica.fork(ActorId::random()));
+    let value = edit(&mut peer);
+    let changes = ok(peer.export_changes(&replica.version()));
+    ok(replica.import_changes(&changes));
+    value
 }
 
 // ---------------------------------------------------------------------------
-// Randomized convergence.
+// Random operations.
 
 const NAMES: [&str; 4] = ["Status", "Owner", "Due", "Notes"];
 const TYPES: [&str; 8] = ["text", "number", "checkbox", "formula", "link_to_record", "link_to_record", "link_to_record", "link_to_record"];
@@ -1377,198 +1136,72 @@ fn random_op(replica: &mut Replica, rng: &mut Rng, base: &ObjectId) -> Option<&'
     result.ok().and_then(|()| OPS.get(kind).copied())
 }
 
-/// Every invariant repair restores, on a repaired replica.
-fn check_invariants(replica: &Replica, seed: u64) {
-    let read = ModelView::new(replica);
-    let mut reachable = BTreeSet::new();
-    let base = read.base().unwrap_or_else(|| panic!("seed {seed}: a base"));
-    let raw_live = |id: &ObjectId, field: &str| {
-        let items = ok(replica.list(id, field));
-        for item in &items {
-            assert!(replica.exists(item), "seed {seed}: dangling entry {item} in {field}");
-        }
-        items
-    };
-    let tables = ok(read.tables());
-    assert_eq!(tables.iter().collect::<BTreeSet<_>>().len(), tables.len(), "seed {seed}: tables once");
-    raw_live(&base, "tables");
-    reachable.extend(raw_live(&base, "dashboards"));
-    let table_names: BTreeSet<String> = tables.iter().map(|table| ok(read.table(table)).name).collect();
-    assert_eq!(table_names.len(), tables.len(), "seed {seed}: unique table names");
-    let mut single = BTreeSet::new();
-    for table in &tables {
-        reachable.insert(table.clone());
-        for list in ["fields", "views", "records"] {
-            reachable.extend(raw_live(table, list));
-        }
-        let fields = ok(read.fields(table));
-        let names: BTreeSet<&str> = fields.iter().map(|field| field.name.as_str()).collect();
-        assert_eq!(names.len(), fields.len(), "seed {seed}: unique field names");
-        let ids: BTreeSet<&ObjectId> = fields.iter().map(|field| &field.id).collect();
-        assert_eq!(ids.len(), fields.len(), "seed {seed}: fields once");
-        let records = ok(read.record_ids(table));
-        assert_eq!(records.iter().collect::<BTreeSet<_>>().len(), records.len(), "seed {seed}: records once");
-        let primary = ok(read.table(table)).primary_field;
-        assert_eq!(primary.is_some(), !fields.is_empty(), "seed {seed}: a primary field");
-        if let Some(primary) = primary {
-            assert!(ids.contains(&primary), "seed {seed}: the primary field is listed");
-        }
-        for field in &fields {
-            if field.options.get("allow_multiple") == Some(&json!(false)) {
-                single.insert(field.id.clone());
-            }
-        }
-    }
-    for ty in ["Table", "Field", "View", "Record", "Dashboard"] {
-        for id in replica.objects_of_type(ty) {
-            assert!(reachable.contains(&id), "seed {seed}: orphan {ty} {id}");
-        }
-    }
-    let mut triples = BTreeSet::new();
-    let mut singles = BTreeSet::new();
-    let raw_links = replica.objects_of_type("Link");
-    for link in &raw_links {
-        let end = |name: &str| ObjectId::from_string(ok(replica.get(link, name)).as_str().unwrap_or_default());
-        let (from, field, to) = (end("from"), end("field"), end("to"));
-        assert!(reachable.contains(&from) && reachable.contains(&to) && reachable.contains(&field), "seed {seed}: live link ends");
-        assert!(triples.insert((from.clone(), field.clone(), to)), "seed {seed}: links once");
-        if single.contains(&field) {
-            assert!(singles.insert((from, field)), "seed {seed}: one link for a single-target field");
-        }
-    }
-    assert_eq!(ok(read.links()).len(), raw_links.len(), "seed {seed}: readers show every link");
-}
-
-fn run_random(seed: u64, count: usize, steps: usize) {
-    let (mut net, base, ids) = shared(count, seed);
-    write(replica(&mut net, 0), |tx| model::create_field(tx, &ids.table, &field("Rel", "link_to_record")));
-    ok(net.sync_all());
-    let mut rng = Rng::new(seed.wrapping_add(1000));
-    let mut accepted: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
-    for _ in 0..steps {
-        let index = rng.below(count);
-        if let Some(kind) = random_op(replica(&mut net, index), &mut rng, &base) {
-            *accepted.entry(kind).or_default() += 1;
-        }
-        if rng.below(5) == 0 {
-            let from = rng.below(count);
-            let to = rng.below(count);
-            if from != to {
-                ok(net.deliver(from, to));
-                if rng.below(2) == 0 {
-                    repair_now(replica(&mut net, to));
-                }
-            }
-        }
-    }
-    converge(&mut net);
-    for index in 0..count {
-        let replica = replica(&mut net, index);
-        check_invariants(replica, seed);
-        let wrote = ok(model::transact(replica, &Origin::system("repair"), repair::repair_all));
-        assert!(!wrote, "seed {seed}: repair is idempotent");
-    }
-    for kind in OPS {
-        let done = accepted.get(kind).copied().unwrap_or_default();
-        assert!(done >= 5, "seed {seed}: {kind} succeeded {done} times: {accepted:?}");
-    }
-}
-
-#[test]
-fn random_operations_converge_on_two_replicas() {
-    for seed in [11, 12, 13, 14] {
-        run_random(seed, 2, 500);
-    }
-}
-
-#[test]
-fn random_operations_converge_on_three_replicas() {
-    for seed in [21, 22, 23, 24] {
-        run_random(seed, 3, 500);
-    }
-}
-
-/// Random local writes, imports, undos, and redos on replicas that stay repaired (as a
+/// Random local writes, imports, undos, and redos on a replica that stays repaired (as a
 /// `TableFile`'s replica does): after each, the incremental repair writes exactly what a full
 /// pass writes on a copy of the same state, and the index it carries stays usable.
-fn run_incremental_matches_full(seed: u64, count: usize, steps: usize) {
-    let (mut net, base, ids) = shared(count, seed);
-    write(replica(&mut net, 0), |tx| model::create_field(tx, &ids.table, &field("Rel", "link_to_record")));
-    ok(net.sync_all());
+fn run_incremental_matches_full(seed: u64, steps: usize) {
+    let (mut target, base, ids) = shared();
+    write(&mut target, |tx| model::create_field(tx, &ids.table, &field("Rel", "link_to_record")));
     let mut rng = Rng::new(seed.wrapping_add(2000));
-    let mut indexes: Vec<repair::RepairIndex> = (0..count).map(|_| repair::RepairIndex::default()).collect();
+    let mut index = repair::RepairIndex::default();
     let mut repaired = 0;
     for step in 0..steps {
-        let to = rng.below(count);
-        let start = replica(&mut net, to).version();
-        replica(&mut net, to).take_changed();
-        let before = ok(indexes[to].before(replica(&mut net, to)));
+        let start = target.version();
+        target.take_changed();
+        let before = ok(index.before(&target));
         match rng.below(8) {
             0..=3 => {
-                random_op(replica(&mut net, to), &mut rng, &base);
+                random_op(&mut target, &mut rng, &base);
             }
             4 | 5 => {
-                let from = (to + 1 + rng.below(count - 1)) % count;
-                ok(net.deliver(from, to));
+                imported(&mut target, |peer| random_op(peer, &mut rng, &base));
             }
             6 => {
-                ok(replica(&mut net, to).undo());
+                ok(target.undo());
             }
             _ => {
-                ok(replica(&mut net, to).redo());
+                ok(target.redo());
             }
         }
-        let target = replica(&mut net, to);
         let changed = target.take_changed();
         let mut full = ok(Replica::load(schema(), &ok(target.snapshot()), ActorId::random()));
         let full_wrote = ok(repair::run(&mut full, &changed));
-        indexes[to].advance(&start, target, &changed);
-        let (wrote, _) = ok(repair::run_since(target, &changed, &before, &mut indexes[to]));
+        index.advance(&start, &target, &changed);
+        let (wrote, _) = ok(repair::run_since(&mut target, &changed, &before, &mut index));
         assert_eq!(wrote, full_wrote, "seed {seed}, step {step}: the incremental repair wrote as much as a full one");
         assert_eq!(ok(target.state_json()), ok(full.state_json()), "seed {seed}, step {step}: the incremental repair wrote what a full one wrote");
         if wrote {
             repaired += 1;
         }
     }
-    converge(&mut net);
     assert!(repaired >= 5, "seed {seed}: only {repaired} steps needed a repair");
 }
 
 #[test]
 fn incremental_repair_follows_a_field_turned_single_target() {
-    let (mut net, _, ids) = shared(2, 9);
-    let link = write(replica(&mut net, 0), |tx| model::create_field(tx, &ids.table, &field("Owner", "link_to_record")));
-    let rows = records(replica(&mut net, 0), &ids.table, vec![json!({}), json!({}), json!({})]);
-    write(replica(&mut net, 0), |tx| model::replace_links(tx, &nth(&rows, 0), &link, &[nth(&rows, 1), nth(&rows, 2)]));
-    ok(net.sync_all());
-    // Another replica makes the field single-target; this one only learns of the field's change.
-    ok(replica(&mut net, 1).transact(&person(), |tx| tx.set(&link, "options", json!({ "allow_multiple": false }))));
+    let (mut target, _, ids) = shared();
+    let link = write(&mut target, |tx| model::create_field(tx, &ids.table, &field("Owner", "link_to_record")));
+    let rows = records(&mut target, &ids.table, vec![json!({}), json!({}), json!({})]);
+    write(&mut target, |tx| model::replace_links(tx, &nth(&rows, 0), &link, &[nth(&rows, 1), nth(&rows, 2)]));
     let mut index = repair::RepairIndex::default();
-    let start = replica(&mut net, 0).version();
-    replica(&mut net, 0).take_changed();
-    let before = ok(index.before(replica(&mut net, 0)));
-    ok(net.deliver(1, 0));
-    let target = replica(&mut net, 0);
+    let start = target.version();
+    target.take_changed();
+    let before = ok(index.before(&target));
+    // Another replica makes the field single-target; this one only learns of the field's change.
+    imported(&mut target, |peer| ok(peer.transact(&person(), |tx| tx.set(&link, "options", json!({ "allow_multiple": false })))));
     let changed = target.take_changed();
     assert!(changed.contains(&link));
     assert_eq!(target.objects_of_type("Link").len(), 2);
-    index.advance(&start, target, &changed);
-    let (wrote, _) = ok(repair::run_since(target, &changed, &before, &mut index));
+    index.advance(&start, &target, &changed);
+    let (wrote, _) = ok(repair::run_since(&mut target, &changed, &before, &mut index));
     assert!(wrote);
     assert_eq!(target.objects_of_type("Link").len(), 1);
 }
 
 #[test]
-fn incremental_repair_matches_a_full_pass_on_two_replicas() {
-    for seed in [31, 32, 33, 34] {
-        run_incremental_matches_full(seed, 2, 600);
-    }
-}
-
-#[test]
-fn incremental_repair_matches_a_full_pass_on_three_replicas() {
-    for seed in [41, 42, 43, 44] {
-        run_incremental_matches_full(seed, 3, 600);
+fn incremental_repair_matches_a_full_pass_with_imports() {
+    for seed in [31, 32, 33, 34, 41, 42, 43, 44] {
+        run_incremental_matches_full(seed, 600);
     }
 }
 
@@ -1578,14 +1211,12 @@ fn incremental_repair_matches_a_full_pass_on_three_replicas() {
 #[test]
 #[ignore = "timing; run in release"]
 fn repair_cost_on_ten_thousand_records() {
-    let mut net = network(2, 99);
-    let base = base_in(replica(&mut net, 0));
-    let ids = simple_table(replica(&mut net, 0), &base, "Big");
-    let link = write(replica(&mut net, 0), |tx| model::create_field(tx, &ids.table, &field("Rel", "link_to_record")));
+    let (mut replica, _, ids) = shared();
+    let link = write(&mut replica, |tx| model::create_field(tx, &ids.table, &field("Rel", "link_to_record")));
     let name = nth(&ids.fields, 0);
     let rows: Vec<Map<String, Value>> = (0..10_000).map(|index| object(json!({ name.as_str(): format!("row {index}") }))).collect();
-    let created = write(replica(&mut net, 0), |tx| model::create_records(tx, &ids.table, None, &rows, 1, ""));
-    write(replica(&mut net, 0), |tx| {
+    let created = write(&mut replica, |tx| model::create_records(tx, &ids.table, None, &rows, 1, ""));
+    write(&mut replica, |tx| {
         for pair in created.chunks(2).take(2_000) {
             if let [from, to] = pair {
                 model::add_link(tx, from, &link, to)?;
@@ -1593,13 +1224,11 @@ fn repair_cost_on_ten_thousand_records() {
         }
         Ok(())
     });
-    ok(net.sync_all());
-    write(replica(&mut net, 1), |tx| model::set_cells(tx, &ids.table, &nth(&created, 5), &object(json!({ name.as_str(): "edited" }))));
-    ok(net.sync_all());
-    let replica = replica(&mut net, 0);
+    replica.take_changed();
+    imported(&mut replica, |peer| write(peer, |tx| model::set_cells(tx, &ids.table, &nth(&created, 5), &object(json!({ name.as_str(): "edited" })))));
     let changed = replica.take_changed();
     let started = std::time::Instant::now();
-    let wrote = ok(repair::run(replica, &changed));
+    let wrote = ok(repair::run(&mut replica, &changed));
     println!("repair pass: {:?} (wrote {wrote})", started.elapsed());
     assert!(!wrote);
 }

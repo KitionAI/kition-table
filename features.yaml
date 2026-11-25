@@ -103,7 +103,7 @@ features:
     cases: [table.platform.document-identity/fork, table.platform.document-identity/no-replica]
     since: "2026-11-20"
   - id: table.collab.merge-inside
-    title: "Concurrent edits merge inside a select's options, a long text and an AI prompt; view configs name fields by id and keep no search (schema version 1)"
+    title: "A select's options, a long text and an AI prompt are edited inside (objects and texts), and travel to another replica as such; view configs name fields by id and keep no search (schema version 1)"
     dimension: [collab, data-safety]
     priority: P0
     status: has
@@ -111,20 +111,26 @@ features:
     cases: [table.collab.merge-inside/schema-freeze, table.collab.merge-inside/view-and-dashboard-items]
     since: "2026-11-23"
   - id: table.file.content-only
-    title: "A saved .ktable holds the table's content, not its history (the sealed content snapshot; no change log, record history, deleted rows or free pages)"
+    title: "A saved .ktable holds the table's content, not its history (content.json, the KDM content encoding, DEFLATE-compressed in the kition_kdm row; no version, change log, record history, deleted rows or free pages)"
     dimension: [data-safety, collab]
     priority: P0
     status: has
-    paths: [crates/engine/file/src/content.rs, crates/engine/file/src/kdm/store.rs, bindings/wasm/src/lib.rs, bindings/wasm/tests/content_file.rs, apps/kition-table/tests/content_file.rs]
+    paths: [crates/engine/file/src/content.rs, crates/engine/file/src/kdm/store.rs, bindings/wasm/src/lib.rs, bindings/wasm/tests/content_file.rs, apps/kition-table/tests/content_file.rs, crates/engine/file/tests/samples.rs]
     cases: [table.file.content-only/no-history]
     since: "2026-11-23"
   - id: table.collab.live
     title: Two or more people edit one table at the same time, live
     dimension: [collab, function]
     priority: P1
-    status: has
+    status: partial
     requirements: [E2]
-    paths: [web/src/capabilities.ts, web/src/main.tsx, web/src/dataSource.ts, bindings/wasm/src/lib.rs, bindings/wasm/tests/convergence.rs]
+    paths: [web/src/capabilities.ts, web/src/main.tsx, web/src/dataSource.ts, bindings/wasm/src/lib.rs]
+    gap: >-
+      Kition Desktop is for one person since the plain document model (kition-sdk 91cf510, plan
+      2026-11-24): the KDM no longer merges concurrent edits, so the convergence suite and the
+      table's merge tests are gone; co-editing comes back with Kition One's server-ordered
+      changes. What stays: replicas of one document take each other's changes in order, and an
+      imported change reaches the table editor through the data source.
     cases: [table.collab.live/two-editors]
     since: "2026-11-16"
   - id: table.editor.toolbar
@@ -145,7 +151,7 @@ features:
     cases: [table.records/save-reopen, regressions/issue-7, regressions/issue-8, regressions/issue-grid-typing-and-drag, regressions/issue-rating-draws-stars, regressions/issue-table-100k-rows, regressions/issue-table-open-100k, regressions/issue-table-bulk-write, regressions/issue-table-bulk-write-cells, regressions/issue-table-bulk-transact]
     since: "2026-11-16"
   - id: table.records.history-kept
-    title: "A record's history survives closing the document: derived from the replica the host keeps, cut at its checkpoints, each change with its author (nothing stored in the file)"
+    title: "A record's history survives closing the document: told between the host's checkpoints (their snapshots), each stretch at its checkpoint's time and by its author (nothing stored in the file)"
     dimension: [function, data-safety]
     priority: P1
     status: has

@@ -47,7 +47,7 @@ impl Fixture {
         for title in ["One", "Two", "Three"] {
             doc.execute("table.records.create", json!({"tableId":1,"values":{"title":title,"notes":"N"}})).unwrap();
         }
-        std::fs::write(dir.path().join("Work.ktable"), doc.sealed_save().unwrap()).unwrap();
+        std::fs::write(dir.path().join("Work.ktable"), doc.saved_bytes().unwrap()).unwrap();
         let kit = KitDefinition::from_manifest_text(include_str!("../../../kit.json")).unwrap();
         let kits = KitManager::new(Some(dir.path().to_owned()), vec![(kit, Some(PathBuf::from(env!("CARGO_BIN_EXE_kition-table"))))]);
         Self { dir, kits, options: CallOptions { guard, ..Default::default() } }
@@ -64,13 +64,13 @@ impl Fixture {
     fn colleague(&self, command: &str, params: Value) {
         let mut doc = self.disk();
         doc.execute(command, params).unwrap();
-        std::fs::write(self.dir.path().join("Work.ktable"), doc.sealed_save().unwrap()).unwrap();
+        std::fs::write(self.dir.path().join("Work.ktable"), doc.saved_bytes().unwrap()).unwrap();
     }
 
     fn colleague_model(&self, ops: Value) {
         let mut doc = self.disk();
         kition_kit::session::model::Exchange::new().batch(&mut doc, &json!({"ops":ops}), false).unwrap();
-        std::fs::write(self.dir.path().join("Work.ktable"), doc.sealed_save().unwrap()).unwrap();
+        std::fs::write(self.dir.path().join("Work.ktable"), doc.saved_bytes().unwrap()).unwrap();
     }
 
     async fn call(&self, action: &str, mut input: Value) -> Result<Value, Value> {

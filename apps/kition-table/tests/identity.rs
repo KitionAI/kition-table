@@ -58,10 +58,10 @@ fn table() -> (Vec<u8>, String, String) {
     doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "Also kept" } })).unwrap();
     let made = doc.execute("table.records.create", json!({ "tableId": 1, "values": { "title": SECRET, "files": [gone] } })).unwrap();
     let secret = made["result"]["id"].as_i64().unwrap_or_else(|| panic!("a record id: {made}"));
-    let first = doc.sealed_save().unwrap();
+    let first = doc.saved_bytes().unwrap();
     let mut doc = TableDocument::open("Plan.ktable", &first).unwrap();
     doc.execute("table.records.delete", json!({ "tableId": 1, "recordId": secret })).unwrap();
-    (doc.sealed_save().unwrap(), hash(&kept), hash(&gone))
+    (doc.saved_bytes().unwrap(), hash(&kept), hash(&gone))
 }
 
 /// Every object of the table with its fields, by id: what must be equal in a fork.
@@ -172,7 +172,7 @@ async fn a_table_tells_its_identity_and_forks_into_a_new_document_without_histor
     let read = read["result"]["data"].as_str().unwrap_or_default().to_owned();
     assert_eq!(base64::engine::general_purpose::STANDARD.decode(read).unwrap(), b"an attachment a record keeps");
     opened.execute("table.records.create", json!({ "tableId": 1, "values": { "title": "New" } })).unwrap();
-    let edited = opened.sealed_save().unwrap();
+    let edited = opened.saved_bytes().unwrap();
     let mut reopened = TableDocument::open("Fork.ktable", &edited).unwrap();
     assert_eq!(reopened.doc_id(), fork_id);
     let rows = reopened.execute("table.read", json!({ "tableId": 1 })).unwrap()["result"]["rows"].clone();

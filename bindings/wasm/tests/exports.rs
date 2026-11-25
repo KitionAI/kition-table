@@ -28,8 +28,8 @@ fn every_creates_entry_makes_a_clean_document() {
     for entry in manifest()["creates"].as_array().unwrap() {
         let name = format!("{}.{}", entry["baseName"].as_str().unwrap(), entry["extension"].as_str().unwrap());
         let size = &entry["size"];
-        let mut doc = TableDocument::create(&name, size["width"].as_u64().unwrap() as u32, size["height"].as_u64().unwrap() as u32).unwrap();
-        let bytes = doc.sealed_save().unwrap();
+        let doc = TableDocument::create(&name, size["width"].as_u64().unwrap() as u32, size["height"].as_u64().unwrap() as u32).unwrap();
+        let bytes = doc.saved_bytes().unwrap();
         let reopened = TableDocument::open(&name, &bytes).unwrap();
         assert!(reopened.check().is_empty(), "{name}: {:?}", reopened.check());
         assert_eq!(reopened.inspect().unwrap()["tables"].as_array().unwrap().len(), 1, "{name}");
@@ -59,7 +59,7 @@ fn every_exports_entry_writes_a_file_a_reader_reads_back() {
     let extensions: Vec<&str> = exports.iter().map(|entry| entry["extension"].as_str().unwrap()).collect();
     assert_eq!(extensions, ["csv", "md"]);
     let mut doc = basic();
-    let bytes = doc.sealed_save().unwrap();
+    let bytes = doc.saved_bytes().unwrap();
     let commands: Vec<String> = doc.commands().into_iter().map(|command| command.id).collect();
     for (table, titles, records) in tables(&mut doc) {
         assert!(records > 0);
@@ -93,6 +93,6 @@ fn every_exports_entry_writes_a_file_a_reader_reads_back() {
         }
     }
     // Exporting writes nothing into the document.
-    assert_eq!(doc.sealed_save().unwrap(), bytes);
+    assert_eq!(doc.saved_bytes().unwrap(), bytes);
     assert!(!doc.dirty());
 }

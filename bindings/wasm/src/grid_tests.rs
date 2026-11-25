@@ -201,15 +201,18 @@ fn the_view_s_engine_sorts_and_a_changed_schema_arrange_again() {
 }
 
 #[test]
-fn changes_imported_from_a_co_editor_are_arranged() {
+fn changes_imported_from_another_replica_are_arranged() {
     let mut t = table();
-    let bytes = t.doc.sealed_save().unwrap();
-    let mut peer = TableDocument::open("Tasks.ktable", &bytes).unwrap();
+    // Another replica of the document on its line of changes (the KDM takes changes in order).
+    let mut peer = TableDocument::open_with_replica("Tasks.ktable", &[], &t.doc.snapshot().unwrap(), &[]).unwrap();
     let params = t.sorted_by_title();
     t.open(params);
     let since = t.doc.version();
-    let a = t.record_id("a");
-    peer.call("records.update", &json!({ "tableId": t.table, "recordId": a, "values": { t.title.clone(): "z" } })).unwrap();
+    // The peer's projection numbers its rows itself: the record by its title there.
+    let table = peer.call("documents.get", &Value::Null).unwrap()["result"]["tables"][0]["id"].as_i64().unwrap();
+    let items = peer.call("records.list", &json!({ "tableId": table })).unwrap()["result"]["items"].clone();
+    let a = items.as_array().unwrap().iter().find(|record| record["values"][&t.title] == "a").unwrap()["id"].as_i64().unwrap();
+    peer.call("records.update", &json!({ "tableId": table, "recordId": a, "values": { t.title.clone(): "z" } })).unwrap();
     let changes = peer.export_changes(&since).unwrap();
     t.doc.import_changes(&changes).unwrap();
     assert_eq!(t.synced(), ["b", "c", "z"]);

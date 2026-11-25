@@ -58,7 +58,7 @@ const asks = []
 for (const text of CORPUS) for (const size of SIZES) for (const weight of WEIGHTS) asks.push({ text, size, weight })
 // The page measures with the faces the development page loads; any table opens it.
 doc.markSaved()
-const bytes = (doc.prepareSave(), doc.save())
+const bytes = doc.save()
 doc.free()
 
 /** Whether this browser's Canvas lets a page pin Inter's optical size (reported, not checked); runs in the page. */

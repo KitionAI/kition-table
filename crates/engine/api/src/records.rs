@@ -66,9 +66,8 @@ fn history_entry(entry: &HistoryEntry) -> Value {
 }
 
 /// `GET /records/{recordId}/history`; a `limit` of 0 means 100. Newest first: this session's
-/// changes, then what came before it, derived from the replica's stored history
-/// ([`TableFile::stored_record_history`], cut at `points`, the host's checkpoints), whose
-/// entries have negative ids.
+/// changes, then what came before it, told between the host's checkpoints `points`
+/// ([`TableFile::stored_record_history`]), whose entries have negative ids.
 pub fn history(file: &TableFile, table_id: i64, record_id: i64, limit: i64, offset: i64, points: &[HistoryPoint]) -> ApiResult<Value> {
     let limit = if limit <= 0 { 100 } else { limit };
     let failed = |_| ApiError::internal("Failed to query record history");
@@ -86,11 +85,12 @@ pub fn history(file: &TableFile, table_id: i64, record_id: i64, limit: i64, offs
 }
 
 /// The `checkpoints` of `records.history`: the host's checkpoints, oldest first, each
-/// `{version, time, author?}` (`version` base64, as `replica/version` answers it).
+/// `{version, time, author?, snapshot?}` (`version` base64, as `replica/version` answers it;
+/// `snapshot` base64, the checkpoint's snapshot as `host/checkpointRead` answers it).
 pub fn history_points(value: Option<&Value>) -> ApiResult<Vec<HistoryPoint>> {
     use base64::Engine;
     let Some(value) = value.filter(|value| !value.is_null()) else { return Ok(Vec::new()) };
-    let invalid = || ApiError::bad_request("checkpoints must be a list of {version, time, author?}");
+    let invalid = || ApiError::bad_request("checkpoints must be a list of {version, time, author?, snapshot?}");
     value
         .as_array()
         .ok_or_else(invalid)?
@@ -100,7 +100,11 @@ pub fn history_points(value: Option<&Value>) -> ApiResult<Vec<HistoryPoint>> {
             let version = kition_kdm::Version::decode(&bytes).map_err(|_| invalid())?;
             let time = point.get("time").and_then(Value::as_i64).unwrap_or(0);
             let author = point.get("author").and_then(Value::as_str).filter(|author| !author.is_empty()).map(str::to_owned);
-            Ok(HistoryPoint { version, time, author })
+            let snapshot = match point.get("snapshot").and_then(Value::as_str) {
+                Some(text) => Some(base64::engine::general_purpose::STANDARD.decode(text).map_err(|_| invalid())?),
+                None => None,
+            };
+            Ok(HistoryPoint { version, time, author, snapshot })
         })
         .collect()
 }

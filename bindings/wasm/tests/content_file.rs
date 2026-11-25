@@ -1,19 +1,16 @@
-//! A `.ktable` file holds the document's content, not its history (kition-sdk data model 7.3, rule
-//! M16b; feature `table.file.content-only`): its store holds one change (the seal) and none of the
-//! deleted or overwritten content, and no byte of the file holds them; an unchanged table saves to
-//! the same bytes; a file opened alone is the same document, with its ids, and edits; a replica
-//! from the file and one with the whole history converge; undo after a save takes back the last
-//! edit; a file opens on top of a stored replica, by its changes or by its state. Hosts seal
-//! before saving (`prepare_save`); a save nobody sealed for is refused and writes nothing.
+//! A `.ktable` file holds the document's content, not its history (kition-sdk data model 7.3 and
+//! 7.4; feature `table.file.content-only`): its store holds the replica's content (`content.json`,
+//! compressed) and no change row, and neither it nor any other byte of the file holds deleted or
+//! overwritten content; an unchanged table saves to the same bytes; a file opened alone is the
+//! same document, with its ids, and edits; undo after a save takes back the last edit; a file
+//! opens on top of a stored replica, by its state.
 //!
 //! The needles are written once each and share no run of four characters with anything else in
-//! the table, so the engine's compression keeps each one literal in the bytes that hold it: every
-//! test checks the session's full snapshot holds them (the control) before it checks the file
-//! does not.
+//! the table: every test checks the session's change log holds them (the control) before it
+//! checks the file does not.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 
 use kition_kit::KitDocument;
-use kition_kit::kdm::{Origin, Replica};
 use kition_table_file::TableFile;
 use kition_table_kit::TableDocument;
 use serde_json::{Value, json};
@@ -24,6 +21,16 @@ const DELETED_RECORD: &str = "Qv7Zp9Wm2Rk5";
 const OVERWRITTEN: &str = "Ug5Le1Fo0Dw4";
 const NEEDLES: [&str; 3] = [TYPED_THEN_DELETED, DELETED_RECORD, OVERWRITTEN];
 
+thread_local! {
+    /// The version `table_with_history` made its table at: its changes since then are the history.
+    static CREATED: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The session's changes since the table was made ([`table_with_history`]): its history.
+fn history_of(doc: &TableDocument) -> Vec<u8> {
+    doc.export_changes(&CREATED.with(|created| created.borrow().clone())).unwrap()
+}
+
 fn contains(bytes: &[u8], needle: &str) -> bool {
     let utf16: Vec<u8> = needle.encode_utf16().flat_map(u16::to_le_bytes).collect();
     bytes.windows(needle.len()).any(|window| window == needle.as_bytes()) || bytes.windows(utf16.len()).any(|window| window == utf16.as_slice())
@@ -33,9 +40,8 @@ fn run(doc: &mut TableDocument, command: &str, params: Value) -> Value {
     doc.execute(command, params.clone()).unwrap_or_else(|err| panic!("{command} {params}: {err}"))["result"].clone()
 }
 
-/// The file as a host saves it: sealed first (`prepare_save`), then the bytes.
+/// The file as a host saves it.
 fn host_save(doc: &mut TableDocument) -> Vec<u8> {
-    doc.prepare_save().unwrap();
     doc.save(None).unwrap()
 }
 
@@ -44,10 +50,11 @@ fn stored(bytes: &[u8]) -> (Vec<u8>, i64) {
     TableFile::open_bytes(bytes).unwrap().stored_replica().unwrap()
 }
 
-/// A table whose history holds typed-then-deleted text in a long text, a deleted record and an
+/// A table whose change log holds typed-then-deleted text in a long text, a deleted record and an
 /// overwritten value; answers it and the id of the record that stays.
 fn table_with_history() -> (TableDocument, i64) {
     let mut doc = TableDocument::create(FILE, 0, 0).unwrap();
+    CREATED.with(|created| *created.borrow_mut() = doc.version());
     let kept =
         run(&mut doc, "table.records.create", json!({ "tableId": 1, "values": { "title": "Kept", "notes": "Start" } }))["id"].as_i64().unwrap();
     run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "notes": format!("Start {TYPED_THEN_DELETED}") } }));
@@ -66,52 +73,42 @@ fn records(doc: &TableDocument) -> Vec<(String, Value)> {
     rows
 }
 
-fn version_of(bytes: &[u8]) -> kition_kit::kdm::Version {
-    TableFile::open_bytes(bytes).unwrap().replica_version()
-}
-
-#[test]
-fn the_file_holds_the_content_and_of_the_history_only_the_seal() {
-    let (mut doc, kept) = table_with_history();
-    let full = doc.snapshot().unwrap();
-    for needle in NEEDLES {
-        assert!(contains(&full, needle), "the control: the session's history holds {needle}");
-    }
-    assert!(Replica::snapshot_origins(&full).unwrap().len() > 1, "the control: the history holds every change");
-    let bytes = host_save(&mut doc);
-    for needle in NEEDLES {
-        assert!(!contains(&bytes, needle), "the file holds {needle}");
-    }
-    let (content, changes) = stored(&bytes);
-    assert_eq!(changes, 0, "no change row");
-    let held = Replica::snapshot_origins(&content).unwrap();
-    assert_eq!(held, vec![Some(Origin::system("content-seal"))], "of the history, the file holds the seal");
-    // The direct path: the seal is the session's own.
-    assert_eq!(doc.file().replica_version(), version_of(&bytes));
-    // The content is all there.
-    let back = TableDocument::open(FILE, &bytes).unwrap();
-    assert_eq!(records(&back), records(&doc));
-    assert_eq!(back.file().get_record(1, kept).unwrap().values["notes"], "Start");
-    println!(
-        "a content file of {} bytes: its replica {} bytes; the session's database {} bytes, its full snapshot {} bytes",
-        bytes.len(),
-        content.len(),
-        doc.file().to_bytes().unwrap().len(),
-        full.len()
-    );
-}
-
 #[test]
 fn an_unchanged_table_saves_to_the_same_bytes() {
-    let (mut doc, _) = table_with_history();
-    let first = host_save(&mut doc);
+    let (mut doc, kept) = table_with_history();
+    let history = history_of(&doc);
+    for needle in NEEDLES {
+        assert!(contains(&history, needle), "the control: the session's change log holds {needle}");
+    }
     let version = doc.file().replica_version();
+    let first = host_save(&mut doc);
+    let (content, changes) = stored(&first);
+    assert_eq!(changes, 0, "no change row");
+    for needle in NEEDLES {
+        assert!(!contains(&first, needle), "the file holds {needle}");
+        assert!(!contains(&content, needle), "the content holds {needle}");
+    }
+    let state: Value = serde_json::from_slice(&content).unwrap();
+    for key in ["version", "lineage", "actor", "origin", "changes"] {
+        assert!(state.get(key).is_none(), "the content holds no {key}");
+    }
+    assert_eq!(state["docId"], doc.doc_id(), "the content names its document");
+    assert_eq!(doc.file().replica_version(), version, "a save writes nothing into the session");
     assert_eq!(host_save(&mut doc), first, "two saves with nothing between");
-    assert_eq!(doc.file().replica_version(), version, "a sealed table seals nothing more");
     doc.mark_saved();
     assert_eq!(host_save(&mut doc), first, "and after the host stored the first");
     let mut opened = TableDocument::open(FILE, &first).unwrap();
     assert_eq!(host_save(&mut opened), first, "and from the file opened again");
+    // The content is all there.
+    assert_eq!(records(&opened), records(&doc));
+    assert_eq!(opened.file().get_record(1, kept).unwrap().values["notes"], "Start");
+    println!(
+        "a content file of {} bytes: its content {} bytes; the session's database {} bytes, its snapshot {} bytes",
+        first.len(),
+        content.len(),
+        doc.file().to_bytes().unwrap().len(),
+        doc.snapshot().unwrap().len()
+    );
 }
 
 #[test]
@@ -138,24 +135,6 @@ fn a_file_opened_alone_is_the_same_document_with_its_ids_and_edits() {
 }
 
 #[test]
-fn a_replica_from_the_file_and_one_with_the_whole_history_converge() {
-    let (mut doc, kept) = table_with_history();
-    let bytes = host_save(&mut doc);
-    let mut file = TableDocument::open(FILE, &bytes).unwrap();
-    run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "title": "From the history" } }));
-    run(&mut file, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "notes": "Start from the file" } }));
-    let to_file = doc.export_changes(&file.version()).unwrap();
-    let to_doc = file.export_changes(&doc.version()).unwrap();
-    file.import_changes(&to_file).unwrap();
-    doc.import_changes(&to_doc).unwrap();
-    assert_eq!(records(&doc), records(&file));
-    let record = doc.file().get_record(1, kept).unwrap();
-    assert_eq!((record.values["title"].clone(), record.values["notes"].clone()), (json!("From the history"), json!("Start from the file")));
-    // The same version, compared as versions: its encoding lists the actors in no fixed order.
-    assert_eq!(doc.file().replica_version(), file.file().replica_version());
-}
-
-#[test]
 fn undo_after_a_save_takes_back_the_last_edit() {
     let (mut doc, kept) = table_with_history();
     run(&mut doc, "table.records.update", json!({ "tableId": 1, "recordId": kept, "values": { "title": "Last" } }));
@@ -167,36 +146,14 @@ fn undo_after_a_save_takes_back_the_last_edit() {
 }
 
 #[test]
-fn a_save_nobody_sealed_for_is_refused_and_writes_nothing() {
-    let (mut doc, _) = table_with_history();
-    let before = doc.file().replica_version();
-    let refused = doc.save(None).unwrap_err();
-    assert!(refused.contains("prepareSave"), "{refused}");
-    assert_eq!(doc.file().replica_version(), before, "a refused save writes nothing into the session");
-    assert!(!doc.file().is_sealed());
-    assert!(doc.dirty(), "a refused save leaves the document unsaved");
-    // Sealed first, as a host saves: the bytes hold the content and, of the history, the seal.
-    let bytes = host_save(&mut doc);
-    for needle in NEEDLES {
-        assert!(!contains(&bytes, needle), "the file holds {needle}");
-    }
-    let (content, changes) = stored(&bytes);
-    assert_eq!(changes, 0);
-    assert_eq!(Replica::snapshot_origins(&content).unwrap(), vec![Some(Origin::system("content-seal"))]);
-    doc.mark_saved();
-    assert!(doc.file().is_sealed());
-    assert_eq!(doc.file().replica_version(), version_of(&bytes));
-}
-
-#[test]
 fn a_file_opens_on_the_replica_a_host_stored_by_its_changes_or_by_its_state() {
     let (mut doc, kept) = table_with_history();
     let bytes = host_save(&mut doc);
     let history = doc.snapshot().unwrap();
-    // The stored replica has the file's version: the document opens saved, with its history.
+    // The stored replica holds the file's state: the document opens saved, on the stored line.
     let opened = TableDocument::open_with_replica(FILE, &bytes, &history, &[]).unwrap();
     assert_eq!(opened.doc_id(), doc.doc_id());
-    assert!(!opened.file().replica().is_shallow(), "the stored replica, with its history, is the document's");
+    assert_eq!(opened.version(), doc.version(), "the stored replica is the document's");
     assert!(!opened.dirty());
     assert_eq!(records(&opened), records(&doc));
     // A file saved elsewhere from changes the store never saw: its state, written over the

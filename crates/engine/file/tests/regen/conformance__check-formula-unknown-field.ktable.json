@@ -1,0 +1,13 @@
+{"kdm":1,"kit":"kit.table","docId":"8f9a4874-5e42-41e9-9472-2c8d81e6d44a","schemaVersion":1,"objects":{
+"01a208fa-fd37-778b-87b1-6844870f0e44":{"$type":"Base","color":"","description":"","icon":"","tables":["01a208fa-fd38-7689-a456-7d008ba266d6"],"title":"Formulas"},
+"01a208fa-fd38-7689-a456-7d008ba266d6":{"$type":"Table","description":"","fields":["01a208fa-fd38-7689-a456-7d01639794bb","01a208fa-fd38-7689-a456-7d026882b269","01a208fa-fd38-7689-a456-7d06a0abb8ba","01a208fa-fd3f-77f8-958c-e242e230fd1a"],"name":"table","primaryField":"01a208fa-fd38-7689-a456-7d01639794bb","records":["7efbf49a-69a5-4d5e-8830-cb468aedc8c1"],"title":"Table","views":["01a208fa-fd38-7689-a456-7d07d23b2d1f"]},
+"01a208fa-fd38-7689-a456-7d01639794bb":{"$type":"Field","formula":"","name":"title","readonly":false,"required":true,"title":"Title","type":"text"},
+"01a208fa-fd38-7689-a456-7d026882b269":{"$type":"Field","choices":["01a208fa-fd38-7689-a456-7d03dd60c667","01a208fa-fd38-7689-a456-7d04e142e6f4","01a208fa-fd38-7689-a456-7d05f734a059"],"formula":"","name":"status","readonly":false,"required":false,"title":"Status","type":"single_select"},
+"01a208fa-fd38-7689-a456-7d03dd60c667":{"$type":"Choice","name":"To do"},
+"01a208fa-fd38-7689-a456-7d04e142e6f4":{"$type":"Choice","name":"In progress"},
+"01a208fa-fd38-7689-a456-7d05f734a059":{"$type":"Choice","name":"Done"},
+"01a208fa-fd38-7689-a456-7d06a0abb8ba":{"$type":"Field","formula":"","name":"notes","readonly":false,"required":false,"title":"Notes","type":"long_text"},
+"01a208fa-fd38-7689-a456-7d07d23b2d1f":{"$type":"View","locked":false,"title":"All","type":"grid"},
+"01a208fa-fd3f-77f8-958c-e242e230fd1a":{"$type":"Field","formula":"{effort} * 2","name":"score","readonly":true,"required":false,"title":"Score","type":"formula"},
+"7efbf49a-69a5-4d5e-8830-cb468aedc8c1":{"$type":"Record","cells":{"01a208fa-fd38-7689-a456-7d01639794bb":"Write the plan"},"createdAt":1795446996294,"createdBy":"kit"}
+}}

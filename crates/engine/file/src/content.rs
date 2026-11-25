@@ -1,20 +1,20 @@
 //! A `.ktable` as a person's file: the document's content, not its history (kition-sdk data model
-//! 7.3, rule M16b).
+//! 7.3 and 7.4).
 //!
-//! The handle a session edits keeps everything a session needs: the replica with its history and
-//! undo, the change log, the origin log and the record history the `records.history` command
+//! The handle a session edits keeps everything a session needs: the replica with its change log
+//! and undo, the change rows, the origin log and the record history the `records.history` command
 //! reads. The file it saves holds none of that ([`TableFile::content_bytes`]): its store is the
-//! replica's sealed content snapshot (the state, and of the history only the seal: no deleted or
-//! overwritten content, no person's or agent's origin), with no change rows and no origin log; the
-//! relational projection keeps only live rows (no record history, no deleted tables, fields,
-//! views or records); only the blobs the records name
-//! stay; and the database is rebuilt (`VACUUM`), so no free page holds anything that was
-//! deleted. The history stays with the host's store (the replica's full snapshot), never in the
-//! file.
+//! replica's content (`Replica::content_snapshot`, `content.json`: the state and nothing else, no
+//! version, no origin, no deleted or overwritten value) DEFLATE-compressed at a fixed level in the
+//! `kition_kdm` row, with no change rows and no origin log; the relational projection keeps only
+//! live rows (no record history, no deleted tables, fields, views or records); only the blobs the
+//! records name stay; and the database is rebuilt (`VACUUM`) with its header's counters fixed, so
+//! no free page holds anything that was deleted and a document saved again unchanged is the same
+//! bytes. The history stays with the host's store (the replica's snapshot and its checkpoints),
+//! never in the file.
 //!
-//! A file opens like any `.ktable` ([`TableFile::open_bytes`]): its replica is a shallow one,
-//! rooted at the seal, with the document's id and its objects' ids, that edits and merges like
-//! any replica.
+//! A file opens like any `.ktable` ([`TableFile::open_bytes`]): its replica holds the document's
+//! id and its objects' ids, on a new line of changes.
 
 use std::collections::BTreeSet;
 
@@ -25,28 +25,20 @@ use crate::kdm::store;
 use crate::{Result, TableFile, file};
 
 impl TableFile {
-    /// Whether the replica is sealed: its last change is the seal, so the file it saves is its own
-    /// content snapshot ([`TableFile::seal`]).
-    pub fn is_sealed(&self) -> bool {
-        self.replica.is_sealed()
-    }
-
-    /// The file's bytes as a person's file holds them (see the module documentation), from the
-    /// sealed replica: [`TableFile::seal`] first, as a host's `prepareSave` does. A replica nobody
-    /// sealed is [`crate::TableFileError::Kdm`]. A document that did not change since saves the same
-    /// bytes.
+    /// The file's bytes as a person's file holds them (see the module documentation). A document
+    /// that did not change since saves the same bytes.
     pub fn content_bytes(&self) -> Result<Vec<u8>> {
-        let content = self.replica.sealed_content_snapshot()?;
+        let content = self.replica.content_snapshot()?;
         self.file_with_content(&content)
     }
 
     /// The stored snapshot and the number of change rows after it: a saved file holds its content
-    /// snapshot and no change row.
+    /// (`content.json`, decompressed here) and no change row.
     pub fn stored_replica(&self) -> Result<(Vec<u8>, i64)> {
         store::stored(&self.conn)
     }
 
-    /// A copy of this file with `content` (a sealed content snapshot of its replica) as its store
+    /// A copy of this file with `content` (its replica's content) as its store
     /// and nothing of its history.
     fn file_with_content(&self, content: &[u8]) -> Result<Vec<u8>> {
         let conn = file::memory_copy(&self.to_bytes()?)?;

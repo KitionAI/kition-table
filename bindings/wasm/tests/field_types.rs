@@ -93,7 +93,7 @@ fn an_unknown_field_type_is_refused_naming_type_and_the_valid_ones() {
 
     // The engine itself, as the in-page editor reaches it: the same refusal, the file unchanged.
     let mut doc = TableDocument::create("Contacts.ktable", 0, 0).unwrap();
-    let before = doc.sealed_save().unwrap();
+    let before = doc.saved_bytes().unwrap();
     for (command, params) in [
         ("table.fields.create", json!({ "tableId": 1, "title": "Email", "type": "no-such-type" })),
         ("table.tables.create", json!({ "title": "Contacts", "fields": [{ "title": "Email", "type": "no-such-type" }] })),
@@ -104,7 +104,7 @@ fn an_unknown_field_type_is_refused_naming_type_and_the_valid_ones() {
             message.contains("no-such-type") && message.contains("`type`") && FIELD_TYPES.iter().all(|id| message.contains(id)),
             "{command}: {message}"
         );
-        assert_eq!(doc.sealed_save().unwrap(), before, "{command} failed and changed the file");
+        assert_eq!(doc.saved_bytes().unwrap(), before, "{command} failed and changed the file");
     }
 }
 
@@ -143,7 +143,7 @@ fn a_new_document_holds_the_documented_starter_table_and_a_host_removes_it() {
         )
         .unwrap();
     assert_eq!(created["result"]["id"], 2, "ids are never reused");
-    let reopened = TableDocument::open("contacts.ktable", &doc.sealed_save().unwrap()).unwrap();
+    let reopened = TableDocument::open("contacts.ktable", &doc.saved_bytes().unwrap()).unwrap();
     let titles: Vec<Value> = reopened.inspect().unwrap()["tables"].as_array().unwrap().iter().map(|table| table["title"].clone()).collect();
     assert_eq!(titles, [json!("Contacts")]);
     assert!(reopened.check().is_empty(), "{:?}", reopened.check());
@@ -151,7 +151,7 @@ fn a_new_document_holds_the_documented_starter_table_and_a_host_removes_it() {
     // With no table at all, the document is still valid and saves.
     let mut empty = TableDocument::create("blank.ktable", 0, 0).unwrap();
     empty.execute("table.tables.delete", json!({ "tableId": 1, "asOrigin": "system:setup" })).unwrap();
-    let reopened = TableDocument::open("blank.ktable", &empty.sealed_save().unwrap()).unwrap();
+    let reopened = TableDocument::open("blank.ktable", &empty.saved_bytes().unwrap()).unwrap();
     assert_eq!(reopened.inspect().unwrap()["tables"], json!([]));
     assert!(reopened.check().is_empty());
 }

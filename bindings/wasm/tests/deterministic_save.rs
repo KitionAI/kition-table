@@ -53,7 +53,7 @@ fn build() -> Vec<u8> {
         &json!({ "dashboardId": "overview", "title": "Overview", "order": 0, "source_table_id": table_id, "layout": [], "widgets": [] }),
     )
     .unwrap();
-    doc.sealed_save().unwrap()
+    doc.saved_bytes().unwrap()
 }
 
 /// The child's half: builds the document into the file `OUT` names (nothing without it).

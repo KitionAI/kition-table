@@ -87,7 +87,7 @@ fn workspace(name: &str) -> Workspace {
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
-    std::fs::write(root.join("Work.ktable"), fixture().sealed_save().unwrap()).unwrap();
+    std::fs::write(root.join("Work.ktable"), fixture().saved_bytes().unwrap()).unwrap();
     let mut kit = Headless::<TableDocument>::with_replica_port(KitInfo::from_manifest(MANIFEST, &[], kition_table_kit::EDITOR_STATE).unwrap());
     let folder = HostFolder::new(&root).unwrap();
     kit.set_host(folder.host());

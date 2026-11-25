@@ -22,10 +22,10 @@
 //! - `render` is the document's picture (what the editor shows), and `table.file.render` (the
 //!   manifest's `agent.render`) the same of a diagnostic's target, a table, a view or a range of
 //!   its rows as PNG at a scale and size budget (KHP A39); the editor never draws with them.
-//! - `save` answers the document's content, not its history (kition-sdk data model 7.3, rule
-//!   M16b; `kition_table_file`'s `content`): `prepareSave` seals the replica first, and the file
-//!   holds the sealed content snapshot, the live rows of the projection and the blobs they name.
-//!   The session keeps its history (the replica's full snapshot, for the host's store).
+//! - `save` answers the document's content, not its history (kition-sdk data model 7.3 and 7.4;
+//!   `kition_table_file`'s `content`): the file holds the replica's content (`content.json`,
+//!   compressed), the live rows of the projection and the blobs they name. The session keeps its
+//!   change log; the host stores the replica's snapshot and its checkpoints.
 //! - Attachments are blobs held in the file (`kition_table_file::blobs`): `attachments.put` stores a
 //!   file's bytes and answers the attachment value naming them, `attachments.read` answers a
 //!   blob's bytes, so an embedding application shows and adds pictures with nothing but the file.
@@ -59,7 +59,6 @@ mod files;
 mod grid;
 mod grid_edit;
 pub mod inspect;
-#[cfg(feature = "headless")]
 mod model;
 pub mod outline;
 mod params;
@@ -243,6 +242,8 @@ pub struct TableDocument {
     grid: grid::Grid,
     /// The editor's grid in bands (`gridAxes`, `gridBands`); not saved.
     bands: bands::Bands,
+    /// The object model's scratch replica (`modelDescribe`, `modelBatch`; [`model`]); not saved.
+    exchange: kition_kit::session::model::Exchange,
 }
 
 /// A picture's size, and the revision and `shown` it was measured at.
@@ -362,6 +363,7 @@ impl TableDocument {
             size: RefCell::new(None),
             grid: grid::Grid::default(),
             bands: bands::Bands::default(),
+            exchange: kition_kit::session::model::Exchange::default(),
         }
     }
 
@@ -570,6 +572,89 @@ impl TableDocument {
         Ok(json!({ "kind": "full" }))
     }
 
+    /// Takes a draft's changes (another replica of this document, forked from it, as kit-editor's
+    /// drafts are) in as one step of the person's undo recorded as `origin`
+    /// ([`TableFile::merge_replica_changes`]); answers `{damage, summary}`, the summary the
+    /// comparison of the document's states before and after (`mergeChanges`, as kition-sdk's
+    /// `export_kit_session!` answers it). A draft that conflicts with what changed since is refused.
+    pub fn merge_changes(&mut self, changes: &[u8], origin: &Origin) -> Result<Value, String> {
+        let before_state = self.file.replica().state_json().map_err(error)?;
+        let before = self.file.replica_version();
+        let change = self.file.merge_replica_changes(changes, origin).map_err(error)?;
+        let damage = self.took(&before, &change, undoable(origin));
+        let after_state = self.file.replica().state_json().map_err(error)?;
+        Ok(json!({ "damage": damage, "summary": kition_kdm::diff::diff_states(&before_state, &after_state).to_json() }))
+    }
+
+    /// What merging a draft's changes would change in the document now, as `StateDiff` JSON
+    /// (`compareChanges`); nothing changes. Refuses what the merge refuses.
+    pub fn compare_changes(&self, changes: &[u8]) -> Result<Value, String> {
+        let before = self.file.replica().state_json().map_err(error)?;
+        let after = self.file.replica().merged_state(changes).map_err(error)?;
+        Ok(kition_kdm::diff::diff_states(&before, &after).to_json())
+    }
+
+    /// Writes the state `snapshot` holds (a snapshot or the content of this document, as a
+    /// checkpoint keeps it) over the document as one change of `origin`, one step of the person's
+    /// undo unless `origin` is `system` or `import` (`restoreState`, the protocol's
+    /// `replica/restore`); answers the damage. Refuses a snapshot of another document.
+    pub fn restore_state(&mut self, snapshot: &[u8], origin: &Origin) -> Result<Value, String> {
+        let earlier = kition_kdm::Replica::load(kition_table_file::kdm::schema(), snapshot, kition_table_file::ids::actor()).map_err(error)?;
+        if earlier.doc_id() != self.file.replica().doc_id() {
+            return Err("the snapshot holds another document".into());
+        }
+        let now = kition_kit::session::state(self.file.replica()).map_err(error)?;
+        let then = kition_kit::session::state(&earlier).map_err(error)?;
+        if now == then {
+            return Ok(json!({ "kind": "none" }));
+        }
+        let schema = kition_table_file::kdm::schema();
+        let before = self.file.replica_version();
+        let ((), change) = self
+            .file
+            .transact_as(origin, |tx| {
+                kition_kit::session::write_state(tx, &schema, &now, &then).map_err(|err| kition_table_file::TableFileError::Kdm(err.to_string()))
+            })
+            .map_err(error)?;
+        Ok(self.took(&before, &change, undoable(origin)))
+    }
+
+    /// After a write outside [`TableDocument::call`] (a merge, a restore) from `before`: the
+    /// grid, the revision and the edit history follow; answers the damage.
+    fn took(&mut self, before: &Version, change: &TableChange, step: bool) -> Value {
+        let after = self.file.replica_version();
+        self.grid.note(before, &after, Some(change));
+        if after == *before {
+            return json!({ "kind": "none" });
+        }
+        self.revision += 1;
+        if step {
+            self.history.edited()
+        } else {
+            self.history.left()
+        }
+        json!({ "kind": "full" })
+    }
+
+    /// What changed since the replica version `since` (a receipt, `Replica::changes_since`):
+    /// `{"changes": StateDiff}`, or `{"changes": null, "unavailable": "<why>"}` when the replica's
+    /// log does not hold `since` (`changesSince`, as kition-sdk's `export_kit_session!` answers it).
+    pub fn receipt_since(&self, since: &[u8]) -> Value {
+        let replica = self.file.replica();
+        let since = if since.is_empty() { Ok(Version::empty()) } else { Version::decode(since) };
+        match since.and_then(|since| replica.changes_since(&since)) {
+            Ok(changes) => json!({ "changes": changes.to_recorded_json(replica.schema()) }),
+            Err(err) => json!({ "changes": null, "unavailable": err.to_string() }),
+        }
+    }
+
+    /// An agent's reply with every object id it holds named by its tool id (KitObjectModel OM9;
+    /// `modelReply`); unchanged when the schema declares no tool ids.
+    pub fn model_reply(&self, value: &Value) -> Value {
+        let ids = kition_kdm::tool_ids::ToolIds::of_replica(self.file.replica());
+        if ids.is_active() { ids.show_json(value) } else { value.clone() }
+    }
+
     /// Runs a command ([`KitDocument::execute`]) as `origin` (a person, an agent, an extension)
     /// instead of the editor's person: the replica records the write as theirs.
     pub fn execute_as(&mut self, command: &str, params: Value, origin: &Origin) -> Result<Value, String> {
@@ -665,16 +750,14 @@ impl TableDocument {
     /// (a blob section) the attachments its changes name. Empty `bytes` (no file yet: a shared
     /// table opened from its room) open the replica alone from `snapshot`.
     ///
-    /// A `.ktable` holds its document's content and, of its history, only the seal, so file
-    /// `bytes` open as [`KitDocument::open`] opens them, and a snapshot of the file's own document
-    /// (the replica with its history: a co-editing host's room, or a single-user host's store)
-    /// takes the file in (`kition_kit::session::take_file`: nothing when the replica has the
-    /// file's version, the file's changes when its history reaches the replica's version, else
-    /// its state by object id as one `system` import) and becomes the document's replica, so
-    /// undo, record changes and co-editing have the whole history. One that holds every change
-    /// of the file opens the document saved; one that adds changes opens it unsaved, since the
-    /// file lacks them. A snapshot of another document, or one that is no replica, is not the
-    /// file's and is left out.
+    /// A `.ktable` holds its document's content alone, so file `bytes` open as
+    /// [`KitDocument::open`] opens them, and a snapshot of the file's own document (the host's
+    /// store) takes the file in (`kition_kit::session::take_file`: nothing when it holds the
+    /// file's state, else the file's state by object id as one `system` import) and becomes the
+    /// document's replica, on the stored line of changes. One that holds the file's state opens
+    /// the document saved; one that took the file's state in opens it unsaved, since the store
+    /// lacks it. A snapshot of another document, or one that is no snapshot, is not the file's
+    /// and is left out.
     pub fn open_with_replica(name: &str, bytes: &[u8], snapshot: &[u8], blobs: &[u8]) -> Result<Self, String> {
         if bytes.is_empty() {
             let mut file = TableFile::create_from_replica_in_memory(snapshot).map_err(error)?;
@@ -687,7 +770,6 @@ impl TableDocument {
         if snapshot.is_empty() {
             return Ok(doc);
         }
-        let before = doc.file.replica_version();
         let merged = (|| {
             let mut stored = kition_kdm::Replica::load(kition_table_file::kdm::schema(), snapshot, kition_table_file::ids::actor()).map_err(error)?;
             if stored.doc_id() != doc.file.replica().doc_id() {
@@ -696,13 +778,15 @@ impl TableDocument {
             if !blobs.is_empty() {
                 doc.file.add_blob_section(blobs).map_err(error)?;
             }
-            kition_kit::session::take_file(&mut stored, doc.file.replica()).map_err(error)?;
-            doc.file.adopt_replica(stored).map_err(error)
+            let took = kition_kit::session::take_file(&mut stored, doc.file.replica()).map_err(error)?;
+            doc.file.adopt_replica(stored).map_err(error)?;
+            Ok(took)
         })();
         match merged {
-            Ok(_) => {
-                if doc.file.replica_version() != before {
-                    // The editor reads the merged document whole when it opens: nothing to queue.
+            Ok(took) => {
+                if took {
+                    // The stored replica took the file's state: the store lacks it. The editor
+                    // reads the document whole when it opens: nothing to queue.
                     doc.history.left();
                 }
                 Ok(doc)
@@ -940,10 +1024,9 @@ impl TableDocument {
 }
 
 impl TableDocument {
-    /// The file's bytes as every host takes them: [`KitDocument::prepare_save`] (the seal), then
-    /// [`KitDocument::save`]. Like `save`, it leaves the document unsaved until `mark_saved`.
-    pub fn sealed_save(&mut self) -> Result<Vec<u8>, String> {
-        self.prepare_save()?;
+    /// The file's bytes as every host takes them ([`KitDocument::save`]). Like `save`, it leaves
+    /// the document unsaved until `mark_saved`.
+    pub fn saved_bytes(&self) -> Result<Vec<u8>, String> {
         self.save(None)
     }
 }
@@ -1141,15 +1224,9 @@ impl KitDocument for TableDocument {
     }
 
     /// The document's content as a `.ktable` file ([`TableFile::content_bytes`]): no history,
-    /// the same bytes while the document does not change. Every host calls
-    /// [`KitDocument::prepare_save`] first, which seals the replica; a replica nobody sealed is
-    /// refused (`save before prepareSave`), so a file is always rooted at a seal of this session's
-    /// replica. The session's own store (the history) is compacted when its log is long and
-    /// vacuumed when it is sparse, as before.
+    /// the same bytes while the document does not change. The session's own store (the history)
+    /// is compacted when its log is long and vacuumed when it is sparse, as before.
     fn save(&self, _name: Option<&str>) -> Result<Vec<u8>, String> {
-        if !self.file.is_sealed() {
-            return Err("save before prepareSave: the table's replica is not sealed".into());
-        }
         self.file.compact_log().map_err(error)?;
         vacuum_if_sparse(&self.file)?;
         let bytes = self.file.content_bytes().map_err(error)?;
@@ -1157,31 +1234,16 @@ impl KitDocument for TableDocument {
         Ok(bytes)
     }
 
-    /// Seals the replica (rule M16b) so `save` writes its content snapshot, and the seal is in
-    /// the replica the host stores and syncs: a `system` change, no edit, no undo step. A handle
-    /// that refuses writes seals nothing: it saves only what is sealed already.
-    fn prepare_save(&mut self) -> Result<(), String> {
-        if self.file.read_only().is_some() {
-            return Ok(());
-        }
-        let before = self.file.replica_version();
-        self.file.seal().map_err(error)?;
-        self.grid.note(&before, &self.file.replica_version(), Some(&TableChange::default()));
-        Ok(())
-    }
-
     fn mark_saved(&mut self) {
         self.history.saved = Some(self.save_pending.take().unwrap_or(self.history.step));
     }
 
-    /// A file read again after an outside write: when it is this document and holds every change
-    /// of this session (or the session holds nothing unsaved), what it adds is taken in, outside
-    /// both undo histories, so this session keeps its own: the changes it holds beyond this
-    /// replica's version when its history reaches it (with their blobs), else (it holds the
-    /// document's content and only its own seal) its state, written by object id as one `system`
-    /// import, after which the session holds what the file holds (saved). A file of another
-    /// document, or one that lacks an unsaved change of this session, cannot be reconciled:
-    /// `false`, nothing changed.
+    /// A file read again after an outside write: when it is this document and the session holds
+    /// nothing unsaved, what it adds is taken in, outside both undo histories, so this session
+    /// keeps its own: its state (it holds the document's content alone), compared with this
+    /// replica's and written by object id as one `import` change, with its blobs, after which the
+    /// session holds what the file holds (saved). A file of another document, or one read while
+    /// the session holds an unsaved change, cannot be reconciled: `false`, nothing changed.
     fn reconcile_reread(&mut self, fresh: &Self) -> Result<bool, String> {
         if fresh.file.replica().doc_id() != self.file.replica().doc_id() {
             return Ok(false);
@@ -1190,21 +1252,10 @@ impl KitDocument for TableDocument {
         if ours.includes(&fresh.file.replica_version()) {
             return Ok(true);
         }
-        // A file that lacks a change of this session is reconciled only when the session holds
-        // nothing the person did not save: then what it lacks is what the session took from an
-        // earlier read of the file (its state, written as an import) or a seal.
-        let extends = fresh.file.replica_version().includes(&ours);
-        if !extends && self.dirty() {
+        // A file opened from its bytes is on a line of its own: it is reconciled only when the
+        // session holds nothing the person did not save.
+        if self.dirty() {
             return Ok(false);
-        }
-        if extends && fresh.file.replica().reaches(&ours) {
-            let changes = fresh.export_changes(&ours.encode())?;
-            let blobs = fresh.file.blobs_for_changes(&changes).map_err(error)?;
-            if !blobs.is_empty() {
-                self.add_blobs(&blobs)?;
-            }
-            self.import_changes(&changes)?;
-            return Ok(true);
         }
         let blobs = fresh.file.all_blobs_section().map_err(error)?;
         if !blobs.is_empty() {

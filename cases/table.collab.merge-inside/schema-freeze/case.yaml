@@ -2,10 +2,12 @@ format: 1
 id: table.collab.merge-inside/schema-freeze
 feature: table.collab.merge-inside
 intent: >-
-  Two copies of one table edit it at once and exchange their changes: options added on both
-  sides are both kept, an option renamed on one side renames the cell the other set, typing in
-  two places of one long text keeps both, and so does editing an AI prompt in two places; a
-  view config names its fields by object id and never stores the editor's search.
+  Two copies of one table on one line of changes edit it one after the other and exchange their
+  changes (concurrent edits are no longer merged, kition-sdk 91cf510): options added on both
+  sides are both kept as Choice objects, an option renamed on one side renames the cell the other
+  set, typing in one long text on both sides keeps both as a CellText's text, and so does editing
+  an AI prompt on both sides; a view config names its fields by object id and never stores the
+  editor's search.
 layer: gate
 source:
   kind: synthetic

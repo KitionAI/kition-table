@@ -68,10 +68,10 @@ fn view(doc: &mut TableDocument) -> Value {
 /// Saves, reopens and compares; then saves the reopened file and compares once more.
 fn round_trip(doc: &mut TableDocument) -> TableDocument {
     let before = view(doc);
-    let bytes = doc.sealed_save().unwrap();
+    let bytes = doc.saved_bytes().unwrap();
     let mut back = TableDocument::open("Tasks.ktable", &bytes).unwrap();
     assert_eq!(view(&mut back), before, "the reopened file differs from the saved one");
-    let again = back.sealed_save().unwrap();
+    let again = back.saved_bytes().unwrap();
     let mut twice = TableDocument::open("Tasks.ktable", &again).unwrap();
     assert_eq!(view(&mut twice), before, "a second save of the reopened file differs");
     back

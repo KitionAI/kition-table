@@ -1,0 +1,17 @@
+{"kdm":1,"kit":"kit.table","docId":"78d1add2-1311-46ce-8b19-40006227f6b0","schemaVersion":1,"objects":{
+"01a208fa-fcd0-71c0-ba80-af3c969ff32f":{"$type":"Base","color":"","description":"","icon":"","tables":["01a208fa-fcd0-71c0-ba80-af3d570dc226","01a208fa-fcd8-7588-9ec2-84d994121e57"],"title":"Lookups"},
+"01a208fa-fcd0-71c0-ba80-af3d570dc226":{"$type":"Table","description":"","fields":["01a208fa-fcd0-71c0-ba80-af3eaf3f4770","01a208fa-fcd0-71c0-ba80-af3f17b50fcf","01a208fa-fcd0-71c0-ba80-af431641722a","01a208fa-fcf2-733c-a5b0-74e36712e753"],"name":"table","primaryField":"01a208fa-fcd0-71c0-ba80-af3eaf3f4770","records":["886bf899-1ce7-46b7-936a-a36b0c1ff1ab"],"title":"Table","views":["01a208fa-fcd0-71c0-ba80-af44862ec459"]},
+"01a208fa-fcd0-71c0-ba80-af3eaf3f4770":{"$type":"Field","formula":"","name":"title","readonly":false,"required":true,"title":"Title","type":"text"},
+"01a208fa-fcd0-71c0-ba80-af3f17b50fcf":{"$type":"Field","choices":["01a208fa-fcd0-71c0-ba80-af40ebf578b9","01a208fa-fcd0-71c0-ba80-af412da907f8","01a208fa-fcd0-71c0-ba80-af42a5a7b0ce"],"formula":"","name":"status","readonly":false,"required":false,"title":"Status","type":"single_select"},
+"01a208fa-fcd0-71c0-ba80-af40ebf578b9":{"$type":"Choice","name":"To do"},
+"01a208fa-fcd0-71c0-ba80-af412da907f8":{"$type":"Choice","name":"In progress"},
+"01a208fa-fcd0-71c0-ba80-af42a5a7b0ce":{"$type":"Choice","name":"Done"},
+"01a208fa-fcd0-71c0-ba80-af431641722a":{"$type":"Field","formula":"","name":"notes","readonly":false,"required":false,"title":"Notes","type":"long_text"},
+"01a208fa-fcd0-71c0-ba80-af44862ec459":{"$type":"View","locked":false,"title":"All","type":"grid"},
+"01a208fa-fcd8-7588-9ec2-84d994121e57":{"$type":"Table","description":"","fields":["01a208fa-fcd8-7588-9ec2-84da7b52897e"],"name":"projects","primaryField":"01a208fa-fcd8-7588-9ec2-84da7b52897e","records":["f01bcce1-d244-4adc-8d32-d1abe943356a"],"title":"Projects","views":["01a208fa-fcd8-7588-9ec2-84db84708f70"]},
+"01a208fa-fcd8-7588-9ec2-84da7b52897e":{"$type":"Field","formula":"","name":"title","readonly":false,"required":true,"title":"Title","type":"text"},
+"01a208fa-fcd8-7588-9ec2-84db84708f70":{"$type":"View","locked":false,"title":"All","type":"grid"},
+"01a208fa-fcf2-733c-a5b0-74e36712e753":{"$type":"Field","formula":"","name":"project_name","options":{"link_field":"01a208fa-fce5-72e3-a4fb-9e62be16f7bb","target_field":"01a208fa-fcd8-7588-9ec2-84da7b52897e"},"readonly":false,"required":false,"title":"Project name","type":"lookup"},
+"886bf899-1ce7-46b7-936a-a36b0c1ff1ab":{"$type":"Record","cells":{"01a208fa-fcd0-71c0-ba80-af3eaf3f4770":"Write the plan"},"createdAt":1795446996216,"createdBy":"kit"},
+"f01bcce1-d244-4adc-8d32-d1abe943356a":{"$type":"Record","cells":{"01a208fa-fcd8-7588-9ec2-84da7b52897e":"Launch"},"createdAt":1795446996190,"createdBy":"kit"}
+}}

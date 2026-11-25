@@ -34,7 +34,7 @@ function fixture(name, count) {
   call('records.create', { tableId: table.id, values: { title: 'Phase 3 deferred', score: 0, received_at: '2026-07-24T05:15:48Z' } })
   for (let index = 2; index < count; index += 1) call('records.create', { tableId: table.id, values: { title: `Message ${String(index + 1).padStart(4, '0')}`, score: index % 6 } })
   doc.markSaved()
-  const bytes = Buffer.from((doc.prepareSave(), doc.save())).toString('base64')
+  const bytes = Buffer.from(doc.save()).toString('base64')
   doc.free()
   return bytes
 }
@@ -53,7 +53,7 @@ function viewsFixture() {
   const second = call('tables.create', { title: 'People' })
   call('dashboards.upsert', { dashboardId: 'overview', title: 'Overview', source_table_id: first.id, layout: [], widgets: [] })
   doc.markSaved()
-  const bytes = Buffer.from((doc.prepareSave(), doc.save())).toString('base64')
+  const bytes = Buffer.from(doc.save()).toString('base64')
   doc.free()
   return { tables: [first.id, second.id], dashboard: 'overview', bytes }
 }
@@ -93,7 +93,7 @@ function coversFixture() {
   const covers = [held('drawn.svg', 'image/svg+xml', Buffer.from(svg)), held('moving.gif', 'image/gif', gif), held('photo.heic', 'image/heic', heic)]
   for (const [index, cover] of covers.entries()) call('records.create', { tableId: table.id, values: { title: `Cover ${index + 1}`, [name]: [cover] } })
   doc.markSaved()
-  const bytes = Buffer.from((doc.prepareSave(), doc.save())).toString('base64')
+  const bytes = Buffer.from(doc.save()).toString('base64')
   doc.free()
   return bytes
 }
@@ -894,10 +894,11 @@ try {
     step('Escape leaves Focus and the bars come back', (await kit.getByTestId('table-tabs').count()) === 1 && (await kit.locator('.data-inline-footer').count()) === 1)
   })
 
-  // A record's history survives closing the document: the file holds none, the host's replica
-  // (Kit UI protocol 7) holds it, and the engine derives the record's history from it back to the
-  // file's seal (feature table.records.history-kept). Last: the page is the development host with
-  // the replica and checkpoints from here on.
+  // A record's history survives closing the document: the file holds none, the host keeps a
+  // snapshot per checkpoint (Kit UI protocol 7m), and the engine tells the record's history before
+  // the session from the differences between consecutive checkpoints, by each later one's author
+  // (feature table.records.history-kept). Last: the page is the development host with the replica
+  // and checkpoints from here on.
   await test('a record keeps its history and authors across saves and reloads', async () => {
     await page.goto(`${origin}/dev.html?locale=en-US&replica=1&checkpoints=1`)
     await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes(' open in '), null, { timeout: 60000 })
@@ -915,26 +916,45 @@ try {
       await page.keyboard.press('Enter')
       await until(async () => (await records(table.id))[0].values.title === text)
     }
-    /** Saves and opens the document again as its last save left it, with its replica. */
-    const saveAndReload = async (text) => {
+    /** Saves, records the host's checkpoint of the save (by `author`), and opens the document again as its last save left it, with its replica. */
+    const saveAndReload = async (text, author) => {
       const saved = await page.evaluate(() => window.devHost.connection().save())
+      await page.evaluate((author) => window.devHost.recordCheckpoint({ origin: 'save', ...(author ? { author } : {}) }), author)
       await page.evaluate(() => window.devHost.reload())
       await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes('Tasks.ktable open in '), null, { timeout: 60000 })
       await editor().waitFor({ timeout: 30000 })
       await until(async () => (await records(table.id))[0]?.values.title === text)
       return saved.saved
     }
-    const history = async () => (await engine('records.history', { tableId: table.id, recordId: first.id })).items
+    /** The host's checkpoints, oldest first, each with its snapshot (base64), as the editor reads them for the history. */
+    const checkpoints = () =>
+      page.evaluate(async (path) => {
+        const history = window.devHost.history
+        const encode = (bytes) => {
+          let binary = ''
+          for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte)
+          return btoa(binary)
+        }
+        const points = []
+        for (const checkpoint of history.checkpoints(path).slice(0, 50).reverse()) {
+          const { snapshot } = await history.handlers().checkpoints.read({ path, id: checkpoint.id })
+          points.push({ version: checkpoint.version, time: checkpoint.time, ...(checkpoint.author ? { author: checkpoint.author } : {}), snapshot: encode(snapshot) })
+        }
+        return points
+      }, 'Tasks.ktable')
+    const history = async () => (await engine('records.history', { tableId: table.id, recordId: first.id, checkpoints: await checkpoints() })).items
     const edits = (items) =>
       items.filter((entry) => entry.action === 'update' && entry.field_id === title.id).map((entry) => [entry.before, entry.after, entry.actor])
+    // The host's checkpoint of the file as it opened.
+    const savedFirst = await saveAndReload(first.values.title)
     await retitle(first.values.title, 'Reviewed')
     const [session] = edits(await history())
     step('the session tells the edit and its author', session?.[1] === 'Reviewed' && typeof session?.[2] === 'string' && session[2].length > 0, JSON.stringify(session))
-    const savedOnce = await saveAndReload('Reviewed')
-    await retitle('Reviewed', 'History kept')
-    const savedTwice = await saveAndReload('History kept')
-    const listed = edits(await history())
     const author = session?.[2]
+    const savedOnce = savedFirst && (await saveAndReload('Reviewed', author))
+    await retitle('Reviewed', 'History kept')
+    const savedTwice = await saveAndReload('History kept', author)
+    const listed = edits(await history())
     step(
       'after two saves and reloads the record history lists both edits with their authors',
       savedOnce && savedTwice && JSON.stringify(listed) === JSON.stringify([['Reviewed', 'History kept', author], [first.values.title, 'Reviewed', author]]),

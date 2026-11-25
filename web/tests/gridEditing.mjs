@@ -159,7 +159,7 @@ async function fixture() {
   call('transact', { ops: [{ op: 'records.create', tableId, at: null, records }] })
   call('views.patchConfig', { tableId, viewId: grid, frozen_column_count: 1 })
   doc.markSaved()
-  const bytes = (doc.prepareSave(), doc.save())
+  const bytes = doc.save()
   doc.free()
   const names = { title: primary.name, amount: amount.name, notes: notes.name, status: status.name, tags: tags.name, done: done.name, score: score.name, due: due.name, files: files.name, summary: summary.name }
   return { bytes, tableId, view: grid, names, ids: { title: primary.id, amount: amount.id, summary: summary.id } }

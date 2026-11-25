@@ -2,9 +2,14 @@
 //!
 //! Every stored write notes the version it reached and its origin in the origin log
 //! ([`store::record_origin`]), which survives compaction. [`TableFile::record_changes_since`]
-//! walks the log from a version: for each write after it, the replica as it was before the write
-//! (a fork at the previous version) takes the write's changes (exported from a fork at the
-//! version the write reached), and the records the import changed are compared before and after.
+//! walks the log from a version within the session's change log: for each write after it, the
+//! replica as it was before the write (`Replica::fork_at` the previous version, which takes back
+//! the later changes by the old values their operations carry) takes the write's changes
+//! (exported from a fork at the version the write reached), and the records the import changed are
+//! compared before and after.
+//!
+//! Before the session ([`TableFile::stored_record_history`]) nothing holds changes: the host keeps
+//! a snapshot per checkpoint, and a record's history is what differs between consecutive ones.
 //! A record no table listed before and one lists after was created; one listed before and no
 //! longer listed was deleted; one listed on both sides whose cells (or links) differ was updated,
 //! in those fields.
@@ -79,9 +84,9 @@ impl TableFile {
         if !current.includes(since) {
             return Err(TableFileError::invalid("the version names changes this document does not have"));
         }
-        // A replica opened from a content file holds no history before its seal: changes before
-        // it are the file's content, not changes since `since`.
-        let since = if self.replica.reaches(since) { since } else { &self.floor };
+        // The replica holds the changes of its own session only: what came before the version it
+        // was loaded at is the content it opened, not changes since `since`.
+        let since = if since.includes(&self.floor) { since } else { &self.floor };
         let mut walk = Walk { file: self, prev: fork(&self.replica, since)?, out: Collected::default() };
         if since.includes(&current) {
             return Ok(walk.out.finish());
@@ -280,13 +285,18 @@ fn diff(file: &TableFile, prev: &Replica, next: &Replica, changed: &BTreeSet<Obj
 
 /// A point of the document's stored history the host names (a checkpoint, Kit UI protocol
 /// section 7m): the replica version it names, when it was recorded (milliseconds since the Unix
-/// epoch) and, when the host knows it, who made it.
+/// epoch), who made it when the host knows, and the snapshot the host keeps for it
+/// (`host/checkpointRead`), when the caller read it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HistoryPoint {
     pub version: Version,
     pub time: i64,
     pub author: Option<String>,
+    pub snapshot: Option<Vec<u8>>,
 }
+
+/// How many of the newest checkpoints [`TableFile::stored_record_history`] reads.
+pub const STORED_HISTORY_POINTS: usize = 50;
 
 impl TableFile {
     /// The replica version this handle's session started at: the record history rows
@@ -295,18 +305,17 @@ impl TableFile {
         &self.session_start
     }
 
-    /// A record's history before this session, newest first, derived from the replica's own
-    /// history (the stored lineage the host handed back on open, data model 7.3); nothing is
-    /// stored for it. It runs from the earliest version the replica reads
-    /// ([`Replica::earliest_readable`]: the file's seal, for a replica rooted at a content file)
-    /// to [`TableFile::session_start`], one stretch per change ([`Replica::history_since`]; a
-    /// change made concurrently with the one before goes with the next that includes both).
-    /// For each stretch, the record's creation, deletion or each field that differs (before and
-    /// after values, as the session's rows hold them), by the people and agents whose changes it
-    /// holds (their principals, as the session's rows name them; else the author of the
-    /// checkpoint that holds it), at the time of the first of `points` (the host's checkpoints,
-    /// oldest first) that holds it (0: none does). A record whose changes all came in this
-    /// session, or a document opened from its file alone (no stored history), has none.
+    /// A record's history before this session, newest first, at the granularity of the host's
+    /// checkpoints: `points` are the checkpoints, oldest first, and of them the newest
+    /// [`STORED_HISTORY_POINTS`] that carry their snapshot are read. Between each two consecutive
+    /// ones, and from the newest to the state this session started at, the record's creation,
+    /// deletion or each field that differs (before and after values, as the session's rows hold
+    /// them) is one entry, at the later checkpoint's time and by its author (time 0 and no author
+    /// for the stretch up to the session's start, when no checkpoint names it). What happened
+    /// before the oldest checkpoint read, several changes between two checkpoints (only their sum
+    /// shows) and who made each of them are not known. A record whose changes all came in this
+    /// session, or a document with no checkpoints, has none. A snapshot of another document is
+    /// [`TableFileError::Invalid`].
     pub fn stored_record_history(&self, table_id: i64, record_id: i64, points: &[HistoryPoint]) -> Result<Vec<crate::HistoryEntry>> {
         let record = self
             .conn
@@ -315,43 +324,36 @@ impl TableFile {
             .optional()?;
         let Some(record) = record.map(ObjectId::from_string) else { return Ok(Vec::new()) };
         let end = self.session_start.clone();
-        let start = self.replica.earliest_readable();
-        if start.includes(&end) || !end.includes(&start) || !self.replica.version().includes(&end) {
-            return Ok(Vec::new());
-        }
-        // The stops: each change up to the session's start, with the principals of the changes
-        // since the stop before (system changes name none).
-        let mut stops: Vec<(Version, Vec<String>)> = Vec::new();
-        let mut last = start.clone();
-        let mut principals: Vec<String> = Vec::new();
-        for change in self.replica.history_since(&start)? {
-            if !end.includes(&change.version) {
+        // The checkpoints up to the session's start (one taken in this session tells nothing
+        // the session's own rows do not), each once.
+        let mut read: Vec<&HistoryPoint> = Vec::new();
+        for point in points.iter().filter(|point| point.snapshot.is_some()) {
+            if point.version != end && point.version.includes(&end) {
                 continue;
             }
-            if let Some(origin) = change.origin.filter(|origin| origin.kind != OriginKind::System)
-                && !principals.contains(&origin.principal)
-            {
-                principals.push(origin.principal);
+            if read.last().is_some_and(|last| last.version == point.version) {
+                continue;
             }
-            if change.version.includes(&last) && change.version != last {
-                last = change.version.clone();
-                stops.push((change.version, std::mem::take(&mut principals)));
-            }
+            read.push(point);
         }
-        if last != end {
-            stops.push((end, principals));
-        }
+        let skip = read.len().saturating_sub(STORED_HISTORY_POINTS);
+        let read = read.split_off(skip);
+        let Some(first) = read.first() else { return Ok(Vec::new()) };
         let document_id = self.info()?.document_id;
         let mut names = HashMap::new();
         let mut entries = Vec::new();
-        let mut prev = fork(&self.replica, &start)?;
-        for (version, mut principals) in stops {
-            let next = fork(&self.replica, &version)?;
-            let holding = points.iter().find(|point| point.version.includes(&version));
-            let time = holding.map_or(0, |point| point.time);
-            principals.sort();
-            let actor =
-                if principals.is_empty() { holding.and_then(|point| point.author.clone()).unwrap_or_default() } else { principals.join(", ") };
+        let mut prev = self.point_replica(first)?;
+        // The stops after the first: each later checkpoint, then the session's start.
+        let mut stops: Vec<(Replica, i64, String)> = Vec::new();
+        for point in read.iter().skip(1) {
+            stops.push((self.point_replica(point)?, point.time, point.author.clone().unwrap_or_default()));
+        }
+        if read.last().is_some_and(|last| last.version != end)
+            && let Ok(start) = fork(&self.replica, &end)
+        {
+            stops.push((start, 0, String::new()));
+        }
+        for (next, time, actor) in stops {
             let was = ModelView::new(&prev).table_of_record(&record)?.is_some();
             let is = ModelView::new(&next).table_of_record(&record)?.is_some();
             let (old, new) = (cells(&prev, &record)?, cells(&next, &record)?);
@@ -388,6 +390,17 @@ impl TableFile {
         }
         entries.reverse();
         Ok(entries)
+    }
+
+    /// The document as the checkpoint `point` holds it (its snapshot, which [`HistoryPoint`]
+    /// carries when the caller read it).
+    fn point_replica(&self, point: &HistoryPoint) -> Result<Replica> {
+        let snapshot = point.snapshot.as_deref().unwrap_or_default();
+        let replica = Replica::load(super::schema(), snapshot, crate::ids::actor())?;
+        if replica.doc_id() != self.replica.doc_id() {
+            return Err(TableFileError::invalid("a checkpoint holds another document"));
+        }
+        Ok(replica)
     }
 }
 

@@ -2,11 +2,12 @@ format: 1
 id: table.collab.merge-inside/view-and-dashboard-items
 feature: table.collab.merge-inside
 intent: >-
-  Two copies of one table edit it at once and exchange their changes: filters added on both
-  sides are both kept; sorts reordered on one side and added on the other merge; columns hidden
-  and placed on both sides are all kept; widgets added and edited on both sides are both kept and
-  name their fields by object id; an AI field's instruction (its aiPrompt text, not a copy in the
-  options) edited in two places keeps both edits.
+  Two copies of one table on one line of changes edit it one after the other and exchange their
+  changes (concurrent edits are no longer merged, kition-sdk 91cf510): filters added on both
+  sides are both kept as Filter objects; sorts reordered on one side and added on the other are
+  both kept; columns hidden and placed on both sides are all kept; widgets added and edited on
+  both sides are both kept and name their fields by object id; an AI field's instruction (its
+  aiPrompt text, not a copy in the options) edited on both sides keeps both edits.
 layer: gate
 source:
   kind: synthetic

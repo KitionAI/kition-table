@@ -154,16 +154,21 @@ impl TableFile {
         self.commit_as(origin, f)
     }
 
-    /// Seals the replica for a save (kition-sdk data model 7.3): unless its last change already is
-    /// a seal, one `system` change (`content-seal`) that depends on every head, stored like any
-    /// write; no edit, no undo step. A saved file then holds the replica's content snapshot
-    /// ([`TableFile::content_bytes`]). Answers whether it sealed.
-    pub fn seal(&mut self) -> Result<bool> {
-        if self.replica.is_sealed() {
-            return Ok(false);
-        }
-        let label = Origin::system("content-seal").encode();
-        self.write(&label, false, |replica| Ok(replica.seal()?)).map(|(sealed, _, _)| sealed)
+    /// Takes a draft's changes (made on another replica of this document, forked from it) in as
+    /// one transaction of `origin` (`Replica::merge_changes`: one undo step of the person unless
+    /// `origin` is `system` or `import`), repaired, stored and projected like every write. A draft
+    /// that changed a field this document changed since it was made, or an object this document
+    /// deleted, is refused ([`TableFileError::Kdm`], `stale`) and changes nothing.
+    pub fn merge_replica_changes(&mut self, changes: &[u8], origin: &Origin) -> Result<TableChange> {
+        self.writable()?;
+        let label = origin.encode();
+        let previous = std::mem::replace(&mut self.origin, origin.clone());
+        let written = self.write(&label, true, |replica| {
+            replica.merge_changes(changes, origin)?;
+            Ok(())
+        });
+        self.origin = previous;
+        written.map(|((), change, _)| change)
     }
 
     /// Makes `replica` (the replica a host stored for this document, with its history, the file
@@ -191,7 +196,7 @@ impl TableFile {
         *self.head.get_mut() = head;
         self.base = file::find_base(&self.conn, &replica)?;
         self.repair_index = repair::RepairIndex::default();
-        self.floor = file::floor_of(&replica);
+        self.floor = replica.version();
         self.session_start = replica.version();
         self.replica = replica;
         self.identity = FileIdentity::of(&self.path);
@@ -262,7 +267,7 @@ impl TableFile {
         self.since = replica.version();
         self.base = file::find_base(&self.conn, &replica)?;
         self.repair_index = repair::RepairIndex::default();
-        self.floor = file::floor_of(&replica);
+        self.floor = replica.version();
         self.replica = replica;
         self.stale = false;
         Ok(())

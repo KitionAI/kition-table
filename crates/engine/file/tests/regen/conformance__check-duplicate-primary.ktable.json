@@ -1,0 +1,13 @@
+{"kdm":1,"kit":"kit.table","docId":"baa0c230-4bf4-4df3-8e72-5ac3ce647a4e","schemaVersion":1,"objects":{
+"01a208fa-fd7d-7057-8341-3706c22a004d":{"$type":"Base","color":"","description":"","icon":"","tables":["01a208fa-fd7d-7057-8341-3707c1f3afd6"],"title":"Duplicates"},
+"01a208fa-fd7d-7057-8341-3707c1f3afd6":{"$type":"Table","description":"","fields":["01a208fa-fd7d-7057-8341-3708559f5a8e","01a208fa-fd7d-7057-8341-370958247579","01a208fa-fd7d-7057-8341-370d3c64e3e9"],"name":"table","primaryField":"01a208fa-fd7d-7057-8341-3708559f5a8e","records":["edd173d3-487a-4221-8090-098b7402e705","4ede11a9-c85b-4739-b697-c33dde6fcbfb"],"title":"Table","views":["01a208fa-fd7d-7057-8341-370e825b75e9"]},
+"01a208fa-fd7d-7057-8341-3708559f5a8e":{"$type":"Field","formula":"","name":"title","readonly":false,"required":true,"title":"Title","type":"text"},
+"01a208fa-fd7d-7057-8341-370958247579":{"$type":"Field","choices":["01a208fa-fd7d-7057-8341-370aa96d3e1b","01a208fa-fd7d-7057-8341-370b0f519f2e","01a208fa-fd7d-7057-8341-370c40d33f04"],"formula":"","name":"status","readonly":false,"required":false,"title":"Status","type":"single_select"},
+"01a208fa-fd7d-7057-8341-370aa96d3e1b":{"$type":"Choice","name":"To do"},
+"01a208fa-fd7d-7057-8341-370b0f519f2e":{"$type":"Choice","name":"In progress"},
+"01a208fa-fd7d-7057-8341-370c40d33f04":{"$type":"Choice","name":"Done"},
+"01a208fa-fd7d-7057-8341-370d3c64e3e9":{"$type":"Field","formula":"","name":"notes","readonly":false,"required":false,"title":"Notes","type":"long_text"},
+"01a208fa-fd7d-7057-8341-370e825b75e9":{"$type":"View","locked":false,"title":"All","type":"grid"},
+"4ede11a9-c85b-4739-b697-c33dde6fcbfb":{"$type":"Record","cells":{"01a208fa-fd7d-7057-8341-3708559f5a8e":"Write the plan"},"createdAt":1795446996363,"createdBy":"kit"},
+"edd173d3-487a-4221-8090-098b7402e705":{"$type":"Record","cells":{"01a208fa-fd7d-7057-8341-3708559f5a8e":"Write the plan"},"createdAt":1795446996356,"createdBy":"kit"}
+}}

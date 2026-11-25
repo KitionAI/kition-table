@@ -162,7 +162,7 @@ function sample() {
   })
 
   doc.markSaved()
-  const bytes = Buffer.from((doc.prepareSave(), doc.save())).toString('base64')
+  const bytes = Buffer.from(doc.save()).toString('base64')
   doc.free()
   return { bytes, tasks: tasks.id, team: team.id, milestones: milestones.id, dashboard }
 }

@@ -1,0 +1,12 @@
+{"kdm":1,"kit":"kit.table","docId":"b07d485d-db44-4096-a14c-7f0579f593fd","schemaVersion":1,"objects":{
+"01a208fa-fd6a-7581-a0b1-19848b655c12":{"$type":"Base","color":"","description":"","icon":"","tables":["01a208fa-fd6a-7581-a0b1-1985095e09b1"],"title":"Required"},
+"01a208fa-fd6a-7581-a0b1-1985095e09b1":{"$type":"Table","description":"","fields":["01a208fa-fd6a-7581-a0b1-1986ecaf63b1","01a208fa-fd6a-7581-a0b1-19874dee79df","01a208fa-fd6a-7581-a0b1-198b0c34682d"],"name":"table","primaryField":"01a208fa-fd6a-7581-a0b1-1986ecaf63b1","records":["4dc7f84e-9857-49d0-b959-e2dc395334d0"],"title":"Table","views":["01a208fa-fd6a-7581-a0b1-198cdbbd9d66"]},
+"01a208fa-fd6a-7581-a0b1-1986ecaf63b1":{"$type":"Field","formula":"","name":"title","readonly":false,"required":true,"title":"Title","type":"text"},
+"01a208fa-fd6a-7581-a0b1-19874dee79df":{"$type":"Field","choices":["01a208fa-fd6a-7581-a0b1-1988b7979c31","01a208fa-fd6a-7581-a0b1-1989091ff5d1","01a208fa-fd6a-7581-a0b1-198ae2f71e18"],"formula":"","name":"status","readonly":false,"required":false,"title":"Status","type":"single_select"},
+"01a208fa-fd6a-7581-a0b1-1988b7979c31":{"$type":"Choice","name":"To do"},
+"01a208fa-fd6a-7581-a0b1-1989091ff5d1":{"$type":"Choice","name":"In progress"},
+"01a208fa-fd6a-7581-a0b1-198ae2f71e18":{"$type":"Choice","name":"Done"},
+"01a208fa-fd6a-7581-a0b1-198b0c34682d":{"$type":"Field","formula":"","name":"notes","readonly":false,"required":true,"title":"Notes","type":"long_text"},
+"01a208fa-fd6a-7581-a0b1-198cdbbd9d66":{"$type":"View","locked":false,"title":"All","type":"grid"},
+"4dc7f84e-9857-49d0-b959-e2dc395334d0":{"$type":"Record","cells":{"01a208fa-fd6a-7581-a0b1-1986ecaf63b1":"Write the plan"},"createdAt":1795446996337,"createdBy":"kit"}
+}}

@@ -114,14 +114,15 @@ fn query_params(method: &str) -> Vec<(&'static str, Value)> {
                 "checkpoints",
                 json!({
                     "type": "array",
-                    "description": "The host's checkpoints of the document, oldest first (Kit UI protocol 7m): the history before this session is told between them.",
+                    "description": "The host's checkpoints of the document, oldest first (Kit UI protocol 7m), with their snapshots: the history before this session is what differs between consecutive ones (the newest 50 are read).",
                     "items": {
                         "type": "object",
                         "additionalProperties": false,
                         "properties": {
                             "version": { "type": "string", "required": true, "description": "The replica version, base64, as replica/version answers it." },
                             "time": { "type": "integer", "description": "When it was recorded, in milliseconds since the Unix epoch." },
-                            "author": { "type": "string", "description": "Who made it, when the host knows." }
+                            "author": { "type": "string", "description": "Who made it, when the host knows." },
+                            "snapshot": { "type": "string", "description": "The document as the checkpoint holds it, base64, as host/checkpointRead answers it; a checkpoint without it tells nothing." }
                         }
                     }
                 }),

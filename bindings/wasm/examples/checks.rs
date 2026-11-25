@@ -44,7 +44,6 @@ fn projects(doc: &mut TableDocument) -> Result<i64, String> {
 fn table(name: &str, build: impl FnOnce(&mut TableDocument) -> Result<(), String>) -> Result<Vec<u8>, String> {
     let mut doc = TableDocument::create(name, 0, 0)?;
     build(&mut doc)?;
-    doc.prepare_save()?;
     doc.save(None)
 }
 

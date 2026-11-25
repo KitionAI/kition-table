@@ -2,12 +2,10 @@ format: 1
 id: table.collab.live/two-editors
 feature: table.collab.live
 intent: >-
-  Two to five editors of one table converge whatever they do at once and in whatever order their
-  changes arrive (the platform convergence suite, L6); two editors adding a record to table 1 at
-  the same moment (Kition One's co-editing case) both hold both; an editor offline while both
-  edit converges when it reconnects; a first open from the room and one from the file are one
-  document. In the editor, the replica is declared, a viewer's session refuses every write the
-  table makes, and a co-editor's records reach the table through the data source.
+  In the editor, the replica is declared, a viewer's session refuses every write the table makes,
+  and records another replica of the document on its line of changes makes reach the table through
+  the data source once imported, its own do not. (Merging concurrent edits is gone with the plain
+  document model, kition-sdk 91cf510; co-editing returns with Kition One.)
 layer: gate
 source:
   kind: synthetic
@@ -15,7 +13,6 @@ source:
   license: owned
 input: []
 steps:
-  - cargo-test: { package: kition-table-kit, test: convergence }
   - exec:
       cmd: [pnpm, --dir, web, exec, vitest, run, src/collab.spec.ts]
 expected:

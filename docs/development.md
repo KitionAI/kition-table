@@ -214,8 +214,6 @@ copied as they are.
 `bindings/wasm` also builds as a native Rust library. Depend on this kit's SDK crate and
 import its re-exported `KitDocument` contract; a host does not need to match a separate
 `kition-sdk` Git revision. The table SDK also exports its `Origin` type for host writes.
-The SDK constrains the Loro facade and internal implementation to their compatible versions,
-because a consuming workspace does not inherit the kit's lockfile.
 
 ```rust,ignore
 use kition_table_kit::{KitDocument, Origin, TableDocument};
@@ -247,9 +245,10 @@ let bytes = document.save(None)?;
 ## How it fits together
 
 - **One engine.** The engine is Rust. It implements the Kition SDK's `KitDocument` contract on the
-  SDK's Kit Data Model: a `.ktable` file holds the document's content (the replica's sealed
-  content snapshot, no history) and a relational projection of it in SQLite; the session keeps the
-  history, which the host stores.
+  SDK's Kit Data Model (a plain object store with an ordered change log): a `.ktable` file holds
+  the document's content (`content.json`, DEFLATE-compressed, in the `kition_kdm` row; no history)
+  and a relational projection of it in SQLite; the session keeps its change log, and the host
+  stores the replica's snapshot and a snapshot per checkpoint.
 - **In the page.** The editor (`web/`) is built on the SDK's `@kition/sdk/editor`. The engine runs
   as WebAssembly in a Web Worker; hosts embed the editor in a sandboxed frame over the Kit UI
   protocol, and name a table or dashboard to open with a view (`document.view` when the editor

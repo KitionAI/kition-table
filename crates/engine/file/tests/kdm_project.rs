@@ -1559,10 +1559,8 @@ fn rebuild_keeps_ids_and_equals_the_incremental_projection() {
 }
 
 #[test]
-fn a_merge_projects_like_a_rebuild() {
+fn an_import_projects_like_a_rebuild() {
     let mut t = linked();
-    let mut other = ok(Replica::load(schema(), &ok(t.replica.snapshot()), ok(ActorId::from_u64(2))));
-    let since = t.replica.version();
     let people = t.people.table.clone();
     let tasks = t.tasks.table.clone();
     let name = nth(&t.people.fields, 0);
@@ -1576,6 +1574,9 @@ fn a_merge_projects_like_a_rebuild() {
     write(&mut t.replica, |tx| model::set_cells(tx, &people, &alice, &object(json!({ name.as_str(): "Ali" }))));
     project_into(&t.file, &mut t.replica, "", 11);
 
+    // Another replica of the document, on its line of changes from here on.
+    let mut other = ok(Replica::load(schema(), &ok(t.replica.snapshot()), ok(ActorId::from_u64(2))));
+    let since = t.replica.version();
     // There: a link to Bob, a new field, a deleted view, a moved record, a new task.
     write(&mut other, |tx| model::replace_links(tx, &task, &owner, &[alice.clone(), bob.clone()]));
     write(&mut other, |tx| model::create_field(tx, &people, &field("Age", "number")));
@@ -1596,7 +1597,7 @@ fn a_merge_projects_like_a_rebuild() {
 
     let fresh = new_file(t.dir.path(), "fresh.ktable", true);
     rebuild_into(&fresh, &t.replica, 13);
-    assert_same(&snapshot(&t.file, &Labels::identity(), false), &snapshot(&fresh, &Labels::identity(), false), "merge");
+    assert_same(&snapshot(&t.file, &Labels::identity(), false), &snapshot(&fresh, &Labels::identity(), false), "import");
     let values = record_values(&t.file, "tasks", &task);
     assert_eq!(values.get("owner_name"), Some(&json!(["Ali", "Bob"])));
 }
@@ -1604,7 +1605,7 @@ fn a_merge_projects_like_a_rebuild() {
 // ---------------------------------------------------------------------------
 // Cycles, chains, fan-out, positions, and failures.
 
-/// Sets a field's options without the model's checks, as a merge of concurrent edits can.
+/// Sets a field's options without the model's checks, as an outside write of the file can.
 fn force_options(replica: &mut Replica, field: &ObjectId, options: Value) {
     write(replica, |tx| tx.set(field, "options", options).map_err(kition_table_file::TableFileError::from));
 }
@@ -1813,56 +1814,6 @@ fn mutual_rollups_stay_bounded() {
     project_bounded(p.dir.path(), &p.file, &mut p.replica, 4, "mutual rollups");
     let values = record_values(&p.file, "a", &nth(&p.a_records, 0));
     assert_eq!(values.get("b_sum"), Some(&json!(0)));
-}
-
-#[test]
-fn a_cycle_made_by_concurrent_edits_stays_bounded() {
-    let mut p = pair();
-    let (a, b) = (p.a.table.clone(), p.b.table.clone());
-    let l1 = derived_field(
-        &mut p.replica,
-        &a,
-        "From B",
-        "lookup",
-        json!({ "link_field": p.a_to_b.as_str(), "target_field": nth(&p.b.fields, 0).as_str() }),
-    );
-    let l2 = derived_field(
-        &mut p.replica,
-        &b,
-        "From A",
-        "lookup",
-        json!({ "link_field": p.b_to_a.as_str(), "target_field": nth(&p.a.fields, 0).as_str() }),
-    );
-    project_into(&p.file, &mut p.replica, "", 3);
-    let mut other = ok(Replica::load(schema(), &ok(p.replica.snapshot()), ok(ActorId::from_u64(2))));
-    let since = p.replica.version();
-    // Each edit alone is fine: here L1 reads L2, which reads A's name ...
-    write(&mut p.replica, |tx| {
-        model::update_field(
-            tx,
-            &l1,
-            &FieldPatch { options: Some(json!({ "link_field": p.a_to_b.as_str(), "target_field": l2.as_str() })), ..FieldPatch::default() },
-        )
-    });
-    // ... there L2 reads L1, which reads B's name.
-    write(&mut other, |tx| {
-        model::update_field(
-            tx,
-            &l2,
-            &FieldPatch { options: Some(json!({ "link_field": p.b_to_a.as_str(), "target_field": l1.as_str() })), ..FieldPatch::default() },
-        )
-    });
-    ok(p.replica.import_changes(&ok(other.export_changes(&since))));
-    let imported = p.replica.take_changed();
-    ok(repair::run(&mut p.replica, &imported));
-    let mut changed = imported;
-    changed.extend(p.replica.take_changed());
-    let tx = ok(p.file.conn().unchecked_transaction());
-    ok(project::project_changes(&tx, &p.replica, &changed.into(), "import", 4));
-    ok(tx.commit());
-    assert!(largest_values(&p.file) < 4_000);
-    project_bounded(p.dir.path(), &p.file, &mut p.replica, 5, "concurrent cycle");
-    let _ = &b;
 }
 
 /// A running total over a chain of `n` records (`cum = num + prev_cum`, `prev_cum` the previous

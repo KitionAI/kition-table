@@ -1,7 +1,8 @@
 //! Storage for a table's KDM replica inside its `.ktable` file.
 //!
-//! The replica lives as a compacted snapshot (`kition_kdm`) plus an append-only log of changes
-//! since that snapshot (`kition_kdm_changes`). The relational tables (`kition_tables`,
+//! The replica lives as a compacted snapshot (`kition_kdm`: the state and its version) plus an
+//! append-only log of the changes since that snapshot (`kition_kdm_changes`, each row the KDM's
+//! JSON change list), or, in a saved file, as its content alone ([`write_content`]). The relational tables (`kition_tables`,
 //! `kition_fields`, ...) are a projection of the replica, written separately by a projector; this
 //! module only stores and loads the replica itself.
 //!
@@ -68,27 +69,52 @@ fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
 /// Loads the stored replica: the snapshot, then every change row in `seq` order. `None` when
 /// `kition_kdm` has no row (the file predates the KDM, or has not been initialized yet).
 ///
-/// [`TableFileError::Kdm`] when, after importing every row, the replica still has changes pending on
-/// others that the log does not hold ([`Replica::has_pending_changes`]): the change log is broken,
-/// for instance a row was lost between `append` calls, or one was written against a `since` the
-/// log never actually reached. The store's invariant is that importing the whole log in `seq`
-/// order always leaves nothing pending; this is never silently swallowed into an incomplete
-/// replica.
+/// A content file's store ([`write_content`]) holds the document's content, `content.json`
+/// DEFLATE-compressed, and opens on a new line of changes; any other store holds a snapshot (the
+/// state and its version, `Replica::snapshot`) and the changes after it, which import in order:
+/// a row that does not follow the ones before it is [`TableFileError::Kdm`] (`stale`), never an
+/// incomplete replica.
 pub fn load(conn: &Connection, schema: Arc<Schema>, actor: ActorId) -> Result<Option<Replica>> {
     let snapshot: Option<Vec<u8>> = conn.query_row("SELECT snapshot FROM kition_kdm WHERE id = 1", [], |row| row.get(0)).optional()?;
     let Some(snapshot) = snapshot else {
         return Ok(None);
     };
+    let snapshot = if holds_content(conn)? { inflate(&snapshot)? } else { snapshot };
     let mut replica = Replica::load(schema, &snapshot, actor)?;
     let mut statement = conn.prepare("SELECT bytes FROM kition_kdm_changes ORDER BY seq ASC")?;
     let rows = statement.query_map([], |row| row.get::<_, Vec<u8>>(0))?.collect::<std::result::Result<Vec<_>, _>>()?;
     for bytes in rows {
         replica.import_changes(&bytes)?;
     }
-    if replica.has_pending_changes() {
-        return Err(TableFileError::Kdm("the kdm change log is broken: a stored change depends on changes the log does not hold".into()));
-    }
     Ok(Some(replica))
+}
+
+/// Whether the store is a content file's ([`write_content`]): its row holds the document's
+/// content, compressed, and no write has touched it since.
+fn holds_content(conn: &Connection) -> Result<bool> {
+    Ok(file::get_meta(conn, EPOCH_KEY)?.as_deref() == Some(CONTENT_EPOCH))
+}
+
+/// The DEFLATE level of the content row: fixed, so the same content is the same bytes for one
+/// build (kition-sdk data model 7.4; the zip kits' `content.json` entries use the same).
+const CONTENT_LEVEL: u32 = 6;
+
+/// `content` (`content.json`) as the content row holds it: raw DEFLATE at [`CONTENT_LEVEL`].
+pub(crate) fn deflate(content: &[u8]) -> Result<Vec<u8>> {
+    use std::io::Write;
+    let mut encoder = flate2::write::DeflateEncoder::new(Vec::with_capacity(content.len() / 4), flate2::Compression::new(CONTENT_LEVEL));
+    encoder.write_all(content)?;
+    Ok(encoder.finish()?)
+}
+
+/// The content row's bytes decompressed.
+pub(crate) fn inflate(bytes: &[u8]) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut out = Vec::with_capacity(bytes.len().saturating_mul(4));
+    flate2::read::DeflateDecoder::new(bytes)
+        .read_to_end(&mut out)
+        .map_err(|err| TableFileError::invalid(format!("the ktable content is damaged: {err}")))?;
+    Ok(out)
 }
 
 /// Writes `replica`'s snapshot as generation 1 and records its document id. Fails if `kition_kdm`
@@ -166,9 +192,18 @@ fn check_doc_id(conn: &Connection, replica: &Replica) -> Result<()> {
 /// `since` from an in-memory replica that kept transacting after one of its `append` calls was
 /// rolled back (its SQL transaction failed or was abandoned) would skip the changes made in
 /// between: the engine already reflects them, but they never reached storage.
+///
+/// On a content file's store ([`write_content`]) the first write stores `replica`'s whole snapshot
+/// instead ([`compact`]): the content opens on a new line of changes each time it is loaded, so
+/// change rows after it would follow no line a later load continues.
 pub fn append(conn: &Connection, replica: &Replica, since: &Version, origin: &str, now: i64) -> Result<i64> {
     check_doc_id(conn, replica)?;
     if since.includes(&replica.version()) {
+        return last_seq(conn);
+    }
+    if holds_content(conn)? {
+        compact(conn, replica, now)?;
+        record_origin(conn, &replica.version(), origin, now)?;
         return last_seq(conn);
     }
     let bytes = replica.export_changes(since)?;
@@ -286,29 +321,32 @@ pub fn compact(conn: &Connection, replica: &Replica, now: i64) -> Result<()> {
 /// state holds the same bytes.
 const CONTENT_EPOCH: &str = "content";
 
-/// Makes the store a content file's: `content` (a sealed content snapshot: the document's state
-/// and, of its history, only the seal) as generation 1, no change rows and no origin log, a fixed
-/// epoch, and the projection recorded as current. For a copy of the file being saved, whose
-/// projection is the state `content` holds.
+/// Makes the store a content file's: `content` (the document's content, `content.json`: its
+/// state and nothing else) DEFLATE-compressed as generation 1, no change rows and no origin log, a
+/// fixed epoch (which tells [`load`] the row holds content), and the projection recorded as
+/// current. For a copy of the file being saved, whose projection is the state `content` holds.
 pub(crate) fn write_content(conn: &Connection, content: &[u8]) -> Result<()> {
     conn.execute("UPDATE kition_kdm SET snapshot = x'' WHERE id = 1", [])?;
     conn.execute("DELETE FROM kition_kdm_changes", [])?;
     conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('kition_kdm_changes', 'kition_kdm_origins')", [])?;
     conn.execute_batch("DROP TABLE IF EXISTS kition_kdm_origins")?;
     conn.execute("DELETE FROM kition_meta WHERE key = ?1", [ORIGIN_LOG_FLOOR_KEY])?;
+    let content = deflate(content)?;
     let updated =
-        conn.execute("UPDATE kition_kdm SET snapshot = zeroblob(?1), generation = 1, updated_at = 0 WHERE id = 1", params![blob_len(content)?])?;
+        conn.execute("UPDATE kition_kdm SET snapshot = zeroblob(?1), generation = 1, updated_at = 0 WHERE id = 1", params![blob_len(&content)?])?;
     if updated == 0 {
         return Err(TableFileError::invalid("kdm replica is not initialized"));
     }
-    put_snapshot(conn, content)?;
+    put_snapshot(conn, &content)?;
     file::set_meta(conn, EPOCH_KEY, CONTENT_EPOCH)?;
     set_projected_position(conn, (1, 0))
 }
 
-/// The stored snapshot (a content file's content entry) and the number of change rows after it.
+/// The stored snapshot (a content file's content, decompressed: `content.json`) and the number of
+/// change rows after it.
 pub fn stored(conn: &Connection) -> Result<(Vec<u8>, i64)> {
     let snapshot: Vec<u8> = conn.query_row("SELECT snapshot FROM kition_kdm WHERE id = 1", [], |row| row.get(0))?;
+    let snapshot = if holds_content(conn)? { inflate(&snapshot)? } else { snapshot };
     let changes: i64 = conn.query_row("SELECT COUNT(*) FROM kition_kdm_changes", [], |row| row.get(0))?;
     Ok((snapshot, changes))
 }

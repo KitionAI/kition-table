@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import type { i18n } from 'i18next'
-import { ConfirmProvider, EditorFrame, FrameChrome, ICON_STROKE, KitEditorProvider, TesseraIcons, createKitStrings, listCheckpoints, useKitEditor, useKitEditorState, useKitSession, type HostConnection } from '@kition/sdk/editor'
+import { ConfirmProvider, EditorFrame, FrameChrome, ICON_STROKE, KitEditorProvider, TesseraIcons, createKitStrings, listCheckpoints, readCheckpoint, useKitEditor, useKitEditorState, useKitSession, type HostConnection } from '@kition/sdk/editor'
 import { TableDataSourceProvider, TableHostProvider } from './editor'
 import { TableEditor } from './editor/TableEditor'
 import { DashboardEditor } from './editor/DashboardEditor'
-import { createWorkerTableDataSource } from './dataSource'
+import { createWorkerTableDataSource, toBase64 } from './dataSource'
 import { describe, engineManifest } from './engine'
 import { hostServices } from './hostRequests'
 import { engineAIRun } from './aiFields'
@@ -22,6 +22,9 @@ const editorKeys = (command: string) => command === 'edit.undo' || command === '
 
 /** The frame has no command tabs: the table editor draws its own toolbar, and the bar under the frame's top lists the tables and dashboards. */
 const NO_TABS = [] as const
+
+/** How many of the newest checkpoints a record's history reads (the engine reads at most 50). */
+const STORED_HISTORY_POINTS = 50
 
 /** The theme's `.dark` class follows the host's color scheme (@kition/sdk/editor sets `data-color-scheme`). */
 function useDarkClass() {
@@ -74,13 +77,17 @@ export function App({ host, i18n }: { host: HostConnection; i18n: i18n }) {
         {
           kept: host.replica,
           checkpoints: async () => {
-            const listed = await listCheckpoints(host.files, path, { limit: 200 })
-            return listed
-              ? listed.checkpoints
-                  .filter((checkpoint) => checkpoint.available)
-                  .reverse()
-                  .map(({ version, time, author }) => ({ version, time, ...(author ? { author } : {}) }))
-              : null
+            // The newest checkpoints with the snapshots the host keeps for them: the history
+            // before this session is what differs between consecutive ones.
+            const listed = await listCheckpoints(host.files, path, { limit: STORED_HISTORY_POINTS })
+            if (!listed) return null
+            const read = await Promise.all(
+              listed.checkpoints.map(async ({ id, version, time, author }) => {
+                const kept = await readCheckpoint(host.files, path, id).catch(() => null)
+                return kept ? { version, time, ...(author ? { author } : {}), snapshot: toBase64(new Uint8Array(kept.snapshot)) } : null
+              }),
+            )
+            return read.filter((point) => point !== null).reverse()
           },
         },
       ),

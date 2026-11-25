@@ -31,7 +31,7 @@ fn text(answer: &Value) -> String {
 #[test]
 fn answers_a_table_as_csv_bytes_without_changing_the_document() {
     let (mut doc, table, _) = people();
-    let (revision, saved) = (doc.revision(), doc.sealed_save().unwrap());
+    let (revision, saved) = (doc.revision(), doc.saved_bytes().unwrap());
     let answer = doc.execute("table.file.export", json!({ "format": "csv", "tableId": table })).unwrap();
     assert_eq!((answer["format"].as_str(), answer["extension"].as_str(), answer["mime"].as_str()), (Some("csv"), Some("csv"), Some("text/csv")));
     let csv = text(&answer);
@@ -43,7 +43,7 @@ fn answers_a_table_as_csv_bytes_without_changing_the_document() {
     let old = doc.execute("table.csv.export", json!({ "tableId": table })).unwrap();
     assert_eq!(old["result"]["content"].as_str(), Some(csv.as_str()));
     assert_eq!((doc.revision(), doc.dirty()), (revision, false));
-    assert_eq!(doc.sealed_save().unwrap(), saved);
+    assert_eq!(doc.saved_bytes().unwrap(), saved);
 }
 
 #[test]
@@ -64,13 +64,13 @@ fn answers_a_table_as_markdown_and_the_first_table_by_default() {
 #[test]
 fn refuses_a_format_or_table_it_cannot_write() {
     let (mut doc, _, _) = people();
-    let saved = doc.sealed_save().unwrap();
+    let saved = doc.saved_bytes().unwrap();
     let error = doc.execute("table.file.export", json!({ "format": "xlsx" })).unwrap_err();
     assert!(error.contains("csv or md"), "{error}");
     assert!(doc.execute("table.file.export", json!({})).is_err(), "a format is required");
     assert!(doc.execute("table.file.export", json!({ "format": "csv", "tableId": 999 })).is_err());
     assert!(doc.execute("table.file.export", json!({ "format": "csv", "path": "/tmp/x.csv" })).is_err(), "no file system");
-    assert_eq!(doc.sealed_save().unwrap(), saved);
+    assert_eq!(doc.saved_bytes().unwrap(), saved);
 }
 
 /// kit.json declares what `table.file.export` writes, for the host's export check and the agent's

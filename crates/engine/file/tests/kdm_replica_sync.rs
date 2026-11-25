@@ -1,12 +1,12 @@
-//! Relaying a `.ktable` file's KDM replica to another copy of the same document, as co-editing
-//! does through a sync room: `replica_version`, `export_replica_changes(since)`, and
-//! `import_replica_changes(changes)`.
+//! Relaying a `.ktable` file's KDM replica to another copy of the same document on the same line
+//! of changes, as the editor's page and drafts do: `replica_version`,
+//! `export_replica_changes(since)`, and `import_replica_changes(changes)`, taken in order.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use kition_kdm::{Origin, Version};
-use kition_table_file::{CreateOptions, FieldPatch, FieldSpec, TableChange, TableFile, TableSpec, ViewSpec};
+use kition_table_file::{CreateOptions, FieldSpec, TableChange, TableFile, TableSpec, ViewSpec};
 use serde_json::{Map, Value, json};
 
 fn ok<T, E: std::fmt::Display>(result: Result<T, E>) -> T {
@@ -74,60 +74,12 @@ fn records(file: &TableFile, table_id: i64) -> Vec<(String, Map<String, Value>)>
 }
 
 #[test]
-fn two_files_exchanging_changes_converge_on_records_fields_and_views() {
-    let dir = tempfile::tempdir().unwrap_or_else(|err| panic!("{err}"));
-    let (_, mut here, mut there, table_id, record_id) = two_copies(dir.path());
-
-    // Concurrent edits on both sides: a record, a field, and a view each.
-    ok(here.update_record(table_id, record_id, &values(json!({ "status": "doing" })), None));
-    ok(here.create_record(table_id, &values(json!({ "title": "From here" }))));
-    ok(here.create_field(table_id, &field("Owner", "text")));
-    ok(here.create_view(table_id, &ViewSpec { title: "Board".into(), view_type: "kanban".into(), config: Value::Null }));
-    ok(there.update_record(table_id, record_id, &values(json!({ "title": "Write more" })), None));
-    ok(there.create_record(table_id, &values(json!({ "title": "From there" }))));
-    let due = ok(there.create_field(table_id, &field("Due", "date")));
-    ok(there.update_field(table_id, due.id, &FieldPatch { title: Some("Due date".into()), ..FieldPatch::default() }));
-    ok(there.create_view(table_id, &ViewSpec { title: "Calendar".into(), view_type: "calendar".into(), config: Value::Null }));
-
-    let to_there = send(&here, &mut there);
-    assert!(!to_there.records_upserted.is_empty(), "the import projected the records it brought: {to_there:?}");
-    let to_here = send(&there, &mut here);
-    assert!(!to_here.schema.is_empty(), "{to_here:?}");
-    // Repairs on either side (none expected here) would reach the other on the next round.
-    send(&here, &mut there);
-
-    assert_eq!(ok(here.replica().state_hash()), ok(there.replica().state_hash()), "both replicas hold the same document");
-    assert_eq!(here.replica_version(), there.replica_version());
-    assert_eq!(records(&here, table_id), records(&there, table_id));
-    let record = ok(here.get_record(table_id, record_id));
-    assert_eq!(record.values.get("status"), Some(&json!("doing")));
-    assert_eq!(record.values.get("title"), Some(&json!("Write more")));
-    assert_eq!(records(&here, table_id).len(), 3);
-    assert_eq!(field_titles(&here, table_id), field_titles(&there, table_id));
-    assert!(field_titles(&here, table_id).contains(&"Owner".to_owned()));
-    assert!(field_titles(&here, table_id).contains(&"Due date".to_owned()));
-    assert_eq!(view_titles(&here, table_id), view_titles(&there, table_id));
-    assert!(view_titles(&here, table_id).contains(&"Board".to_owned()));
-    assert!(view_titles(&here, table_id).contains(&"Calendar".to_owned()));
-
-    // Stored, not only in memory: reopened files read the same.
-    let here_path = here.path().to_path_buf();
-    let there_path = there.path().to_path_buf();
-    here.close();
-    there.close();
-    let here = open(&here_path);
-    let there = open(&there_path);
-    assert_eq!(records(&here, table_id), records(&there, table_id));
-    assert_eq!(field_titles(&here, table_id), field_titles(&there, table_id));
-    assert_eq!(view_titles(&here, table_id), view_titles(&there, table_id));
-}
-
-#[test]
 fn an_import_is_not_an_undo_step() {
     let dir = tempfile::tempdir().unwrap_or_else(|err| panic!("{err}"));
     let (_, mut here, mut there, table_id, record_id) = two_copies(dir.path());
 
     ok(here.update_record(table_id, record_id, &values(json!({ "status": "mine" })), None));
+    send(&here, &mut there);
     ok(there.update_record(table_id, record_id, &values(json!({ "title": "Theirs" })), None));
     send(&there, &mut here);
     let record = ok(here.get_record(table_id, record_id));
@@ -214,8 +166,8 @@ fn a_file_created_from_an_export_is_the_same_document() {
     // From then on the two exchange changes like any two copies.
     let joined_record = ok(joined.list_records(joined_table.id)).remove(0);
     ok(joined.update_record(joined_table.id, joined_record.id, &values(json!({ "title": "From the joiner" })), None));
-    ok(here.create_record(table_id, &values(json!({ "title": "From here" }))));
     send(&joined, &mut here);
+    ok(here.create_record(table_id, &values(json!({ "title": "From here" }))));
     send(&here, &mut joined);
     assert_eq!(ok(joined.replica().state_hash()), ok(here.replica().state_hash()));
     assert_eq!(records(&joined, joined_table.id), records(&here, table_id));

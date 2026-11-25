@@ -1,6 +1,7 @@
 // Co-editing in the editor: it declares the replica, a viewer's session refuses every write the
-// table makes and lets every read through, and a co-editor's changes reach the table editor
-// through the data source. Over the built engine (public/engine: `pnpm engine` first).
+// table makes and lets every read through, and changes another replica of the document makes on
+// the same line of changes reach the table editor through the data source. Over the built engine
+// (public/engine: `pnpm engine` first).
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -18,21 +19,20 @@ type Doc = {
   importChanges(changes: Uint8Array): string
   blobsSince(since: Uint8Array): Uint8Array
   addBlobs(blobs: Uint8Array): void
-  prepareSave(): void
+  blobs(): Uint8Array
+  snapshot(): Uint8Array
   save(): Uint8Array
   readonly revision: bigint | number
   free(): void
 }
-type DocClass = { create(name: string, width: number, height: number): Doc; open(name: string, bytes: Uint8Array): Doc }
+type DocClass = {
+  create(name: string, width: number, height: number): Doc
+  open(name: string, bytes: Uint8Array): Doc
+  openWithReplica(name: string, bytes: Uint8Array, snapshot: Uint8Array, blobs: Uint8Array): Doc
+}
 
 const engine = path.resolve(__dirname, '..', 'public', 'engine')
 let TableDocument: DocClass
-
-/** The file's bytes as a host saves them: sealed first. */
-function sealed(doc: Doc): Uint8Array {
-  doc.prepareSave()
-  return doc.save()
-}
 
 beforeAll(async () => {
   const sdk = await import(/* @vite-ignore */ pathToFileURL(path.join(engine, 'kition_table_kit.js')).href)
@@ -81,21 +81,17 @@ describe('co-editing a table', () => {
     doc.free()
   })
 
-  it("hears a co-editor's records once they are imported, and not its own", async () => {
-    const bytes = sealed(TableDocument.create('Tasks.ktable', 0, 0))
+  it("hears another replica's records once they are imported, and not its own", async () => {
+    const bytes = TableDocument.create('Tasks.ktable', 0, 0).save()
     const ann = TableDocument.open('Tasks.ktable', bytes)
-    const bob = TableDocument.open('Tasks.ktable', bytes)
+    // Bob's replica follows Ann's line of changes (the KDM takes changes in order).
+    const bob = TableDocument.openWithReplica('Tasks.ktable', new Uint8Array(), ann.snapshot(), ann.blobs())
     const source = createWorkerTableDataSource(access(bob), 'Tasks.ktable')
     const heard: unknown[] = []
     source.onChange(1, (event) => heard.push(event))
     source.observe(Number(bob.revision))
 
-    // Bob's own edit through the editor: nothing to hear.
-    await source.records.create({ documentId: 1, tableId: 1, values: { title: 'Bob wrote this' } } as never)
-    source.observe(Number(bob.revision))
-    expect(heard).toEqual([])
-
-    // Ann's edit arrives through the room.
+    // Ann's edit arrives.
     ann.execute('table.records.create', JSON.stringify({ tableId: 1, values: { title: 'Ann wrote this' } }))
     relay(ann, bob)
     source.observe(Number(bob.revision))
@@ -105,6 +101,11 @@ describe('co-editing a table', () => {
     expect(event.change.documentPath).toBe('Tasks.ktable')
     expect(event.change.origin).toBe('import:sync')
     expect(event.change.recordsUpserted).toHaveLength(1)
+
+    // Bob's own edit through the editor: nothing more to hear.
+    await source.records.create({ documentId: 1, tableId: 1, values: { title: 'Bob wrote this' } } as never)
+    source.observe(Number(bob.revision))
+    expect(heard).toHaveLength(1)
 
     // And Bob's edit reaches Ann: both show both records.
     relay(bob, ann)

@@ -1,13 +1,13 @@
-//! The object model (`KitObjectModel 1.0`) for the headless executable: the document's own
-//! replica exchanges changes with the host's scratch replica (`kition_kit::session::model`), so a
-//! batch arrives here as another replica's changes and is imported, repaired, and projected like
-//! a co-editor's.
+//! The object model (`KitObjectModel 1.0`) for the headless executable and the editor's engine
+//! (`modelDescribe`, `modelBatch`): the document's own replica exchanges changes with a scratch
+//! replica on its line of changes (`kition_kit::session::model`), so a batch arrives here as that
+//! replica's changes and is imported, repaired, and projected like any import.
 
 use std::sync::{Arc, OnceLock};
 
 use kition_kit::KitDocument;
 use kition_kit::kdm::{Origin, Schema};
-use kition_kit::session::model::ReplicaPort;
+use kition_kit::session::model::{Exchange, ReplicaPort};
 use serde_json::Value;
 
 use crate::{MODEL_SCHEMA, TableDocument};
@@ -60,6 +60,25 @@ impl ReplicaPort for TableDocument {
     }
 }
 
+impl TableDocument {
+    /// `model/describe` (`modelDescribe`).
+    pub fn model_describe(&mut self) -> Result<Value, String> {
+        let mut exchange = std::mem::take(&mut self.exchange);
+        let answer = exchange.describe(self);
+        self.exchange = exchange;
+        answer.map_err(|error| error.to_json().to_string())
+    }
+
+    /// `model/batch` (`modelBatch`); a refusal's message is the error's JSON (`{"code", "index",
+    /// "message"}`).
+    pub fn model_batch(&mut self, request: &Value) -> Result<Value, String> {
+        let mut exchange: Exchange = std::mem::take(&mut self.exchange);
+        let answer = exchange.batch(self, request, false);
+        self.exchange = exchange;
+        answer.map_err(|error| error.to_json().to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use kition_kit::KitDocument;
@@ -98,7 +117,7 @@ mod tests {
         let rename = json!({ "ops": [{ "op": "set", "target": object, "field": "title", "value": "Renamed by a script" }] });
         exchange.batch(&mut doc, &rename, false).unwrap();
         assert_eq!(first_table(&mut doc)["title"], "Renamed by a script", "the model edit is projected");
-        let saved = TableDocument::open("Tasks.ktable", &doc.sealed_save().unwrap()).unwrap();
+        let saved = TableDocument::open("Tasks.ktable", &doc.saved_bytes().unwrap()).unwrap();
         assert_eq!(saved.doc_id(), doc.doc_id());
     }
 }

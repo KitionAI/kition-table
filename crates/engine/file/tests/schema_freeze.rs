@@ -1,7 +1,8 @@
-//! The document shapes frozen for the release (schema version 1): what merges per item or per
-//! character is a container. Each test edits two copies of one document concurrently, sends
-//! each one's changes to the other, and checks that both edits are there and that both copies
-//! read the same:
+//! The document shapes frozen for the release (schema version 1): what is edited per item or per
+//! character is a container. Each test edits two copies of one document on one line of changes,
+//! one after the other, sends each one's changes to the other, and checks that both edits are
+//! there and that both copies read the same (the KDM takes changes in order; concurrent edits are
+//! not merged since kition-sdk's plain document model):
 //!
 //! - a select's options are `Choice` objects its `Field.choices` lists, and its cells hold choice
 //!   ids (options added on both sides are both kept; a renamed option renames the cell another
@@ -105,7 +106,8 @@ fn options_added_on_both_sides_are_both_kept() {
     let mut c = copies();
     let patch = |choices: Value| FieldPatch { options: Some(json!({ "choices": choices })), ..FieldPatch::default() };
     ok(c.here.update_field(c.table, c.status, &patch(json!(["To do", "Done", "Blocked"]))));
-    ok(c.there.update_field(c.table, c.status, &patch(json!(["To do", "Done", "Later"]))));
+    c.exchange();
+    ok(c.there.update_field(c.table, c.status, &patch(json!(["To do", "Done", "Blocked", "Later"]))));
     c.exchange();
     let (_, options, _) = c.converged(c.status);
     let mut merged = choices(&options);
@@ -127,8 +129,9 @@ fn options_added_on_both_sides_are_both_kept() {
 #[test]
 fn an_option_renamed_on_one_side_renames_the_cell_set_on_the_other() {
     let mut c = copies();
-    ok(c.here.update_field(c.table, c.status, &FieldPatch { options: Some(json!({ "choices": ["To do", "Finished"] })), ..FieldPatch::default() }));
     ok(c.there.update_record(c.table, c.record, &values(json!({ "status": "Done" })), None));
+    c.exchange();
+    ok(c.here.update_field(c.table, c.status, &FieldPatch { options: Some(json!({ "choices": ["To do", "Finished"] })), ..FieldPatch::default() }));
     c.exchange();
     let (record, options, _) = c.converged(c.status);
     assert_eq!(choices(&options), vec!["To do", "Finished"]);
@@ -175,7 +178,8 @@ fn a_value_that_names_no_option_stays_a_value_the_field_does_not_list() {
 fn typing_in_two_places_of_one_long_text_keeps_both() {
     let mut c = copies();
     ok(c.here.update_record(c.table, c.record, &values(json!({ "notes": "hello brave world" })), None));
-    ok(c.there.update_record(c.table, c.record, &values(json!({ "notes": "hello world!" })), None));
+    c.exchange();
+    ok(c.there.update_record(c.table, c.record, &values(json!({ "notes": "hello brave world!" })), None));
     c.exchange();
     let (record, _, _) = c.converged(c.status);
     assert_eq!(record.get("notes"), Some(&json!("hello brave world!")));
@@ -214,7 +218,8 @@ fn editing_an_ai_prompt_in_two_places_keeps_both() {
     let mut c = copies();
     let prompt = |text: &str| FieldPatch { ai_prompt: Some(text.into()), ..FieldPatch::default() };
     ok(c.here.update_field(c.table, c.summary, &prompt("Summarize the notes")));
-    ok(c.there.update_field(c.table, c.summary, &prompt("Summarize notes briefly")));
+    c.exchange();
+    ok(c.there.update_field(c.table, c.summary, &prompt("Summarize the notes briefly")));
     c.exchange();
     let (_, _, ai_prompt) = c.converged(c.summary);
     assert_eq!(ai_prompt, "Summarize the notes briefly");
@@ -290,8 +295,12 @@ fn filters_added_on_both_sides_are_both_kept() {
     edit_view(&mut c.here, c.table, |config| {
         config.insert("filter_tree".into(), tree(vec![condition("a", "title", "Write"), condition("b", "title", "Here")]));
     });
+    c.exchange();
     edit_view(&mut c.there, c.table, |config| {
-        config.insert("filter_tree".into(), tree(vec![condition("a", "title", "Write"), condition("c", "notes", "There")]));
+        config.insert(
+            "filter_tree".into(),
+            tree(vec![condition("a", "title", "Write"), condition("b", "title", "Here"), condition("c", "notes", "There")]),
+        );
     });
     c.exchange();
     let (here, there) = (view_config(&c.here, c.table), view_config(&c.there, c.table));
@@ -324,8 +333,9 @@ fn sorts_reordered_on_one_side_and_added_on_the_other_merge() {
     edit_view(&mut c.here, c.table, |config| {
         config.insert("sorts".into(), items(&["status", "title"]));
     });
+    c.exchange();
     edit_view(&mut c.there, c.table, |config| {
-        config.insert("sorts".into(), items(&["title", "status", "notes"]));
+        config.insert("sorts".into(), items(&["status", "title", "notes"]));
     });
     c.exchange();
     let (here, there) = (view_config(&c.here, c.table), view_config(&c.there, c.table));
@@ -344,8 +354,9 @@ fn columns_hidden_and_placed_on_both_sides_are_all_kept() {
     edit_view(&mut c.here, c.table, |config| {
         config.insert("hidden_field_names".into(), json!(["notes"]));
     });
+    c.exchange();
     edit_view(&mut c.there, c.table, |config| {
-        config.insert("hidden_field_names".into(), json!(["status"]));
+        config.insert("hidden_field_names".into(), json!(["notes", "status"]));
     });
     c.exchange();
     let mut hidden: Vec<String> = view_config(&c.here, c.table)["hidden_field_names"]
@@ -357,11 +368,12 @@ fn columns_hidden_and_placed_on_both_sides_are_all_kept() {
     hidden.sort();
     assert_eq!(hidden, vec!["notes", "status"]);
     assert_eq!(view_config(&c.here, c.table), view_config(&c.there, c.table));
-    // A column's place is one entry of the view's layout: two columns placed at once both keep theirs.
+    // A column's place is one entry of the view's layout: two columns placed one after the other both keep theirs.
     let view = ok(c.here.get_table(c.table)).views[0].id;
     let fields = ok(c.here.list_fields(c.table));
     let (first, second) = (fields[1].id, fields[2].id);
     ok(c.here.upsert_view_field(view, first, &kition_table_file::ViewFieldPatch { position: Some(5), ..Default::default() }));
+    c.exchange();
     ok(c.there.upsert_view_field(view, second, &kition_table_file::ViewFieldPatch { frozen: Some(true), ..Default::default() }));
     c.exchange();
     let layout = view_config(&c.here, c.table)["field_layout"].clone();
@@ -392,7 +404,11 @@ fn widgets_added_and_edited_on_both_sides_are_both_kept_and_name_fields_by_id() 
         json!([{ "widget_id": "w1", "x": 0, "y": 0, "w": 4, "h": 3 }, { "widget_id": "w2", "x": 4, "y": 0, "w": 4, "h": 3 }]),
     );
     ok(c.here.upsert_dashboard(Some("d1"), "Overview", config_of(config), &widgets));
-    let (config, widgets) = dashboard(vec![widget("w1", "Renamed there")], json!([{ "widget_id": "w1", "x": 0, "y": 0, "w": 4, "h": 3 }]));
+    c.exchange();
+    let (config, widgets) = dashboard(
+        vec![widget("w1", "Renamed there"), widget("w2", "Added here")],
+        json!([{ "widget_id": "w1", "x": 0, "y": 0, "w": 4, "h": 3 }, { "widget_id": "w2", "x": 4, "y": 0, "w": 4, "h": 3 }]),
+    );
     ok(c.there.upsert_dashboard(Some("d1"), "Overview", config_of(config), &widgets));
     c.exchange();
     let (here, there) = (ok(c.here.list_dashboards()), ok(c.there.list_dashboards()));
@@ -423,7 +439,8 @@ fn an_ai_instruction_edited_in_two_places_keeps_both() {
         ..FieldPatch::default()
     };
     ok(c.here.update_field(c.table, field, &options("Write a short summary")));
-    ok(c.there.update_field(c.table, field, &options("Write a summary of the notes")));
+    c.exchange();
+    ok(c.there.update_field(c.table, field, &options("Write a short summary of the notes")));
     c.exchange();
     let (_, options, ai_prompt) = c.converged(field);
     assert_eq!(options["ai_config"]["prompt"], "Write a short summary of the notes");

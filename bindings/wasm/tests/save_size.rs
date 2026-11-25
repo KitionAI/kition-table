@@ -25,7 +25,7 @@ fn pages(doc: &TableDocument) -> (i64, i64) {
 fn report(label: &str, doc: &mut TableDocument) {
     let (count, free) = pages(doc);
     let started = Instant::now();
-    let bytes = doc.sealed_save().unwrap();
+    let bytes = doc.saved_bytes().unwrap();
     let save = started.elapsed();
     println!(
         "{label}: {count} pages, {free} free ({:.0}%); save {save:?} writes {:.1} MB",

@@ -13,7 +13,7 @@ fn native_host_imports() {
         )
         .unwrap();
     assert_eq!(record["change"]["origin"], "system:host");
-    let bytes = doc.sealed_save().unwrap();
+    let bytes = doc.saved_bytes().unwrap();
     let mut reopened = TableDocument::open("contacts.ktable", &bytes).unwrap();
     let tables = reopened.execute("table.tables.list", json!({})).unwrap();
     assert!(tables["result"]["items"].as_array().unwrap().iter().any(|table| table["title"] == "Contacts"));

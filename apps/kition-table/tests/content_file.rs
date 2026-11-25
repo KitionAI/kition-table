@@ -1,11 +1,11 @@
 //! An agent's run through the kit's headless executable saves the table's content, not its
-//! history (feature `table.file.content-only`): the file the run writes holds one change (the seal)
-//! and no change row, and no byte of it holds what the run overwrote.
+//! history (feature `table.file.content-only`): the file the run writes holds the content
+//! (`content.json`: no version, no origin) and no change row, and neither it nor any byte of the
+//! file holds what the run overwrote.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::path::PathBuf;
 
-use kition_kdm::{Origin, Replica};
 use kition_kits::tools::{self, CallOptions, Guard};
 use kition_kits::{KitDefinition, KitManager};
 use kition_table_file::TableFile;
@@ -17,8 +17,7 @@ const OVERWRITTEN: &str = "Hc3Wq8Lm5Zt1";
 #[tokio::test]
 async fn an_agent_run_saves_sealed_content() {
     let dir = tempfile::tempdir().unwrap();
-    let mut doc = TableDocument::create("Work.ktable", 0, 0).unwrap();
-    doc.prepare_save().unwrap();
+    let doc = TableDocument::create("Work.ktable", 0, 0).unwrap();
     std::fs::write(dir.path().join("Work.ktable"), doc.save(None).unwrap()).unwrap();
     let definition = Box::leak(Box::new(KitDefinition::from_manifest_text(include_str!("../../../kit.json")).unwrap()));
     let executable = Some(PathBuf::from(env!("CARGO_BIN_EXE_kition-table")));
@@ -36,5 +35,9 @@ async fn an_agent_run_saves_sealed_content() {
     assert_eq!(file.get_record(1, 1).unwrap().values["title"], "From the agent");
     let (content, changes) = file.stored_replica().unwrap();
     assert_eq!(changes, 0, "no change row");
-    assert_eq!(Replica::snapshot_origins(&content).unwrap(), vec![Some(Origin::system("content-seal"))]);
+    assert!(!content.windows(OVERWRITTEN.len()).any(|window| window == OVERWRITTEN.as_bytes()), "the content holds the overwritten title");
+    let state: serde_json::Value = serde_json::from_slice(&content).unwrap();
+    for key in ["version", "lineage", "origin", "changes"] {
+        assert!(state.get(key).is_none(), "the content holds no {key}");
+    }
 }

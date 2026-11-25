@@ -8261,7 +8261,7 @@
           },
           "checkpoints": {
             "type": "array",
-            "description": "The host's checkpoints of the document, oldest first (Kit UI protocol 7m): the history before this session is told between them.",
+            "description": "The host's checkpoints of the document, oldest first (Kit UI protocol 7m), with their snapshots: the history before this session is what differs between consecutive ones (the newest 50 are read).",
             "items": {
               "type": "object",
               "additionalProperties": false,
@@ -8277,6 +8277,10 @@
                 "author": {
                   "type": "string",
                   "description": "Who made it, when the host knows."
+                },
+                "snapshot": {
+                  "type": "string",
+                  "description": "The document as the checkpoint holds it, base64, as host/checkpointRead answers it; a checkpoint without it tells nothing."
                 }
               },
               "required": [

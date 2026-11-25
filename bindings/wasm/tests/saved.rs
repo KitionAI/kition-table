@@ -6,7 +6,7 @@ use kition_table_kit::TableDocument;
 use serde_json::json;
 
 fn agrees(doc: &mut TableDocument, label: &str) {
-    let again = TableDocument::open("Saved.ktable", &doc.sealed_save().unwrap()).unwrap();
+    let again = TableDocument::open("Saved.ktable", &doc.saved_bytes().unwrap()).unwrap();
     assert_eq!(doc.file().replica().state_json().unwrap(), again.file().replica().state_json().unwrap(), "{label}: replica");
     assert_eq!(
         serde_json::to_value(doc.derived(&[], &[]).unwrap()).unwrap(),
@@ -68,7 +68,7 @@ fn fractional_model_width_is_the_integer_width_the_api_and_file_hold() {
             false,
         )
         .unwrap();
-    let saved = TableDocument::open("Saved.ktable", &doc.sealed_save().unwrap()).unwrap();
+    let saved = TableDocument::open("Saved.ktable", &doc.saved_bytes().unwrap()).unwrap();
     let fields = saved.file().list_view_fields(1).unwrap();
     assert_eq!(answer["loaded"][0]["fields"]["widths"][field.as_str()], json!(fields.iter().find(|f| f.field_id == field_id).unwrap().width));
     assert_eq!(answer["loaded"][0]["fields"]["widths"][field.as_str()], 333);
@@ -81,7 +81,7 @@ fn column_layout_changes_are_in_the_replica_receipt() {
     let before = doc.version();
     doc.execute("table.views.patchField", json!({"tableId":1,"viewId":1,"fieldId":1,"position":2,"frozen":true})).unwrap();
     assert_ne!(doc.version(), before, "a public document write must have a replica change");
-    let mut again = TableDocument::open("Saved.ktable", &doc.sealed_save().unwrap()).unwrap();
+    let mut again = TableDocument::open("Saved.ktable", &doc.saved_bytes().unwrap()).unwrap();
     let fields = again.execute("table.views.listFields", json!({"tableId":1,"viewId":1})).unwrap();
     assert_eq!(fields["result"]["items"][0]["position"], 2);
     assert_eq!(fields["result"]["items"][0]["frozen"], true);

@@ -2,8 +2,10 @@
 //! with `KitEngine.invoke(name, …)`:
 //! `call` (one data-document request), `takeImported`, `gridOpen`, `gridSync` and `gridStats`
 //! (the editor's arrangement, `grid.rs`), and engine contract 2's replica members
-//! (`openWithReplica`, `snapshot`, `undo`, `redo` and the rest) in the shapes kition-sdk's
-//! `session::web` gives them, as Kition Sheet adds them by hand.
+//! (`openWithReplica`, `snapshot`, `undo`, `redo`, the object model's `modelDescribe` and
+//! `modelBatch`, a draft's `mergeChanges` and `compareChanges`, `restoreState`, `changesSince`,
+//! `modelReply` and the rest) in the shapes kition-sdk's `session::web` gives them: the table's
+//! replica lives in its file, not in a `KitSession`, so they are added by hand.
 
 use kition_kit::wasm_bindgen::prelude::*;
 
@@ -11,6 +13,11 @@ use crate::__kition_kit_export::WebDocument;
 
 fn error(message: String) -> JsError {
     JsError::new(&message)
+}
+
+/// An origin in the KDM's commit form, the JSON array `[kind, principal, label]`.
+fn origin_of(origin: &str) -> Result<kition_kdm::Origin, JsError> {
+    kition_kdm::Origin::decode(origin).ok_or_else(|| error(format!("origin is not [kind, principal, label]: {origin}")))
 }
 
 /// Registers a font file for the document's picture and grid (Kition platform E9; kit-editor
@@ -147,6 +154,57 @@ impl WebDocument {
     #[wasm_bindgen(js_name = canRedo)]
     pub fn can_redo(&self) -> bool {
         self.0.can_redo()
+    }
+
+    /// `model/describe` as JSON text.
+    #[wasm_bindgen(js_name = modelDescribe)]
+    pub fn model_describe(&mut self) -> Result<String, JsError> {
+        self.0.model_describe().map(|answer| answer.to_string()).map_err(error)
+    }
+
+    /// `model/batch`: the request and the answer as JSON text; a failure's message is the error's
+    /// JSON (`{"code", "index", "message"}`).
+    #[wasm_bindgen(js_name = modelBatch)]
+    pub fn model_batch(&mut self, request: &str) -> Result<String, JsError> {
+        let request: serde_json::Value = serde_json::from_str(request).map_err(|err| {
+            error(serde_json::json!({ "code": "invalid-op", "index": null, "message": format!("the batch is not JSON: {err}") }).to_string())
+        })?;
+        self.0.model_batch(&request).map(|answer| answer.to_string()).map_err(error)
+    }
+
+    /// A draft's changes taken in as one step of the person's undo, recorded as `origin` (`[kind,
+    /// principal, label]`): `{"damage", "summary"}` as JSON.
+    #[wasm_bindgen(js_name = mergeChanges)]
+    pub fn merge_changes(&mut self, changes: &[u8], origin: &str) -> Result<String, JsError> {
+        let origin = origin_of(origin)?;
+        self.0.merge_changes(changes, &origin).map(|answer| answer.to_string()).map_err(error)
+    }
+
+    /// What merging a draft's changes would change now, as `StateDiff` JSON; nothing changes.
+    #[wasm_bindgen(js_name = compareChanges)]
+    pub fn compare_changes(&self, changes: &[u8]) -> Result<String, JsError> {
+        self.0.compare_changes(changes).map(|answer| answer.to_string()).map_err(error)
+    }
+
+    /// Writes the state `snapshot` holds over the document as one change of `origin`; answers
+    /// the damage JSON.
+    #[wasm_bindgen(js_name = restoreState)]
+    pub fn restore_state(&mut self, snapshot: &[u8], origin: &str) -> Result<String, JsError> {
+        let origin = origin_of(origin)?;
+        self.0.restore_state(snapshot, &origin).map(|damage| damage.to_string()).map_err(error)
+    }
+
+    /// What changed since the version `since` (a receipt) as JSON.
+    #[wasm_bindgen(js_name = changesSince)]
+    pub fn changes_since(&self, since: &[u8]) -> String {
+        self.0.receipt_since(since).to_string()
+    }
+
+    /// An agent's reply (JSON text) with its object ids as tool ids.
+    #[wasm_bindgen(js_name = modelReply)]
+    pub fn model_reply(&self, value: &str) -> Result<String, JsError> {
+        let value: serde_json::Value = serde_json::from_str(value).map_err(|err| error(format!("the reply is not JSON: {err}")))?;
+        Ok(self.0.model_reply(&value).to_string())
     }
 
     /// The file holds its replica: there always is one.

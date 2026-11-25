@@ -58,7 +58,7 @@ fn it_never_reads_or_moves_what_the_picture_shows_and_answers_the_same_bytes() {
     assert_eq!(render(&mut doc, call.clone()), first, "what the picture shows changed a named view");
     assert_eq!(render(&mut doc, json!({})), default, "what the picture shows changed the default view");
     // Saved and opened again (another file's timestamps, another replica actor): the same bytes.
-    let mut reopened = TableDocument::open("Work.ktable", &doc.sealed_save().unwrap()).unwrap();
+    let mut reopened = TableDocument::open("Work.ktable", &doc.saved_bytes().unwrap()).unwrap();
     assert_eq!(render(&mut reopened, call), first, "a reopened file draws the same bytes");
 }
 

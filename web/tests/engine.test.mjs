@@ -12,11 +12,8 @@ const sdk = await import(pathToFileURL(path.join(engine, 'kition_table_kit.js'))
 await sdk.default({ module_or_path: fs.readFileSync(path.join(engine, 'kition_table_kit_bg.wasm')) })
 const { TableDocument } = sdk
 
-/** The file's bytes as a host saves them: sealed first. */
-const sealed = (doc) => {
-  doc.prepareSave()
-  return doc.save()
-}
+/** The file's bytes as a host saves them. */
+const saved = (doc) => doc.save()
 const call = (doc, method, params = {}) => JSON.parse(doc.call(method, JSON.stringify(params)))
 const firstTable = (doc) => call(doc, 'documents.get').result.tables[0]
 const titles = (doc) => {
@@ -45,7 +42,7 @@ test('a new table has the starter table, and a write answers its change', () => 
 test('saved bytes reopen with the edits, the same replica, and pass as a kit module document', () => {
   const doc = TableDocument.create('Tasks.ktable', 0, 0)
   add(doc, 'Ada')
-  const bytes = (doc.prepareSave(), doc.save())
+  const bytes = doc.save()
   assert.equal(doc.dirty, true)
   doc.markSaved()
   assert.equal(doc.dirty, false)
@@ -82,14 +79,13 @@ test('opening a file and the reads the editor makes on load leave it saved', () 
 })
 
 test('an edit makes the document unsaved, and undo back to the saved state saved again', () => {
-  const doc = TableDocument.open('Tasks.ktable', sealed(TableDocument.create('Tasks.ktable', 0, 0)))
+  const doc = TableDocument.open('Tasks.ktable', saved(TableDocument.create('Tasks.ktable', 0, 0)))
   add(doc, 'Ada')
   assert.equal(doc.dirty, true)
   call(doc, 'undo')
   assert.equal(doc.dirty, false)
   call(doc, 'redo')
   assert.equal(doc.dirty, true)
-  doc.prepareSave()
   doc.save()
   doc.markSaved()
   call(doc, 'undo')
@@ -99,31 +95,12 @@ test('an edit makes the document unsaved, and undo back to the saved state saved
   doc.free()
 })
 
-test('two copies of a file exchange their changes and converge', () => {
-  const bytes = sealed(TableDocument.create('Tasks.ktable', 0, 0))
-  const left = TableDocument.open('Tasks.ktable', bytes)
-  const right = TableDocument.open('Tasks.ktable', bytes)
-  add(left, 'Left')
-  add(right, 'Right')
-  const damage = JSON.parse(right.importChanges(left.exportChanges(right.version())))
-  assert.equal(damage.kind, 'full')
-  left.importChanges(right.exportChanges(left.version()))
-  assert.deepEqual(titles(left).sort(), ['Left', 'Right'])
-  assert.deepEqual(titles(right).sort(), ['Left', 'Right'])
-  const imported = JSON.parse(right.takeImported())
-  assert.equal(imported.length, 1)
-  assert.equal(imported[0].origin, 'import:sync')
-  assert.deepEqual(JSON.parse(right.takeImported()), [])
-  left.free()
-  right.free()
-})
-
 test('attachments are put into the file, read back, and synced to a copy beside their change', () => {
   const doc = TableDocument.create('Photos.ktable', 0, 0)
   add(doc, 'Beach')
   const table = firstTable(doc)
   const files = call(doc, 'fields.create', { tableId: table.id, title: 'Files', type: 'attachment' }).result.name
-  const bytes = (doc.prepareSave(), doc.save())
+  const bytes = doc.save()
   const left = TableDocument.open('Photos.ktable', bytes)
   const right = TableDocument.open('Photos.ktable', bytes)
   doc.free()
@@ -150,7 +127,7 @@ test('attachments are put into the file, read back, and synced to a copy beside 
   assert.deepEqual(call(right, 'records.list', { tableId: table.id }).result.items[0].values[files], [attachment])
   assert.deepEqual(new Uint8Array(Buffer.from(call(right, 'attachments.read', { hash }).result.data, 'base64')), picture)
   // Saved, the copy keeps the bytes.
-  const reopened = TableDocument.open('Photos.ktable', (right.prepareSave(), right.save()))
+  const reopened = TableDocument.open('Photos.ktable', right.save())
   assert.equal(call(reopened, 'attachments.read', { hash }).result.sizeBytes, picture.length)
   left.free()
   right.free()
@@ -165,7 +142,7 @@ test('a large table opens, pages, and edits within budget', () => {
     const records = Array.from({ length: 1000 }, (_, index) => ({ [primary]: `Item ${chunk * 1000 + index}` }))
     call(doc, 'transact', { ops: [{ op: 'records.create', tableId: table.id, at: null, records }] })
   }
-  const bytes = (doc.prepareSave(), doc.save())
+  const bytes = doc.save()
   doc.free()
   let started = performance.now()
   const opened = TableDocument.open('Large.ktable', bytes)
@@ -186,9 +163,10 @@ test('a large table opens, pages, and edits within budget', () => {
   call(opened, 'redo')
   const redoMs = performance.now() - started
   started = performance.now()
-  const saved = (opened.prepareSave(), opened.save())
+  const saved = opened.save()
   const saveMs = performance.now() - started
-  const peer = TableDocument.open('Large.ktable', saved)
+  // Another replica on the same line of changes (the KDM takes changes in order).
+  const peer = TableDocument.openWithReplica('Large.ktable', new Uint8Array(), opened.snapshot(), new Uint8Array())
   const since = opened.version()
   call(peer, 'transact', { ops: [{ op: 'cells.set', tableId: table.id, records: [{ rowKey: page.items[1].row_key, values: { [primary]: 'From the peer' } }] }] })
   started = performance.now()

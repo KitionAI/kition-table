@@ -13,8 +13,8 @@ use crate::blobs::{self, blob_hash_candidates};
 use crate::kdm::{schema, store};
 use crate::{Result, TableFile, TableFileError, file};
 
-/// The replica `bytes` (a `.ktable` file) embeds, as one KDM snapshot: the stored snapshot with
-/// the change rows after it imported, or `None` for an empty file (one made for the kit before it
+/// The replica `bytes` (a `.ktable` file) embeds, as one KDM snapshot: a saved file's content
+/// (`content.json`), or the stored snapshot with the change rows after it imported, or `None` for an empty file (one made for the kit before it
 /// saved a table there). Refuses bytes that are no `.ktable` file this build reads (another
 /// schema version), a broken change log, and a replica of another document than the one the file
 /// records. Never writes.
@@ -31,21 +31,21 @@ pub fn embedded_replica(bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     {
         return Err(TableFileError::invalid(format!("the file records document {recorded}, its replica is document {}", replica.doc_id())));
     }
-    let changes: i64 = conn.query_row("SELECT COUNT(*) FROM kition_kdm_changes", [], |row| row.get(0))?;
+    let (stored, changes) = store::stored(&conn)?;
     if changes == 0 {
-        return Ok(Some(conn.query_row("SELECT snapshot FROM kition_kdm WHERE id = 1", [], |row| row.get(0))?));
+        return Ok(Some(stored));
     }
     Ok(Some(replica.snapshot()?))
 }
 
 /// `bytes` (a `.ktable` file) holding the document `snapshot` instead of its own (`document.fork`):
 /// the file a new document made of `snapshot` is ([`TableFile::create_from_replica_in_memory`]:
-/// the snapshot as the stored replica with no change rows, the relational tables projected from
-/// it, `document_id` and the recorded docId the snapshot's), with the blobs of `bytes` its records
-/// name. Nothing else of the source is carried over: no change rows, origin log, record history or
-/// change log, no deleted rows of the projection, no blob no record names, and no free page
-/// holding any of them (the database is vacuumed), so no earlier identity or history stays in the
-/// file. Refuses bytes that are no `.ktable` file and a snapshot that is no table document.
+/// the relational tables projected from it, `document_id` and the recorded docId the snapshot's),
+/// with the blobs of `bytes` its records name, saved as a person's file
+/// ([`TableFile::content_bytes`]: its content alone). Nothing else of the source is carried over:
+/// no change rows, origin log, record history or change log, no deleted rows of the projection, no
+/// blob no record names, and no free page holding any of them, so no earlier identity or history
+/// stays in the file. Refuses bytes that are no `.ktable` file and a snapshot that is no table document.
 pub fn replace_replica(bytes: &[u8], snapshot: &[u8]) -> Result<Vec<u8>> {
     let source = read_only(bytes)?;
     file::check_version(&source)?;
@@ -77,8 +77,7 @@ pub fn replace_replica(bytes: &[u8], snapshot: &[u8]) -> Result<Vec<u8>> {
             )?;
         }
     }
-    fork.conn.execute_batch("VACUUM")?;
-    fork.to_bytes()
+    fork.content_bytes()
 }
 
 /// `bytes` as a read-only database in memory.

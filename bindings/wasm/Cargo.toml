@@ -49,8 +49,6 @@ wasm-opt = ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int", 
 image = { version = "0.25", default-features = false, features = ["png"] }
 # GIF attachments for the thumbnail tests (tests/thumbnails.rs).
 gif = { workspace = true }
-# Two to five replicas driven through the engine's commands (tests/convergence.rs).
-kition-convergence = { workspace = true }
 jsonschema = { version = "0.58", default-features = false }
 # Counted ids for the deterministic save test and the showcase sample (KITION_REPRODUCIBLE_IDS):
 # the kit's own and the KDM's, in tests and examples only.

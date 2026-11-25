@@ -109,12 +109,13 @@ export function refusalMessage(error: unknown): unknown {
 
 /**
  * Where a record's history before this session comes from (Kit UI protocol 7, 7m): `kept`, the
- * host keeps the document's replica (its history; without it only this session's changes are
- * known); `checkpoints`, the host's checkpoints, oldest first, which cut that history.
+ * host keeps the document's replica; `checkpoints`, the host's checkpoints, oldest first, each
+ * with its snapshot (base64): the history before this session is what differs between
+ * consecutive ones.
  */
 export type RecordHistorySource = {
   kept?: boolean
-  checkpoints?: () => Promise<Array<{ version: string; time: number; author?: string }> | null>
+  checkpoints?: () => Promise<Array<{ version: string; time: number; author?: string; snapshot: string }> | null>
 }
 
 /** `params` without `documentId`: the engine holds one document. */
@@ -210,8 +211,8 @@ export function createWorkerTableDataSource(engine: TableEngineAccess, path: str
       update: (params) => call('records.update', own(params)),
       delete: (params) => call('records.delete', own(params)),
       history: async (params) => {
-        // The host's checkpoints cut the history before this session; a host that answers none
-        // (or fails) leaves it one stretch.
+        // The host's checkpoints tell the history before this session; a host that answers none
+        // (or fails) leaves only this session's.
         const checkpoints = (await history.checkpoints?.().catch(() => null)) ?? null
         const answer = await call<RecordHistoryResponse>('records.history', { ...own(params), ...(checkpoints?.length ? { checkpoints } : {}) })
         return { ...answer, kept: history.kept ?? false }
