@@ -917,8 +917,8 @@ fn shared() -> (Replica, ObjectId, TableIds) {
 fn imported<R>(replica: &mut Replica, edit: impl FnOnce(&mut Replica) -> R) -> R {
     let mut peer = ok(replica.fork(ActorId::random()));
     let value = edit(&mut peer);
-    let changes = ok(peer.export_changes(&replica.version()));
-    ok(replica.import_changes(&changes));
+    let changes = peer.export_changes(&replica.version()).unwrap_or_else(|err| panic!("the peer's export: {err}"));
+    replica.import_changes(&changes).unwrap_or_else(|err| panic!("the import of the peer's changes: {err}"));
     value
 }
 
@@ -1148,8 +1148,10 @@ fn outside_write(replica: &mut Replica, rng: &mut Rng, base: &ObjectId) {
     if from == to {
         return;
     }
-    let name = ok(replica.get(&from, "name"));
-    ok(replica.transact(&Origin::new(OriginKind::Import, "file"), |tx| tx.set(&to, "name", name)));
+    let name = replica.get(&from, "name").unwrap_or_else(|err| panic!("outside write, reading {from}: {err}"));
+    replica
+        .transact(&Origin::new(OriginKind::Import, "file"), |tx| tx.set(&to, "name", name))
+        .unwrap_or_else(|err| panic!("outside write, writing {to}: {err}"));
 }
 
 /// Random local writes, imports, merged drafts, outside writes of the file, undos, and redos on a
@@ -1169,8 +1171,10 @@ fn run_incremental_matches_full(seed: u64, steps: usize) {
     for step in 0..steps {
         let start = target.version();
         target.take_changed();
-        let before = ok(index.before(&target));
-        match rng.below(9) {
+        let before = index.before(&target).unwrap_or_else(|err| panic!("seed {seed}, step {step} (index): {err}"));
+        let kind = rng.below(9);
+        let at = |what: &str| format!("seed {seed}, step {step} ({kind}, {what})");
+        match kind {
             0..=2 => {
                 random_op(&mut target, &mut rng, &base);
             }
@@ -1180,26 +1184,27 @@ fn run_incremental_matches_full(seed: u64, steps: usize) {
             4 => {
                 random_op(&mut draft, &mut rng, &base);
                 if rng.below(3) == 0 {
-                    let changes = ok(draft.export_changes(&draft_base));
+                    let changes = draft.export_changes(&draft_base).unwrap_or_else(|err| panic!("{}: {err}", at("draft export")));
                     // A refused merge (`stale`) changes nothing.
                     let _ = target.merge_changes(&changes, &person());
-                    draft = ok(target.fork(ActorId::random()));
+                    draft = target.fork(ActorId::random()).unwrap_or_else(|err| panic!("{}: {err}", at("fork")));
                     draft_base = target.version();
                 }
             }
             5 => outside_write(&mut target, &mut rng, &base),
             6 | 7 => {
-                ok(target.undo());
+                target.undo().unwrap_or_else(|err| panic!("{}: {err}", at("undo")));
             }
             _ => {
-                ok(target.redo());
+                target.redo().unwrap_or_else(|err| panic!("{}: {err}", at("redo")));
             }
         }
         let changed = target.take_changed();
         let mut full = ok(Replica::load(schema(), &ok(target.snapshot()), ActorId::random()));
-        let full_wrote = ok(repair::run(&mut full, &changed));
+        let full_wrote = repair::run(&mut full, &changed).unwrap_or_else(|err| panic!("{}: {err}", at("full repair")));
         index.advance(&start, &target, &changed);
-        let (wrote, _) = ok(repair::run_since(&mut target, &changed, &before, &mut index));
+        let (wrote, _) =
+            repair::run_since(&mut target, &changed, &before, &mut index).unwrap_or_else(|err| panic!("{}: {err}", at("incremental repair")));
         assert_eq!(wrote, full_wrote, "seed {seed}, step {step}: the incremental repair wrote as much as a full one");
         assert_eq!(ok(target.state_json()), ok(full.state_json()), "seed {seed}, step {step}: the incremental repair wrote what a full one wrote");
         if wrote {
