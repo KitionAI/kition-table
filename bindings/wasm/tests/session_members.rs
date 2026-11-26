@@ -255,3 +255,81 @@ fn a_restored_state_keeps_the_ids_and_undoes_as_one_step() {
     let other = TableDocument::create(FILE, 0, 0).unwrap();
     assert!(doc.restore_state(&other.snapshot().unwrap(), &origin).is_err(), "another document's state is refused");
 }
+
+/// The id and row key of the record of table 1 titled `title`.
+fn record_titled(doc: &mut TableDocument, title: &str) -> (Value, String) {
+    let page = run(doc, "record.list", json!({ "tableId": 1 }));
+    let record = page["items"].as_array().unwrap().iter().find(|record| record["values"]["title"] == title).unwrap().clone();
+    (record["id"].clone(), record["row_key"].as_str().unwrap().to_owned())
+}
+
+#[test]
+fn a_draft_the_repair_cancels_records_nothing_and_undo_takes_back_the_person_s_step() {
+    let mut doc = document();
+    run(
+        &mut doc,
+        "field.add",
+        json!({ "tableId": 1, "name": "related", "title": "Related", "type": "link_to_record", "options": { "target_table_id": 1, "allow_multiple": true } }),
+    );
+    add(&mut doc, "Target");
+    let (kept, _) = record_titled(&mut doc, "Kept");
+    let (target, target_key) = record_titled(&mut doc, "Target");
+    // An agent's draft links the kept record to the target.
+    let (mut draft, base) = draft(&doc);
+    run(&mut draft, "record.set", json!({ "tableId": 1, "recordId": kept, "values": { "related": [target_key] } }));
+    assert_eq!(draft.file().replica().objects_of_type("Link").len(), 1, "the draft made one link");
+    let changes = draft.export_changes(&base).unwrap();
+    // Meanwhile the person deletes the target: the repair deletes a link whose end is gone, so
+    // merging the draft leaves the document exactly as it is.
+    let (before_delete, before_delete_view) = (state_hash(&doc), engine_view(&mut doc));
+    run(&mut doc, "record.delete", json!({ "tableId": 1, "recordId": target }));
+    doc.saved_bytes().unwrap();
+    doc.mark_saved();
+    let (hash, view, version, revision) = (state_hash(&doc), engine_view(&mut doc), doc.version(), doc.revision());
+    let depth = doc.file().replica().undo_depth(UndoScope::Person);
+    let answer = doc.merge_changes(&changes, &Origin::agent("helper")).unwrap();
+    assert!(answer["scope"].is_null(), "a merge that changes nothing records no step: {answer}");
+    assert_eq!(answer["damage"]["kind"], "none", "{answer}");
+    assert_eq!(state_hash(&doc), hash, "the state is unchanged");
+    assert_eq!(engine_view(&mut doc), view, "and the engine's view of it");
+    assert_eq!(doc.version(), version, "no change is logged");
+    assert_eq!(doc.revision(), revision, "the revision stays");
+    assert_eq!(doc.file().replica().undo_depth(UndoScope::Person), depth, "no undo step is recorded");
+    assert!(!doc.dirty(), "the kit's own history has no step for it: the document is still saved");
+    assert!(doc.file().replica().objects_of_type("Link").is_empty());
+    // The next undo takes back the person's deletion, exactly.
+    let (done, _) = doc.undo().unwrap();
+    assert!(done);
+    assert_eq!(state_hash(&doc), before_delete, "the undo takes back the person's deletion exactly");
+    assert_eq!(engine_view(&mut doc), before_delete_view);
+    assert_eq!(doc.file().replica().undo_depth(UndoScope::Person), depth - 1);
+    assert!(doc.dirty());
+}
+
+#[test]
+fn a_merge_and_its_repair_undo_as_one_step_to_the_exact_state_before() {
+    let mut doc = document();
+    let (mut draft, base) = draft(&doc);
+    run(&mut draft, "field.add", json!({ "tableId": 1, "title": "Reviewer", "type": "text" }));
+    let changes = draft.export_changes(&base).unwrap();
+    // Meanwhile the document gets a field of the same name: the repair renames one `reviewer_2`.
+    run(&mut doc, "field.add", json!({ "tableId": 1, "title": "Reviewer", "type": "text" }));
+    let (before, before_view, before_names) = (state_hash(&doc), engine_view(&mut doc), field_names(&mut doc));
+    assert!(!before_names.iter().any(|name| name == "reviewer_2"), "{before_names:?}");
+    let depth = doc.file().replica().undo_depth(UndoScope::Person);
+    let answer = doc.merge_changes(&changes, &Origin::agent("helper")).unwrap();
+    assert_eq!(answer["scope"], "person", "{answer}");
+    let names = field_names(&mut doc);
+    assert!(names.iter().any(|name| name == "reviewer") && names.iter().any(|name| name == "reviewer_2"), "{names:?}");
+    assert_eq!(doc.file().replica().undo_depth(UndoScope::Person), depth + 1, "the merge and its repair are one step");
+    let (merged, merged_view) = (state_hash(&doc), engine_view(&mut doc));
+    let (done, _) = doc.undo().unwrap();
+    assert!(done);
+    assert_eq!(state_hash(&doc), before, "one undo of the person restores the exact state before the merge");
+    assert_eq!(engine_view(&mut doc), before_view);
+    assert_eq!(field_names(&mut doc), before_names, "no `reviewer_2` is left behind");
+    let (redone, _) = doc.redo().unwrap();
+    assert!(redone);
+    assert_eq!(state_hash(&doc), merged, "redo restores the merged state exactly");
+    assert_eq!(engine_view(&mut doc), merged_view);
+}

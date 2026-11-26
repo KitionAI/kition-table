@@ -78,7 +78,7 @@ impl TableFile {
     /// [`TableFile::commit`] with another origin.
     pub(crate) fn commit_as<R>(&mut self, origin: &Origin, f: impl FnOnce(&mut Tx<'_>) -> Result<R>) -> Result<(R, TableChange)> {
         let label = origin.encode();
-        self.write(&label, false, |replica| model::transact(replica, origin, f)).map(|(value, change, _)| (value, change))
+        self.write(&label, false, no_step, |replica| model::transact(replica, origin, f)).map(|(value, change, _)| (value, change))
     }
 
     /// The history label of this handle's writes: the principal, or nothing for `system` writes
@@ -88,9 +88,18 @@ impl TableFile {
     }
 
     /// Runs `step` as one write (see the module documentation); with `repair_after`, what it
-    /// changed is repaired before it is stored. Answers the step's value, what the write
-    /// projected, and whether the repair wrote anything.
-    fn write<R>(&mut self, label: &str, repair_after: bool, step: impl FnOnce(&mut Replica) -> Result<R>) -> Result<(R, TableChange, bool)> {
+    /// changed is repaired before it is stored: in the undo step the step recorded when
+    /// `in_step` finds one in its value (a draft's merge: [`repair::run_since_in_step`], the
+    /// value's scope then the step's after the repair), else in a `system:repair` change of its
+    /// own. Answers the step's value, what the write projected, and whether the repair wrote
+    /// anything.
+    fn write<R>(
+        &mut self,
+        label: &str,
+        repair_after: bool,
+        in_step: InStep<R>,
+        step: impl FnOnce(&mut Replica) -> Result<R>,
+    ) -> Result<(R, TableChange, bool)> {
         self.writable()?;
         if self.stale {
             self.reload()?;
@@ -110,7 +119,8 @@ impl TableFile {
                 // the handle left it, so the next write resyncs.
                 return Ok(None);
             }
-            let written = write_in(&tx, &mut self.replica, &mut self.repair_index, &start, &since, &head, label, &actor, now, repair_after, step)?;
+            let written =
+                write_in(&tx, &mut self.replica, &mut self.repair_index, &start, &since, &head, label, &actor, now, repair_after, in_step, step)?;
             tx.commit()?;
             Ok(Some(written))
         })();
@@ -155,17 +165,21 @@ impl TableFile {
     }
 
     /// Takes a draft's changes (made on another replica of this document, forked from it) in as
-    /// one transaction of `origin` (`Replica::merge_changes`: one undo step of the person unless
-    /// `origin` is `system` or `import`), repaired, stored and projected like every write. A draft
-    /// that changed a field this document changed since it was made, or an object this document
-    /// deleted, is refused ([`TableFileError::Kdm`], `stale`) and changes nothing. Answers the change
-    /// and the undo scope the merge's step was recorded in (`DraftMerge::scope`: the person's, even
-    /// for an agent's draft; `None` when no step was recorded).
+    /// one transaction of `origin` (`Replica::merge_changes_repaired`: one undo step of the person
+    /// unless `origin` is `system` or `import`), stored and projected like every write. This kit's
+    /// repair runs in the merge's own change (a field renamed `name_2`, a link whose end is gone
+    /// deleted), so one undo of the person takes the merge and its repair back to the exact state
+    /// before it, and a merge the repair takes back entirely records nothing (no change, the
+    /// version stays, no undo step). A draft that changed a field this document changed since it
+    /// was made, or an object this document deleted, is refused ([`TableFileError::Kdm`], `stale`)
+    /// and changes nothing. Answers the change and the undo scope the merge's step was recorded in
+    /// (`DraftMerge::scope`: the person's, even for an agent's draft; `None` when no step was
+    /// recorded).
     pub fn merge_replica_changes(&mut self, changes: &[u8], origin: &Origin) -> Result<(TableChange, Option<UndoScope>)> {
         self.writable()?;
         let label = origin.encode();
         let previous = std::mem::replace(&mut self.origin, origin.clone());
-        let written = self.write(&label, true, |replica| Ok(replica.merge_changes(changes, origin)?.scope));
+        let written = self.write(&label, true, merge_step, |replica| Ok(replica.merge_changes_repaired(changes, origin, repair_merged)?.scope));
         self.origin = previous;
         written.map(|(scope, change, _)| (change, scope))
     }
@@ -392,7 +406,7 @@ impl TableFile {
         self.writable()?;
         let label = self.origin.clone().with_label("undo").encode();
         // An undo can bring back what others changed meanwhile (a name since taken): repaired.
-        let (outcome, change, _) = self.write(&label, true, |replica| Ok(replica.undo_in(scope)?))?;
+        let (outcome, change, _) = self.write(&label, true, no_step, |replica| Ok(replica.undo_in(scope)?))?;
         self.passed = outcome.passed.len();
         Ok((outcome.is_done(), change))
     }
@@ -406,7 +420,7 @@ impl TableFile {
     pub fn redo_in(&mut self, scope: UndoScope) -> Result<(bool, TableChange)> {
         self.writable()?;
         let label = self.origin.clone().with_label("redo").encode();
-        let (outcome, change, _) = self.write(&label, true, |replica| Ok(replica.redo_in(scope)?))?;
+        let (outcome, change, _) = self.write(&label, true, no_step, |replica| Ok(replica.redo_in(scope)?))?;
         self.passed = outcome.passed.len();
         Ok((outcome.is_done(), change))
     }
@@ -476,7 +490,7 @@ impl TableFile {
             let bytes = self.replica.export_changes(&theirs)?;
             let import = Origin::new(OriginKind::Import, "import");
             fresh.origin = import.clone();
-            let merged = fresh.write(&import.encode(), false, |replica| {
+            let merged = fresh.write(&import.encode(), false, no_step, |replica| {
                 let changed = replica.import_changes(&bytes)?;
                 repair::run(replica, &changed)?;
                 Ok(())
@@ -545,7 +559,7 @@ impl TableFile {
         self.writable()?;
         let import = Origin::new(OriginKind::Import, IMPORT_PRINCIPAL);
         let previous = std::mem::replace(&mut self.origin, import.clone());
-        let written = self.write(&import.encode(), true, |replica| {
+        let written = self.write(&import.encode(), true, no_step, |replica| {
             replica.import_changes(changes)?;
             Ok(())
         });
@@ -568,6 +582,20 @@ pub struct ReplicaImport {
     pub repaired: bool,
 }
 
+/// Where a write's value holds the undo scope its step recorded, for the repair after it to join
+/// that step ([`TableFile::write`]): `None` for a write whose repair is a change of its own.
+type InStep<R> = fn(&mut R) -> Option<&mut Option<UndoScope>>;
+
+/// A write whose repair, if any, is a `system:repair` change of its own.
+fn no_step<R>(_: &mut R) -> Option<&mut Option<UndoScope>> {
+    None
+}
+
+/// A draft's merge: its value is the scope of the step it recorded.
+fn merge_step(scope: &mut Option<UndoScope>) -> Option<&mut Option<UndoScope>> {
+    Some(scope)
+}
+
 /// The body of one write, inside its SQL transaction, after the catch-up: `start` is the
 /// replica's version before the catch-up, `since` and `head` are what the store holds. Answers
 /// the step's value, what the projection changed, whether the repair wrote anything, and the
@@ -575,7 +603,8 @@ pub struct ReplicaImport {
 ///
 /// The repair after the step covers only what the step changed ([`repair::run_since`]): the state
 /// before it is repaired, since every stored write is (local model writes keep the rules, and
-/// imports, undo, and redo are repaired here).
+/// imports, undo, and redo are repaired here). After a step that recorded an undo step `in_step`
+/// names, the repair joins that step ([`repair::run_since_in_step`]).
 #[allow(clippy::too_many_arguments)]
 fn write_in<R>(
     conn: &Connection,
@@ -588,6 +617,7 @@ fn write_in<R>(
     actor: &str,
     now: i64,
     repair_after: bool,
+    in_step: InStep<R>,
     step: impl FnOnce(&mut Replica) -> Result<R>,
 ) -> Result<(R, TableChange, bool, store::Head)> {
     // Changes imported by the catch-up were projected by the handle that stored them; projecting
@@ -596,13 +626,21 @@ fn write_in<R>(
     index.advance(start, replica, &structural(&changed));
     let before = if repair_after { Some(index.before(replica)?) } else { None };
     let stepped_from = replica.version();
-    let value = step(replica)?;
+    let mut value = step(replica)?;
     let stepped = replica.take_changes();
     let stepped_structure = structural(&stepped);
     index.advance(&stepped_from, replica, &stepped_structure);
     let mut repaired = false;
     if let Some(before) = before {
-        let (wrote, fixed) = repair::run_since(replica, &stepped_structure, &before, index)?;
+        let scope = in_step(&mut value);
+        let (wrote, fixed) = match (scope.as_deref().copied().flatten(), scope) {
+            (Some(step), Some(scope)) => {
+                let (wrote, fixed, kept) = repair::run_since_in_step(replica, &stepped_structure, &before, index, step)?;
+                *scope = kept;
+                (wrote, fixed)
+            }
+            _ => repair::run_since(replica, &stepped_structure, &before, index)?,
+        };
         repaired = wrote;
         changed.extend(Changes::from(fixed));
     }
@@ -620,9 +658,9 @@ fn write_in<R>(
     Ok((value, change, repaired, store::head(conn)?))
 }
 
-/// This kit's repair of a draft merged into a copy of the replica, for a draft's preview: the
-/// full pass ([`repair::repair`]), which writes what the incremental pass after a stored merge
-/// ([`repair::run_since`]) writes, the document before the merge being repaired.
+/// This kit's repair of a draft's merge, in the merge's own change: the full pass
+/// ([`repair::repair`]), both for a draft's preview (on a copy of the replica) and for the merge
+/// itself ([`TableFile::merge_replica_changes`]), so the preview is what the merge gives.
 fn repair_merged(tx: &mut Tx<'_>, changed: &BTreeSet<ObjectId>) -> kition_kdm::Result<()> {
     repair::repair(tx, changed).map(|_| ()).map_err(|err| kition_kdm::KdmError::Engine(err.to_string()))
 }

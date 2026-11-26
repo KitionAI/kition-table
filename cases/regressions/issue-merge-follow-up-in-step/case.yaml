@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-merge-follow-up-in-step
+feature: table.collab.drafts
+intent: >-
+  Every write the table makes because of a draft's merge is in the merge's undo step: a draft adds
+  a field titled "Reviewer" while the document adds one of the same name; after the merge one is
+  `reviewer_2`, the merge and its repair are one step of the person, one Undo restores the exact
+  state hash from before the merge (no `reviewer_2` left behind) and Redo the exact merged state.
+  Before, the repair was a separate `system:repair` change after the merge (kition-sdk 6a57d68,
+  Replica::merge_changes_repaired and Replica::transact_in_step).
+layer: gate
+source:
+  kind: issue
+  from: kition-sdk regressions/issue-merge-follow-up-in-step
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: session_members }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-26"

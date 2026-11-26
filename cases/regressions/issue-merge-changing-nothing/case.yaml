@@ -1,0 +1,22 @@
+format: 1
+id: regressions/issue-merge-changing-nothing
+feature: table.collab.drafts
+intent: >-
+  A draft whose merge the table's repair takes back entirely records nothing: an agent's draft
+  links a record to one the person deleted meanwhile, the repair deletes the link whose end is
+  gone, so the state hash, the version, the revision, undo_depth and the kit's own history (the
+  document stays saved) are unchanged, mergeChanges answers scope null and no damage, and the next
+  Undo takes back the person's deletion exactly. The table's repair runs in the merge's own change
+  (Replica::merge_changes_repaired, kition-sdk 6a57d68).
+layer: gate
+source:
+  kind: issue
+  from: kition-sdk regressions/issue-merge-changing-nothing
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: session_members }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-26"

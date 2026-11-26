@@ -23,7 +23,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use kition_kdm::{KdmError, ObjectId, Origin, Replica, Tx};
+use kition_kdm::{KdmError, ObjectId, Origin, Replica, Tx, UndoScope};
 use serde_json::{Map, Value, json};
 
 use super::cells::{self, CellKind, Encoder, Texts};
@@ -85,6 +85,24 @@ pub enum Anchor {
 pub fn transact<R>(replica: &mut Replica, origin: &Origin, f: impl FnOnce(&mut Tx<'_>) -> Result<R>) -> Result<R> {
     let mut failure = None;
     let outcome = replica.transact(origin, |tx| {
+        f(tx).map_err(|err| {
+            failure = Some(err);
+            KdmError::Engine("the transaction was aborted".into())
+        })
+    });
+    outcome.map_err(|err| failure.take().unwrap_or_else(|| err.into()))
+}
+
+/// [`transact`] joining the top undo step of `scope` ([`Replica::transact_in_step`]): answers also
+/// the scope the step is in afterwards (`None`: the step now changes nothing and was dropped).
+pub fn transact_in_step<R>(
+    replica: &mut Replica,
+    scope: UndoScope,
+    origin: &Origin,
+    f: impl FnOnce(&mut Tx<'_>) -> Result<R>,
+) -> Result<(R, Option<UndoScope>)> {
+    let mut failure = None;
+    let outcome = replica.transact_in_step(scope, origin, |tx| {
         f(tx).map_err(|err| {
             failure = Some(err);
             KdmError::Engine("the transaction was aborted".into())

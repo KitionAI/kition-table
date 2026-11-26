@@ -28,7 +28,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use kition_kdm::{ObjectId, Origin, Replica, Tx, Version};
+use kition_kdm::{ObjectId, Origin, Replica, Tx, UndoScope, Version};
 use serde_json::{Value, json};
 
 use super::model::{self, BASE, DASHBOARD, FIELD, LINK, LinkEnds, RECORD, TABLE, VIEW, all_links, is_a, is_single_target, string, unique_name};
@@ -242,6 +242,30 @@ pub fn run_since(
     let repaired = replica.take_changed();
     index.advance(&from, replica, &repaired);
     Ok((wrote, repaired))
+}
+
+/// [`run_since`] after a change that recorded an undo step in `scope` (a draft's merge, right
+/// after it): the repair's writes join that step ([`Replica::transact_in_step`]) instead of being
+/// a `system:repair` change of their own, so one undo takes back the change and its repair
+/// together, to the exact state before the change, and one redo brings back both. Answers also
+/// the scope the step is in after the repair: `scope`, or `None` when the repair took back all the
+/// step did and the step was dropped.
+pub fn run_since_in_step(
+    replica: &mut Replica,
+    changed: &BTreeSet<ObjectId>,
+    before: &Before,
+    index: &mut RepairIndex,
+    scope: UndoScope,
+) -> Result<(bool, BTreeSet<ObjectId>, Option<UndoScope>)> {
+    if changed.is_empty() {
+        return Ok((false, BTreeSet::new(), Some(scope)));
+    }
+    index.ensure(replica);
+    let from = replica.version();
+    let (wrote, kept) = model::transact_in_step(replica, scope, &Origin::system("repair"), |tx| repair_since(tx, changed, before, index))?;
+    let repaired = replica.take_changed();
+    index.advance(&from, replica, &repaired);
+    Ok((wrote, repaired, kept))
 }
 
 fn repair_since(tx: &mut Tx<'_>, changed: &BTreeSet<ObjectId>, before: &Before, index: &mut RepairIndex) -> Result<bool> {

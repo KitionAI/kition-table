@@ -25,17 +25,17 @@ kition-table-picture = { path = "crates/view/picture" }
 
 # kition-sdk, pinned by commit (one revision for every crate of it): the kit contract, the headless
 # host, and the Kit Data Model.
-kition-kit = { git = "https://github.com/KitionAI/kition-sdk", rev = "7466039af21eefaa6bdee97d1efca00d5ff8ce30" }
-kition-headless = { git = "https://github.com/KitionAI/kition-sdk", rev = "7466039af21eefaa6bdee97d1efca00d5ff8ce30" }
-kition-kdm = { git = "https://github.com/KitionAI/kition-sdk", rev = "7466039af21eefaa6bdee97d1efca00d5ff8ce30" }
+kition-kit = { git = "https://github.com/KitionAI/kition-sdk", rev = "6a57d68f3555f24c14def0ac57d14646bf95aa01" }
+kition-headless = { git = "https://github.com/KitionAI/kition-sdk", rev = "6a57d68f3555f24c14def0ac57d14646bf95aa01" }
+kition-kdm = { git = "https://github.com/KitionAI/kition-sdk", rev = "6a57d68f3555f24c14def0ac57d14646bf95aa01" }
 # The Kit Protocol server types: the headless executable's `document.identity` error, and what the
 # headless tests drive.
-kition-kit-server = { git = "https://github.com/KitionAI/kition-sdk", rev = "7466039af21eefaa6bdee97d1efca00d5ff8ce30" }
+kition-kit-server = { git = "https://github.com/KitionAI/kition-sdk", rev = "6a57d68f3555f24c14def0ac57d14646bf95aa01" }
 # A host of kit processes (`HeadlessKit`), for the `document.identity` tests (tests only).
-kition-kit-host = { git = "https://github.com/KitionAI/kition-sdk", rev = "7466039af21eefaa6bdee97d1efca00d5ff8ce30" }
+kition-kit-host = { git = "https://github.com/KitionAI/kition-sdk", rev = "6a57d68f3555f24c14def0ac57d14646bf95aa01" }
 # The kits' MCP tools (`kition-kits-mcp`'s library), for the end-to-end agent tests (tests only).
-kition-kits = { git = "https://github.com/KitionAI/kition-sdk", rev = "7466039af21eefaa6bdee97d1efca00d5ff8ce30" }
-kition-env = { git = "https://github.com/KitionAI/kition-sdk", rev = "7466039af21eefaa6bdee97d1efca00d5ff8ce30" }
+kition-kits = { git = "https://github.com/KitionAI/kition-sdk", rev = "6a57d68f3555f24c14def0ac57d14646bf95aa01" }
+kition-env = { git = "https://github.com/KitionAI/kition-sdk", rev = "6a57d68f3555f24c14def0ac57d14646bf95aa01" }
 
 # Tessera's icons (the editor's own), as SVG path data the picture strokes; pinned by commit.
 kition-tessera-icons = { git = "https://github.com/KitionAI/kition-tessera", rev = "832f61a5e4b4ac1a5083620bfdeeb92a86560694" }
