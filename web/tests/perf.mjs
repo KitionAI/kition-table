@@ -334,7 +334,7 @@ try {
 {
   const cost = spawnSync(process.execPath, [path.join(REPO, 'web', 'tests', 'historyCost.mjs'), fixture, '3'], { encoding: 'utf8', timeout: 600_000 })
   for (const line of `${cost.stdout ?? ''}`.trim().split('\n').filter(Boolean)) console.log(`INFO record history - ${line}`)
-  if (cost.status !== 0) console.log(`INFO record history - stopped (${cost.signal ?? `exit ${cost.status}`}): ${`${cost.stderr ?? ''}`.trim().split('\n').slice(-3).join(' | ')}`)
+  if (cost.status !== 0) console.log(`INFO record history - stopped (${cost.signal ?? `exit ${cost.status}`}): ${`${cost.stderr ?? ''}`.trim().split('\n').filter((line) => line.trim()).slice(-8).join(' | ')}`)
 }
 const report = { browser: which, version, tier, relax: k, rows, speedLines, informational, results }
 if (process.env.PERF_OUT) fs.writeFileSync(process.env.PERF_OUT, JSON.stringify(report, null, 1))
