@@ -219,11 +219,11 @@ fn a_draft_s_preview_runs_the_repair_that_merging_it_runs() {
     run(&mut draft, "field.add", json!({ "tableId": 1, "title": "Reviewer", "type": "text" }));
     let changes = draft.export_changes(&base).unwrap();
     // Meanwhile the document gets a field of the same name: after the merge the repair renames
-    // the one with the higher id (`Reviewer_2`).
+    // the one with the higher id (`reviewer_2`).
     run(&mut doc, "field.add", json!({ "tableId": 1, "title": "Reviewer", "type": "text" }));
     let unrepaired = doc.file().replica().merged_state(&changes).unwrap();
     let previewed = doc.file().merged_replica_state(&changes).unwrap();
-    assert_ne!(previewed, unrepaired, "the merge leaves two fields named `Reviewer`, which the repair renames");
+    assert_ne!(previewed, unrepaired, "the merge leaves two fields named `reviewer`, which the repair renames");
     let version = doc.version();
     let preview = doc.compare_changes(&changes).unwrap();
     assert_eq!(doc.version(), version, "comparing changes nothing");
@@ -231,7 +231,7 @@ fn a_draft_s_preview_runs_the_repair_that_merging_it_runs() {
     assert_eq!(doc.file().replica().state_json().unwrap(), previewed, "the preview's merged state is the state after merging");
     assert_eq!(answer["summary"], preview, "the comparison named what the merge and its repair did: {answer}");
     let names = field_names(&mut doc);
-    assert!(names.iter().any(|name| name == "Reviewer") && names.iter().any(|name| name == "Reviewer_2"), "{names:?}");
+    assert!(names.iter().any(|name| name == "reviewer") && names.iter().any(|name| name == "reviewer_2"), "{names:?}");
 }
 
 #[test]
