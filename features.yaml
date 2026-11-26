@@ -123,8 +123,8 @@ features:
     dimension: [collab, function]
     priority: P1
     status: has
-    paths: [bindings/wasm/src/web.rs, bindings/wasm/src/lib.rs, bindings/wasm/src/model.rs, crates/engine/file/src/kdm/commit.rs, bindings/wasm/tests/session_members.rs, web/package.json]
-    cases: [table.collab.drafts/engine-members, regressions/issue-draft-preview-repaired, regressions/issue-merge-changing-nothing, regressions/issue-merge-follow-up-in-step]
+    paths: [bindings/wasm/src/web.rs, bindings/wasm/src/lib.rs, bindings/wasm/src/model.rs, crates/engine/file/src/kdm/commit.rs, bindings/wasm/tests/session_members.rs, web/package.json, web/tests/drafts.mjs]
+    cases: [table.collab.drafts/engine-members, table.collab.drafts/editor, regressions/issue-draft-preview-repaired, regressions/issue-merge-changing-nothing, regressions/issue-merge-follow-up-in-step]
     since: "2026-11-25"
   - id: table.collab.live
     title: Two or more people edit one table at the same time, live

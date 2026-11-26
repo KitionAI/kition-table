@@ -16,6 +16,7 @@
     "test:unit": "vitest run",
     "test:flow": "node scripts/sample.mjs && node tests/flow.mjs chromium && node tests/flow.mjs webkit",
     "test:modes": "node scripts/sample.mjs && node tests/modes.mjs chromium && node tests/modes.mjs webkit",
+    "test:drafts": "node scripts/sample.mjs && node tests/drafts.mjs chromium && node tests/drafts.mjs webkit",
     "test:grid": "node tests/widths.mjs chromium && node tests/widths.mjs webkit && node tests/parity.mjs chromium && node tests/parity.mjs webkit",
     "test:grid:interaction": "node tests/gridInteraction.mjs chromium && node tests/gridInteraction.mjs webkit",
     "test:grid:editing": "node tests/gridEditing.mjs chromium && node tests/gridEditing.mjs webkit",

@@ -1,0 +1,27 @@
+format: 1
+id: table.collab.drafts/editor
+feature: table.collab.drafts
+intent: >-
+  In the editor, through the dev host (`?checkpoints=1`) on the sample table: the person retitles
+  a record in the grid; an agent's draft adds a record (`ai/run` on the draft); the draft's
+  comparison lists it and the document does not change; the person retitles again meanwhile; the
+  person accepts the draft (`draft/merge`, the agent's origin) and the grid shows both. One click
+  of Undo takes back the draft's record only, Redo brings it back. A labelled checkpoint recorded
+  at a save, a later retitle, the checkpoint restored (`replica/restore`): the title is the
+  checkpoint's, and one Undo brings the later title back.
+layer: gate
+source:
+  kind: probe
+  from: web/tests/drafts.mjs
+  license: owned
+input: []
+steps:
+  - exec:
+      cmd: [pnpm, --dir, web, exec, node, tests/drafts.mjs, chromium]
+expected:
+  - actual: out:exec
+    compare: exit
+    value: 0
+requires: [chromium]
+timeout_s: 180
+since: "2026-11-26"
