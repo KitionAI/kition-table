@@ -894,6 +894,23 @@ try {
     step('Escape leaves Focus and the bars come back', (await kit.getByTestId('table-tabs').count()) === 1 && (await kit.locator('.data-inline-footer').count()) === 1)
   })
 
+  // A viewer loads a table: a read-only session runs the editor's reads, which the command ids put
+  // in `file.*` (`file.get`, flagged `mutates: false`), and draws the records.
+  await test('a viewer loads a table and its records', async () => {
+    await page.goto(`${origin}/dev.html?locale=en-US&role=viewer`)
+    await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes(' open in '), null, { timeout: 60000 })
+    await open('Tasks.ktable', SMALL)
+    // The editor's own reads of this frame, answered by the engine (a refused one never reaches it).
+    const reads = await sent(0, 'file.get')
+    const [table] = await tables()
+    const listed = await records(table.id)
+    step(
+      'a viewer loads a table and its records',
+      reads.length > 0 && reads.every((call) => call.ok === true) && listed.length > 0 && listed[0].values.title === 'Phase 2 wrap',
+      JSON.stringify({ reads: reads.map((call) => call.ok), records: listed.length, first: listed[0]?.values.title }),
+    )
+  })
+
   // A record's history survives closing the document: the file holds none, the host keeps a
   // snapshot per checkpoint (Kit UI protocol 7m), and the engine tells the record's history before
   // the session from the differences between consecutive checkpoints, by each later one's author

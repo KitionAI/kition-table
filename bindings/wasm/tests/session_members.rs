@@ -126,7 +126,8 @@ fn an_agent_s_draft_merged_is_one_step_of_the_person_and_undo_and_redo_are_exact
     // Meanwhile the person adds another record to the same table: both additions merge.
     add(&mut doc, "Meanwhile");
     let (before, before_view) = (state_hash(&doc), engine_view(&mut doc));
-    doc.merge_changes(&changes, &Origin::agent("helper")).unwrap();
+    let answer = doc.merge_changes(&changes, &Origin::agent("helper")).unwrap();
+    assert_eq!(answer["scope"], "person", "the merge's step is the person's, as the replica recorded it: {answer}");
     assert_eq!(titles(&mut doc), ["From the agent's draft", "Kept", "Meanwhile"], "both records are there");
     let (merged, merged_view) = (state_hash(&doc), engine_view(&mut doc));
     // The merge is the person's undo step, though an agent made the draft (KitModel M12a): the

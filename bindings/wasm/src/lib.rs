@@ -587,16 +587,21 @@ impl TableDocument {
 
     /// Takes a draft's changes (another replica of this document, forked from it, as kit-editor's
     /// drafts are) in as one step of the person's undo recorded as `origin`
-    /// ([`TableFile::merge_replica_changes`]); answers `{damage, summary}`, the summary the
+    /// ([`TableFile::merge_replica_changes`]); answers `{damage, summary, scope}`, the summary the
     /// comparison of the document's states before and after (`mergeChanges`, as kition-sdk's
     /// `export_kit_session!` answers it). A draft that conflicts with what changed since is refused.
     pub fn merge_changes(&mut self, changes: &[u8], origin: &Origin) -> Result<Value, String> {
         let before_state = self.file.replica().state_json().map_err(error)?;
         let before = self.file.replica_version();
-        let change = self.file.merge_replica_changes(changes, origin).map_err(error)?;
-        let damage = self.took(&before, &change, undoable(origin));
+        let (change, scope) = self.file.merge_replica_changes(changes, origin).map_err(error)?;
+        // The engine's history follows the scope the replica recorded the step in (the person's).
+        let damage = self.took(&before, &change, scope == Some(UndoScope::Person));
         let after_state = self.file.replica().state_json().map_err(error)?;
-        Ok(json!({ "damage": damage, "summary": kition_kdm::diff::diff_states(&before_state, &after_state).to_json() }))
+        Ok(json!({
+            "damage": damage,
+            "summary": kition_kdm::diff::diff_states(&before_state, &after_state).to_json(),
+            "scope": scope.map(UndoScope::as_str),
+        }))
     }
 
     /// What merging a draft's changes would change in the document now, as `StateDiff` JSON

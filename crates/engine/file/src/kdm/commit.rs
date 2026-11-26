@@ -158,17 +158,16 @@ impl TableFile {
     /// one transaction of `origin` (`Replica::merge_changes`: one undo step of the person unless
     /// `origin` is `system` or `import`), repaired, stored and projected like every write. A draft
     /// that changed a field this document changed since it was made, or an object this document
-    /// deleted, is refused ([`TableFileError::Kdm`], `stale`) and changes nothing.
-    pub fn merge_replica_changes(&mut self, changes: &[u8], origin: &Origin) -> Result<TableChange> {
+    /// deleted, is refused ([`TableFileError::Kdm`], `stale`) and changes nothing. Answers the change
+    /// and the undo scope the merge's step was recorded in (`DraftMerge::scope`: the person's, even
+    /// for an agent's draft; `None` when no step was recorded).
+    pub fn merge_replica_changes(&mut self, changes: &[u8], origin: &Origin) -> Result<(TableChange, Option<UndoScope>)> {
         self.writable()?;
         let label = origin.encode();
         let previous = std::mem::replace(&mut self.origin, origin.clone());
-        let written = self.write(&label, true, |replica| {
-            replica.merge_changes(changes, origin)?;
-            Ok(())
-        });
+        let written = self.write(&label, true, |replica| Ok(replica.merge_changes(changes, origin)?.scope));
         self.origin = previous;
-        written.map(|((), change, _)| change)
+        written.map(|(scope, change, _)| (change, scope))
     }
 
     /// Makes `replica` (the replica a host stored for this document, with its history, the file
