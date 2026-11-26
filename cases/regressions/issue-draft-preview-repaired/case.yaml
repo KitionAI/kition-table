@@ -1,0 +1,21 @@
+format: 1
+id: regressions/issue-draft-preview-repaired
+feature: table.collab.drafts
+intent: >-
+  A draft's comparison (compareChanges) runs the table's repair on its copy of the merge, so the
+  preview is what accepting the draft gives: a draft that adds a field named like one the document
+  added meanwhile previews the repair's rename (Reviewer_2), and the previewed merged state equals
+  the state after mergeChanges. Before, compareChanges diffed Replica::merged_state, which skips the
+  kit's repair (kition-sdk 7466039, Replica::compare_changes_repaired).
+layer: gate
+source:
+  kind: issue
+  from: kition-sdk regressions/issue-draft-preview-repaired
+  license: owned
+input: []
+steps:
+  - cargo-test: { package: kition-table-kit, test: session_members }
+expected:
+  - actual: out:exit
+    compare: exit
+since: "2026-11-26"

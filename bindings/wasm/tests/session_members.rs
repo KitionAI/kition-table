@@ -203,6 +203,37 @@ fn compare_changes_tells_what_a_merge_would_change() {
     assert!(doc.compare_changes(b"not changes").is_err());
 }
 
+/// The internal names of table 1's fields, sorted.
+fn field_names(doc: &mut TableDocument) -> Vec<String> {
+    let fields = run(doc, "field.list", json!({ "tableId": 1 }));
+    let fields = if fields.is_array() { fields } else { fields["items"].clone() };
+    let mut names: Vec<String> = fields.as_array().unwrap().iter().map(|field| field["name"].as_str().unwrap().to_owned()).collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn a_draft_s_preview_runs_the_repair_that_merging_it_runs() {
+    let mut doc = document();
+    let (mut draft, base) = draft(&doc);
+    run(&mut draft, "field.add", json!({ "tableId": 1, "title": "Reviewer", "type": "text" }));
+    let changes = draft.export_changes(&base).unwrap();
+    // Meanwhile the document gets a field of the same name: after the merge the repair renames
+    // the one with the higher id (`Reviewer_2`).
+    run(&mut doc, "field.add", json!({ "tableId": 1, "title": "Reviewer", "type": "text" }));
+    let unrepaired = doc.file().replica().merged_state(&changes).unwrap();
+    let previewed = doc.file().merged_replica_state(&changes).unwrap();
+    assert_ne!(previewed, unrepaired, "the merge leaves two fields named `Reviewer`, which the repair renames");
+    let version = doc.version();
+    let preview = doc.compare_changes(&changes).unwrap();
+    assert_eq!(doc.version(), version, "comparing changes nothing");
+    let answer = doc.merge_changes(&changes, &Origin::agent("helper")).unwrap();
+    assert_eq!(doc.file().replica().state_json().unwrap(), previewed, "the preview's merged state is the state after merging");
+    assert_eq!(answer["summary"], preview, "the comparison named what the merge and its repair did: {answer}");
+    let names = field_names(&mut doc);
+    assert!(names.iter().any(|name| name == "Reviewer") && names.iter().any(|name| name == "Reviewer_2"), "{names:?}");
+}
+
 #[test]
 fn a_restored_state_keeps_the_ids_and_undoes_as_one_step() {
     let mut doc = document();

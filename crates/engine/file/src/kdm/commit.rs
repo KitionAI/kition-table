@@ -170,6 +170,22 @@ impl TableFile {
         written.map(|(scope, change, _)| (change, scope))
     }
 
+    /// What taking a draft's changes in ([`TableFile::merge_replica_changes`]) would change in the
+    /// document now, without changing it (`compareChanges`): the merge and this kit's repair run
+    /// on a copy of the replica (`Replica::compare_changes_repaired`), so the comparison is what
+    /// accepting the draft gives, the repair's writes included (a field renamed `name_2`, a link
+    /// whose end is gone deleted). Refuses what the merge refuses.
+    pub fn compare_replica_changes(&self, changes: &[u8]) -> Result<kition_kdm::diff::StateDiff> {
+        Ok(self.replica.compare_changes_repaired(changes, repair_merged)?)
+    }
+
+    /// The document's canonical state after taking a draft's changes in, repaired as
+    /// [`TableFile::merge_replica_changes`] repairs it, without changing anything
+    /// (`Replica::merged_state_repaired`).
+    pub fn merged_replica_state(&self, changes: &[u8]) -> Result<serde_json::Value> {
+        Ok(self.replica.merged_state_repaired(changes, repair_merged)?)
+    }
+
     /// Makes `replica` (the replica a host stored for this document, with its history, the file
     /// taken into it: `kition_kit::session::take_file`) this handle's: stored in place of the
     /// file's, repaired, and projected again in place, so the integer ids of rows that stay are
@@ -602,6 +618,13 @@ fn write_in<R>(
     let stored = store::stored_position(conn)?;
     store::set_projected_position(conn, stored)?;
     Ok((value, change, repaired, store::head(conn)?))
+}
+
+/// This kit's repair of a draft merged into a copy of the replica, for a draft's preview: the
+/// full pass ([`repair::repair`]), which writes what the incremental pass after a stored merge
+/// ([`repair::run_since`]) writes, the document before the merge being repaired.
+fn repair_merged(tx: &mut Tx<'_>, changed: &BTreeSet<ObjectId>) -> kition_kdm::Result<()> {
+    repair::repair(tx, changed).map(|_| ()).map_err(|err| kition_kdm::KdmError::Engine(err.to_string()))
 }
 
 /// The changed objects a repair looks at: those with changes other than writes to keys of map

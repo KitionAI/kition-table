@@ -605,11 +605,10 @@ impl TableDocument {
     }
 
     /// What merging a draft's changes would change in the document now, as `StateDiff` JSON
-    /// (`compareChanges`); nothing changes. Refuses what the merge refuses.
+    /// (`compareChanges`), the kit's repair of the merge included
+    /// ([`TableFile::compare_replica_changes`]); nothing changes. Refuses what the merge refuses.
     pub fn compare_changes(&self, changes: &[u8]) -> Result<Value, String> {
-        let before = self.file.replica().state_json().map_err(error)?;
-        let after = self.file.replica().merged_state(changes).map_err(error)?;
-        Ok(kition_kdm::diff::diff_states(&before, &after).to_json())
+        Ok(self.file.compare_replica_changes(changes).map_err(error)?.to_json())
     }
 
     /// Writes the state `snapshot` holds (a snapshot or the content of this document, as a
