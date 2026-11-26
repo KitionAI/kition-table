@@ -306,6 +306,22 @@ fn a_draft_the_repair_cancels_records_nothing_and_undo_takes_back_the_person_s_s
     assert!(doc.dirty());
 }
 
+/// [`engine_view`] without the projection's write times (`created_at`, `updated_at`): the undo
+/// projects the renamed field's row again, at the time of the undo; the document's state, which
+/// the state hash covers, holds no such time.
+fn timeless_view(doc: &mut TableDocument) -> Value {
+    let mut view = engine_view(doc);
+    if let Some(fields) = view["fields"]["items"].as_array_mut() {
+        for field in fields {
+            if let Some(field) = field.as_object_mut() {
+                field.remove("created_at");
+                field.remove("updated_at");
+            }
+        }
+    }
+    view
+}
+
 #[test]
 fn a_merge_and_its_repair_undo_as_one_step_to_the_exact_state_before() {
     let mut doc = document();
@@ -314,7 +330,7 @@ fn a_merge_and_its_repair_undo_as_one_step_to_the_exact_state_before() {
     let changes = draft.export_changes(&base).unwrap();
     // Meanwhile the document gets a field of the same name: the repair renames one `reviewer_2`.
     run(&mut doc, "field.add", json!({ "tableId": 1, "title": "Reviewer", "type": "text" }));
-    let (before, before_view, before_names) = (state_hash(&doc), engine_view(&mut doc), field_names(&mut doc));
+    let (before, before_view, before_names) = (state_hash(&doc), timeless_view(&mut doc), field_names(&mut doc));
     assert!(!before_names.iter().any(|name| name == "reviewer_2"), "{before_names:?}");
     let depth = doc.file().replica().undo_depth(UndoScope::Person);
     let answer = doc.merge_changes(&changes, &Origin::agent("helper")).unwrap();
@@ -322,14 +338,14 @@ fn a_merge_and_its_repair_undo_as_one_step_to_the_exact_state_before() {
     let names = field_names(&mut doc);
     assert!(names.iter().any(|name| name == "reviewer") && names.iter().any(|name| name == "reviewer_2"), "{names:?}");
     assert_eq!(doc.file().replica().undo_depth(UndoScope::Person), depth + 1, "the merge and its repair are one step");
-    let (merged, merged_view) = (state_hash(&doc), engine_view(&mut doc));
+    let (merged, merged_view) = (state_hash(&doc), timeless_view(&mut doc));
     let (done, _) = doc.undo().unwrap();
     assert!(done);
     assert_eq!(state_hash(&doc), before, "one undo of the person restores the exact state before the merge");
-    assert_eq!(engine_view(&mut doc), before_view);
+    assert_eq!(timeless_view(&mut doc), before_view);
     assert_eq!(field_names(&mut doc), before_names, "no `reviewer_2` is left behind");
     let (redone, _) = doc.redo().unwrap();
     assert!(redone);
     assert_eq!(state_hash(&doc), merged, "redo restores the merged state exactly");
-    assert_eq!(engine_view(&mut doc), merged_view);
+    assert_eq!(timeless_view(&mut doc), merged_view);
 }
