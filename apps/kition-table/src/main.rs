@@ -1,7 +1,7 @@
 //! `kition-table`: the Table kit served headless over the Kit Protocol by `kition-headless`, as the
 //! kit's `kit.json` declares it: the same document the in-page editor runs (`kition-table-kit`,
 //! Kition's table engine), with the object model (`model.describe`, `model.batch`) over the
-//! document's own replica, and the identity a file carries (`document.identity`, `document.fork`:
+//! document's own replica, and the identity a file carries (`file.identity`, `file.fork`:
 //! a `.ktable` embeds its replica, [`TableFiles`]). Kition's agent edits tables through Kition's
 //! runtime instead; this executable is for other hosts, scripts, and the conformance suite.
 
@@ -14,8 +14,8 @@ use kition_kit_server::{ErrorReason, RpcError};
 /// bytes come in the params.
 const SANDBOXED: &[&str] = &["file.previewImport", "file.runImport"];
 
-/// Where a `.ktable` file keeps the table document's replica (`document.identity` and
-/// `document.fork`, Kit Process Protocol section 5.6): `kition_kdm`'s snapshot and the change rows
+/// Where a `.ktable` file keeps the table document's replica (`file.identity` and
+/// `file.fork`, Kit Process Protocol section 5.6): `kition_kdm`'s snapshot and the change rows
 /// after it. A fork's file is the new document's file with the source's blobs its records name, and
 /// none of the source's history (`kition_table_file::identity::replace_replica`).
 struct TableFiles;

@@ -5,7 +5,7 @@ intent: >-
   Through the real kition-table process: an empty .ktable (made for the kit before it saved a
   table) carries no identity, and its fork is the same bytes with no docId; bytes that are not a
   table (text, and an SQLite database that is no .ktable) are refused as unsupported_format by
-  both document.identity and document.fork, never answered with no identity, and the fork writes
+  both file.identity and file.fork, never answered with no identity, and the fork writes
   nothing.
 layer: gate
 dimension: data-safety

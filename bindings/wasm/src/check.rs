@@ -1,4 +1,4 @@
-//! `document.check` (KHP A20, A38): what is wrong with a table document, as diagnostics with a
+//! `file.check` (KHP A20, A38): what is wrong with a table document, as diagnostics with a
 //! target and a fix command. The codes are catalogued in `agent/checks.json`, each with a fixture
 //! in `conformance/` that reports it.
 //!

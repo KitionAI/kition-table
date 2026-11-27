@@ -2,9 +2,9 @@ format: 1
 id: table.platform.document-identity/fork
 feature: table.platform.document-identity
 intent: >-
-  Through the real kition-table process: document.identity answers the docId a .ktable carries
+  Through the real kition-table process: file.identity answers the docId a .ktable carries
   (the one its replica and its recorded kdm_doc_id name), and a byte copy answers the same one;
-  document.fork writes a new document to a new file: a new docId in the replica, document_id and
+  file.fork writes a new document to a new file: a new docId in the replica, document_id and
   kdm_doc_id, the same objects, ids and values, the blob its records name and not the one only a
   deleted record named, no change rows, origin log, record history, change log, deleted rows or
   free pages; the text of a record deleted before the fork is in the source's bytes and not the

@@ -1,4 +1,4 @@
-//! `document.identity` and `document.fork` (Kit Process Protocol section 5.6, KitModel M7a)
+//! `file.identity` and `file.fork` (Kit Process Protocol section 5.6, KitModel M7a)
 //! through the real `kition-table` process: a `.ktable` embeds its replica (`kition_kdm`'s
 //! snapshot and the change rows after it), so a byte copy of a file is the same document. A host
 //! reads the identity a file carries without opening it, and forks a file into a new document: a
@@ -78,7 +78,7 @@ async fn objects(kit: &HeadlessKit, path: &str) -> Value {
     assert!(ids.len() >= 5, "the base, a table, its fields and two records: {inventory}");
     let load: Vec<Value> = ids.iter().map(|id| json!({ "target": id })).collect();
     let loaded = batch(json!({ "ops": [], "load": load })).await.unwrap();
-    kit.request("document.close", json!({ "documentId": document }), LIMIT).await.unwrap();
+    kit.request("file.close", json!({ "documentId": document }), LIMIT).await.unwrap();
     json!({ "objects": inventory["objects"], "loaded": loaded["loaded"] })
 }
 
@@ -113,7 +113,7 @@ async fn a_table_tells_its_identity_and_forks_into_a_new_document_without_histor
     assert_eq!(count(&source, "SELECT COUNT(*) FROM kition_records WHERE deleted_at IS NOT NULL"), 0, "nor a deleted row");
     assert_eq!(count(&source, "SELECT COUNT(*) FROM kition_record_history"), 0, "nor record history");
     let kit = launch(&dir).await;
-    assert!(kit.serves("document.identity"), "{}", kit.capabilities());
+    assert!(kit.serves("file.identity"), "{}", kit.capabilities());
 
     // The identity the file carries, read without opening it, and the same for a byte copy.
     let source_id = kit.identity("Plan.ktable", LIMIT).await.unwrap().doc_id.expect("a table file has an identity");
@@ -142,7 +142,7 @@ async fn a_table_tells_its_identity_and_forks_into_a_new_document_without_histor
         .await
         .unwrap();
     assert_ne!(draft["documentId"], state["documentId"], "{draft}");
-    kit.request("document.close", json!({ "documentId": state["documentId"] }), LIMIT).await.unwrap();
+    kit.request("file.close", json!({ "documentId": state["documentId"] }), LIMIT).await.unwrap();
 
     // The fork's file: the new id everywhere the file names its document, no history of any kind,
     // and the blob its records name, not the one only the deleted record named.

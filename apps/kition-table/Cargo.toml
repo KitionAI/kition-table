@@ -15,7 +15,7 @@ workspace = true
 kition-table-kit = { path = "../../bindings/wasm", features = ["headless"] }
 kition-headless = { workspace = true }
 kition-table-fonts = { workspace = true, features = ["embed"] }
-# The `.ktable` file's replica (`TableFiles`, document.identity): where it is, its schema, and the
+# The `.ktable` file's replica (`TableFiles`, file.identity): where it is, its schema, and the
 # error type the host reads.
 kition-table-file = { workspace = true }
 kition-kdm = { workspace = true }
@@ -31,6 +31,6 @@ kition-kits = { workspace = true }
 kition-env = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tempfile = { workspace = true }
-# document.identity and document.fork through the real process (tests/identity.rs).
+# file.identity and file.fork through the real process (tests/identity.rs).
 kition-kit-host = { workspace = true }
 rusqlite = { workspace = true }

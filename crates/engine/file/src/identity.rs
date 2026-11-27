@@ -1,4 +1,4 @@
-//! The document a `.ktable` file carries (`document.identity` and `document.fork`, Kit Process
+//! The document a `.ktable` file carries (`file.identity` and `file.fork`, Kit Process
 //! Protocol section 5.6, KitModel M7a).
 //!
 //! A `.ktable` embeds its document's KDM replica (`kition_kdm`'s snapshot and the change rows of
@@ -38,7 +38,7 @@ pub fn embedded_replica(bytes: &[u8]) -> Result<Option<Vec<u8>>> {
     Ok(Some(replica.snapshot()?))
 }
 
-/// `bytes` (a `.ktable` file) holding the document `snapshot` instead of its own (`document.fork`):
+/// `bytes` (a `.ktable` file) holding the document `snapshot` instead of its own (`file.fork`):
 /// the file a new document made of `snapshot` is ([`TableFile::create_from_replica_in_memory`]:
 /// the relational tables projected from it, `document_id` and the recorded docId the snapshot's),
 /// with the blobs of `bytes` its records name, saved as a person's file
